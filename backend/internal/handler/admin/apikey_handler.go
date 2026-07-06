@@ -49,6 +49,15 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 
 	var resetKey *service.APIKey
 	if req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage {
+		// reset 与 window 对齐语义冲突（reset 清零 usage+窗口，window 保留 usage 只改窗口），
+		// 两者同时传入会让最终状态语义不明，显式拒绝。
+		hasWindow := (req.Window5hStart != nil && *req.Window5hStart != "") ||
+			(req.Window1dStart != nil && *req.Window1dStart != "") ||
+			(req.Window7dStart != nil && *req.Window7dStart != "")
+		if hasWindow {
+			response.BadRequest(c, "reset_rate_limit_usage and window_*_start are mutually exclusive")
+			return
+		}
 		resetKey, err = h.adminService.AdminResetAPIKeyRateLimitUsage(c.Request.Context(), keyID)
 		if err != nil {
 			response.ErrorFrom(c, err)
