@@ -49,12 +49,18 @@ type GatewayHandler struct {
 	usageRecordWorkerPool     *service.UsageRecordWorkerPool
 	errorPassthroughService   *service.ErrorPassthroughService
 	contentModerationService  *service.ContentModerationService
+	requestArchiveService     *service.RequestArchiveService
 	concurrencyHelper         *ConcurrencyHelper
 	userMsgQueueHelper        *UserMsgQueueHelper
 	maxAccountSwitches        int
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
+}
+
+// SetRequestArchiveService 注入请求存档服务(可选,延迟注入避免循环依赖)。
+func (h *GatewayHandler) SetRequestArchiveService(svc *service.RequestArchiveService) {
+	h.requestArchiveService = svc
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -203,6 +209,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
 		return
 	}
+	h.archiveRequestForGateway(c, apiKey, subject, service.ContentModerationProtocolAnthropicMessages, reqModel, body)
 
 	// Track if we've started streaming (for error handling)
 	streamStarted := false

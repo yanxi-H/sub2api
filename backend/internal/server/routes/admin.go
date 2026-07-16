@@ -146,6 +146,14 @@ func registerContentModerationRoutes(admin *gin.RouterGroup, h *handler.Handlers
 		risk.DELETE("/hashes", h.Admin.ContentModeration.DeleteFlaggedHash)
 		risk.DELETE("/hashes/all", h.Admin.ContentModeration.ClearFlaggedHashes)
 	}
+
+	// 请求文本存档(全量记录 prompt 用于风控筛查)
+	archive := admin.Group("/request-archive")
+	{
+		archive.GET("", h.Admin.RequestArchive.List)
+		archive.GET("/:id", h.Admin.RequestArchive.GetDetail)
+		archive.GET("/status", h.Admin.RequestArchive.GetStatus)
+	}
 }
 
 func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

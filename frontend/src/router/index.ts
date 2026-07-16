@@ -588,6 +588,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/request-archive',
+    name: 'AdminRequestArchive',
+    component: () => import('@/views/admin/RequestArchiveView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Request Archive',
+      titleKey: 'admin.requestArchive.title',
+      descriptionKey: 'admin.requestArchive.description'
+    }
+  },
+  {
     path: '/admin/usage',
     name: 'AdminUsage',
     component: () => import('@/views/admin/UsageView.vue'),
