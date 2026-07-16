@@ -182,7 +182,7 @@ type AICredit struct {
 
 // UsageInfo 账号使用量信息
 type UsageInfo struct {
-	Source             string         `json:"source,omitempty"`               // "passive" or "active"
+	Source             string         `json:"source,omitempty"`               // "passive", "active", or "stored"
 	UpdatedAt          *time.Time     `json:"updated_at,omitempty"`           // 更新时间
 	FiveHour           *UsageProgress `json:"five_hour"`                      // 5小时窗口
 	SevenDay           *UsageProgress `json:"seven_day,omitempty"`            // 7天窗口
@@ -381,16 +381,19 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 	if account.CanGetUsage() {
 		var apiResp *ClaudeUsageResponse
 
-		// 1. 检查缓存（成功响应 3 分钟 / 错误响应 1 分钟）
-		if cached, ok := s.cache.apiCache.Load(accountID); ok {
-			if cache, ok := cached.(*apiUsageCache); ok {
-				age := time.Since(cache.timestamp)
-				if cache.err != nil && age < apiErrorCacheTTL {
-					// 负缓存命中：返回缓存的错误，避免重试风暴
-					return nil, cache.err
-				}
-				if cache.response != nil && age < apiCacheTTL {
-					apiResp = cache.response
+		// 1. 检查缓存（成功响应 3 分钟 / 错误响应 1 分钟）。管理员显式
+		// force 查询时跳过缓存，确保仪表盘拿到最新的上游数据。
+		if !forceProbe {
+			if cached, ok := s.cache.apiCache.Load(accountID); ok {
+				if cache, ok := cached.(*apiUsageCache); ok {
+					age := time.Since(cache.timestamp)
+					if cache.err != nil && age < apiErrorCacheTTL {
+						// 负缓存命中：返回缓存的错误，避免重试风暴
+						return nil, cache.err
+					}
+					if cache.response != nil && age < apiCacheTTL {
+						apiResp = cache.response
+					}
 				}
 			}
 		}
@@ -409,14 +412,16 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 			flightKey := fmt.Sprintf("usage:%d", accountID)
 			result, flightErr, _ := s.cache.apiFlight.Do(flightKey, func() (any, error) {
 				// 再次检查缓存（可能在等待 singleflight 期间被其他请求填充）
-				if cached, ok := s.cache.apiCache.Load(accountID); ok {
-					if cache, ok := cached.(*apiUsageCache); ok {
-						age := time.Since(cache.timestamp)
-						if cache.err != nil && age < apiErrorCacheTTL {
-							return nil, cache.err
-						}
-						if cache.response != nil && age < apiCacheTTL {
-							return cache.response, nil
+				if !forceProbe {
+					if cached, ok := s.cache.apiCache.Load(accountID); ok {
+						if cache, ok := cached.(*apiUsageCache); ok {
+							age := time.Since(cache.timestamp)
+							if cache.err != nil && age < apiErrorCacheTTL {
+								return nil, cache.err
+							}
+							if cache.response != nil && age < apiCacheTTL {
+								return cache.response, nil
+							}
 						}
 					}
 				}
@@ -514,6 +519,10 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 // buildPassiveUsageWindow 从 Extra 中的被动采样数据（utilization 为 0-1 小数、reset 为 Unix 秒）
 // 构建用量窗口，无数据时返回 nil。
 func buildPassiveUsageWindow(extra map[string]any, utilKey, resetKey string) *UsageProgress {
+	return buildPassiveUsageWindowAt(extra, utilKey, resetKey, time.Now())
+}
+
+func buildPassiveUsageWindowAt(extra map[string]any, utilKey, resetKey string, now time.Time) *UsageProgress {
 	util := parseExtraFloat64(extra[utilKey])
 	resetRaw := parseExtraFloat64(extra[resetKey])
 	if util <= 0 && resetRaw <= 0 {
@@ -524,7 +533,7 @@ func buildPassiveUsageWindow(extra map[string]any, utilKey, resetKey string) *Us
 	if resetRaw > 0 {
 		t := time.Unix(int64(resetRaw), 0)
 		resetAt = &t
-		remaining = int(time.Until(t).Seconds())
+		remaining = int(t.Sub(now).Seconds())
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -1364,7 +1373,7 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 	if resetAtRaw, ok := extra[resetAtKey]; ok {
 		if resetAt, err := parseTime(fmt.Sprint(resetAtRaw)); err == nil {
 			progress.ResetsAt = &resetAt
-			progress.RemainingSeconds = int(time.Until(resetAt).Seconds())
+			progress.RemainingSeconds = int(resetAt.Sub(now).Seconds())
 			if progress.RemainingSeconds < 0 {
 				progress.RemainingSeconds = 0
 			}
@@ -1380,7 +1389,7 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 			}
 			resetAt := base.Add(time.Duration(resetAfterSeconds) * time.Second)
 			progress.ResetsAt = &resetAt
-			progress.RemainingSeconds = int(time.Until(resetAt).Seconds())
+			progress.RemainingSeconds = int(resetAt.Sub(now).Seconds())
 			if progress.RemainingSeconds < 0 {
 				progress.RemainingSeconds = 0
 			}
@@ -1556,11 +1565,15 @@ func (s *AccountUsageService) buildUsageInfo(resp *ClaudeUsageResponse, updatedA
 
 // estimateSetupTokenUsage 根据session_window推算Setup Token账号的使用量
 func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageInfo {
+	return s.estimateSetupTokenUsageAt(account, time.Now())
+}
+
+func (s *AccountUsageService) estimateSetupTokenUsageAt(account *Account, now time.Time) *UsageInfo {
 	info := &UsageInfo{}
 
 	// 如果有session_window信息
 	if account.SessionWindowEnd != nil {
-		remaining := int(time.Until(*account.SessionWindowEnd).Seconds())
+		remaining := int(account.SessionWindowEnd.Sub(now).Seconds())
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -1600,7 +1613,7 @@ func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageIn
 		// 窗口已过期（resetAt 在 now 之前）→ 额度已重置，归零；
 		// 与 Codex 分支 buildCodexUsageProgressFromExtra 保持一致，避免
 		// UI 在 active poll 没回写 SessionWindowEnd 时渲染矛盾状态。
-		if info.FiveHour.ResetsAt != nil && !time.Now().Before(*info.FiveHour.ResetsAt) {
+		if info.FiveHour.ResetsAt != nil && !now.Before(*info.FiveHour.ResetsAt) {
 			info.FiveHour.Utilization = 0
 			info.FiveHour.ResetsAt = nil
 			info.FiveHour.RemainingSeconds = 0
@@ -1615,6 +1628,58 @@ func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageIn
 
 	// Setup Token无法获取7d数据
 	return info
+}
+
+// BuildStoredAccountUsage builds the dashboard's 5h/7d view exclusively from
+// persisted account state. It never contacts an upstream provider.
+func BuildStoredAccountUsage(account *Account, now time.Time) *UsageInfo {
+	if account == nil {
+		return nil
+	}
+
+	info := &UsageInfo{Source: "stored"}
+	switch {
+	case account.Platform == PlatformOpenAI:
+		applyExtraToUsage(info, account.Extra, now)
+		info.UpdatedAt = parseUsageSnapshotTime(account.Extra, "codex_usage_updated_at")
+	case account.IsAnthropicOAuthOrSetupToken():
+		if account.SessionWindowEnd != nil {
+			usageService := &AccountUsageService{}
+			info = usageService.estimateSetupTokenUsageAt(account, now)
+		}
+		info.Source = "stored"
+		info.SevenDay = buildPassiveUsageWindowAt(account.Extra, "passive_usage_7d_utilization", "passive_usage_7d_reset", now)
+		info.UpdatedAt = parseUsageSnapshotTime(account.Extra, "passive_usage_sampled_at")
+	}
+
+	return info
+}
+
+func parseUsageSnapshotTime(extra map[string]any, key string) *time.Time {
+	if len(extra) == 0 {
+		return nil
+	}
+	raw, ok := extra[key]
+	if !ok {
+		return nil
+	}
+	parsed, err := parseTime(fmt.Sprint(raw))
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+// SupportsLiveAccountUsageRefresh reports whether GetUsage can query a
+// provider that exposes the dashboard's 5h/7d windows.
+func SupportsLiveAccountUsageRefresh(account *Account) bool {
+	if account == nil {
+		return false
+	}
+	if account.Platform == PlatformOpenAI {
+		return account.Type == AccountTypeOAuth
+	}
+	return account.Platform == PlatformAnthropic && account.Type == AccountTypeOAuth
 }
 
 func buildGeminiUsageProgress(used, limit int64, resetAt time.Time, tokens int64, cost float64, now time.Time) *UsageProgress {

@@ -700,6 +700,14 @@ func (s *stubAdminService) AdminSetAPIKeyWindowStart(ctx context.Context, keyID 
 	return nil, service.ErrAPIKeyNotFound
 }
 
+func (s *stubAdminService) AdminBatchSyncAPIKey7dWindow(ctx context.Context, keyIDs []int64, groupID, accountID int64) ([]*service.APIKey, error) {
+	return nil, nil
+}
+
+func (s *stubAdminService) AdminBatchResetAPIKey7dUsage(ctx context.Context, keyIDs []int64, groupID int64) ([]*service.APIKey, error) {
+	return nil, nil
+}
+
 func (s *stubAdminService) ResetAccountQuota(ctx context.Context, id int64) error {
 	return nil
 }

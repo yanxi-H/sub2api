@@ -89,6 +89,26 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 	return apiKeyEntityToService(m), nil
 }
 
+func (r *apiKeyRepository) GetByIDs(ctx context.Context, ids []int64) ([]*service.APIKey, error) {
+	if len(ids) == 0 {
+		return []*service.APIKey{}, nil
+	}
+	client := clientFromContext(ctx, r.client)
+	rows, err := client.APIKey.Query().
+		Where(apikey.IDIn(ids...), apikey.DeletedAtIsNil()).
+		WithUser().
+		WithGroup().
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	apiKeys := make([]*service.APIKey, 0, len(rows))
+	for _, row := range rows {
+		apiKeys = append(apiKeys, apiKeyEntityToService(row))
+	}
+	return apiKeys, nil
+}
+
 // GetKeyAndOwnerID 根据 API Key ID 获取其 key 与所有者（用户）ID。
 // 相比 GetByID，此方法性能更优，因为：
 //   - 使用 Select() 只查询必要字段，减少数据传输量
@@ -296,6 +316,37 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
 	key.UpdatedAt = now
 	return nil
+}
+
+// BatchSet7dWindowStart updates only the 7-day window column so concurrent
+// billing updates to other usage windows cannot be overwritten by stale data.
+func (r *apiKeyRepository) BatchSet7dWindowStart(ctx context.Context, keyIDs []int64, groupID *int64, windowStart time.Time) (int, error) {
+	client := clientFromContext(ctx, r.client)
+	builder := client.APIKey.Update().Where(apikey.IDIn(keyIDs...), apikey.DeletedAtIsNil())
+	if groupID == nil {
+		builder.Where(apikey.GroupIDIsNil())
+	} else {
+		builder.Where(apikey.GroupIDEQ(*groupID))
+	}
+	return builder.
+		SetWindow7dStart(windowStart).
+		SetUpdatedAt(time.Now()).
+		Save(ctx)
+}
+
+// BatchReset7dUsage clears only 7-day usage and preserves the current window start.
+func (r *apiKeyRepository) BatchReset7dUsage(ctx context.Context, keyIDs []int64, groupID *int64) (int, error) {
+	client := clientFromContext(ctx, r.client)
+	builder := client.APIKey.Update().Where(apikey.IDIn(keyIDs...), apikey.DeletedAtIsNil())
+	if groupID == nil {
+		builder.Where(apikey.GroupIDIsNil())
+	} else {
+		builder.Where(apikey.GroupIDEQ(*groupID))
+	}
+	return builder.
+		SetUsage7d(0).
+		SetUpdatedAt(time.Now()).
+		Save(ctx)
 }
 
 func (r *apiKeyRepository) Delete(ctx context.Context, id int64) error {

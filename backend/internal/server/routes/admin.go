@@ -152,6 +152,8 @@ func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	apiKeys := admin.Group("/api-keys")
 	{
 		apiKeys.PUT("/:id", h.Admin.APIKey.UpdateGroup)
+		apiKeys.POST("/batch-sync-7d-window", h.Admin.APIKey.BatchSync7dWindow)
+		apiKeys.POST("/batch-reset-7d-usage", h.Admin.APIKey.BatchReset7dUsage)
 	}
 }
 
@@ -315,6 +317,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)
+		accounts.GET("/usage-windows", h.Admin.Account.ListUsageWindows)
+		accounts.POST("/usage-windows/refresh", h.Admin.Account.RefreshUsageWindows)
 		accounts.GET("/:id", h.Admin.Account.GetByID)
 		accounts.POST("", h.Admin.Account.Create)
 		accounts.POST("/:id/duplicate", h.Admin.Account.Duplicate)

@@ -126,6 +126,7 @@ describe('admin DashboardView', () => {
           Select: true,
           ModelDistributionChart: true,
           TokenUsageTrend: true,
+          RateLimitOverviewPanel: true,
           Line: true
         }
       }

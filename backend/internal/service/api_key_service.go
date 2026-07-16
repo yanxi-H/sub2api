@@ -29,6 +29,7 @@ var (
 	ErrAPIKeyInvalidChars = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
 	ErrAPIKeyRateLimited  = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
 	ErrInvalidIPPattern   = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrAPIKey7dWindowSyncUnavailable = infraerrors.BadRequest("API_KEY_7D_WINDOW_SYNC_UNAVAILABLE", "selected account does not have a known future 7-day reset time")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -199,7 +200,8 @@ type UpdateAPIKeyRequest struct {
 	RateLimit5h         *float64 `json:"rate_limit_5h"`
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
-	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // Reset all usage counters to 0
+	ResetRateLimitUsage   *bool    `json:"reset_rate_limit_usage"`    // Reset all usage counters to 0
+	Sync7dWindowAccountID *int64   `json:"sync_7d_window_account_id"` // Align 7d window to the selected upstream account
 
 	// 管理员修改归属用户(nil = 不修改)。仅 UpdateAsAdmin 路径生效;普通 Update 忽略。
 	UserID *int64 `json:"user_id"`
@@ -223,6 +225,7 @@ type APIKeyService struct {
 	cfg                   *config.Config
 	authCacheL1           *ristretto.Cache
 	authCfg               apiKeyAuthCacheConfig
+	accountRepo           APIKeyAccountRepository
 	authGroup             singleflight.Group
 	lastUsedTouchL1       sync.Map // keyID -> nextAllowedAt(time.Time)
 	lastUsedTouchSF       singleflight.Group
@@ -255,6 +258,17 @@ func NewAPIKeyService(
 // Called after construction (e.g. in wire) to avoid circular dependencies.
 func (s *APIKeyService) SetRateLimitCacheInvalidator(inv RateLimitCacheInvalidator) {
 	s.rateLimitCacheInvalid = inv
+}
+
+// APIKeyAccountRepository is a minimal account lookup interface used to sync
+// 7d windows to an upstream account's known reset time.
+type APIKeyAccountRepository interface {
+	GetByID(ctx context.Context, id int64) (*Account, error)
+}
+
+// SetAccountRepository sets the optional account repository used for 7d window sync.
+func (s *APIKeyService) SetAccountRepository(accountRepo APIKeyAccountRepository) {
+	s.accountRepo = accountRepo
 }
 
 func (s *APIKeyService) SetConcurrencyService(concurrencyService *ConcurrencyService) {
@@ -792,6 +806,28 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 		apiKey.Window7dStart = nil
 	}
 
+	// Sync 7d window to an upstream account's known reset time (admin only).
+	synced7dWindow := false
+	if req.Sync7dWindowAccountID != nil {
+		if !isAdmin {
+			return nil, ErrInsufficientPerms
+		}
+		if s.accountRepo == nil {
+			return nil, ErrAPIKey7dWindowSyncUnavailable
+		}
+		account, err := s.accountRepo.GetByID(ctx, *req.Sync7dWindowAccountID)
+		if err != nil {
+			return nil, fmt.Errorf("get sync account: %w", err)
+		}
+		resetAt, ok := accountSevenDayResetAt(account, time.Now())
+		if !ok {
+			return nil, ErrAPIKey7dWindowSyncUnavailable
+		}
+		windowStart := resetAt.Add(-RateLimitWindow7d)
+		apiKey.Window7dStart = &windowStart
+		synced7dWindow = true
+	}
+
 	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
 		return nil, fmt.Errorf("update api key: %w", err)
 	}
@@ -799,8 +835,8 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
 	s.compileAPIKeyIPRules(apiKey)
 
-	// Invalidate Redis rate limit cache so reset takes effect immediately
-	if resetRateLimit && s.rateLimitCacheInvalid != nil {
+	// Invalidate Redis rate limit cache so reset/sync takes effect immediately
+	if (resetRateLimit || synced7dWindow) && s.rateLimitCacheInvalid != nil {
 		_ = s.rateLimitCacheInvalid.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
 	}
 
@@ -1061,4 +1097,31 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
+}
+
+// accountSevenDayResetAt returns the earliest known future 7-day reset time
+// for an account, preferring product usage windows over generic quota windows.
+func accountSevenDayResetAt(account *Account, now time.Time) (time.Time, bool) {
+	if account == nil || account.Extra == nil {
+		return time.Time{}, false
+	}
+	candidates := []time.Time{
+		parseExtraTime(account.Extra["codex_7d_reset_at"]),
+		parseUnixSecondsTime(account.Extra["passive_usage_7d_reset"]),
+		parseExtraTime(account.Extra["quota_weekly_reset_at"]),
+	}
+	for _, resetAt := range candidates {
+		if !resetAt.IsZero() && resetAt.After(now) {
+			return resetAt, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func parseUnixSecondsTime(value any) time.Time {
+	seconds := parseExtraFloat64(value)
+	if seconds <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(int64(seconds), 0)
 }

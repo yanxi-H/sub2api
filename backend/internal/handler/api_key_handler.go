@@ -63,6 +63,7 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
+	Sync7dWindowAccountID *int64 `json:"sync_7d_window_account_id"` // 同步上游账号7天窗口(管理员)
 
 	// 管理员修改：Key 的归属用户。仅管理员可使用；普通用户传入会被忽略。
 	UserID *int64 `json:"user_id"`
@@ -263,7 +264,8 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		RateLimit5h:         req.RateLimit5h,
 		RateLimit1d:         req.RateLimit1d,
 		RateLimit7d:         req.RateLimit7d,
-		ResetRateLimitUsage: req.ResetRateLimitUsage,
+		ResetRateLimitUsage:   req.ResetRateLimitUsage,
+		Sync7dWindowAccountID: req.Sync7dWindowAccountID,
 	}
 	if req.Name != "" {
 		svcReq.Name = &req.Name

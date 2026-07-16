@@ -42,9 +42,33 @@ export async function setApiKeyWindowStart(id: number, override: WindowStartOver
   return data
 }
 
+export interface BatchAPIKeyResult {
+  items: ApiKey[]
+  updated_count: number
+}
+
+export async function batchSync7dWindow(apiKeyIds: number[], groupId: number | null, accountId: number): Promise<BatchAPIKeyResult> {
+  const { data } = await apiClient.post<BatchAPIKeyResult>('/admin/api-keys/batch-sync-7d-window', {
+    api_key_ids: apiKeyIds,
+    group_id: groupId ?? 0,
+    account_id: accountId
+  })
+  return data
+}
+
+export async function batchReset7dUsage(apiKeyIds: number[], groupId: number | null): Promise<BatchAPIKeyResult> {
+  const { data } = await apiClient.post<BatchAPIKeyResult>('/admin/api-keys/batch-reset-7d-usage', {
+    api_key_ids: apiKeyIds,
+    group_id: groupId ?? 0
+  })
+  return data
+}
+
 export const apiKeysAPI = {
   updateApiKeyGroup,
-  setApiKeyWindowStart
+  setApiKeyWindowStart,
+  batchSync7dWindow,
+  batchReset7dUsage
 }
 
 export default apiKeysAPI

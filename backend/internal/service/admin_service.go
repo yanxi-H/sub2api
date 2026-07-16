@@ -56,6 +56,8 @@ type AdminService interface {
 	// 用于把 sub2api Key 的窗口对齐到 Codex 官方账号的真实刷新周期。
 	// 任一 *time.Time 为 nil 表示该窗口不动。
 	AdminSetAPIKeyWindowStart(ctx context.Context, keyID int64, w5h, w1d, w7d *time.Time) (*APIKey, error)
+	AdminBatchSyncAPIKey7dWindow(ctx context.Context, keyIDs []int64, groupID, accountID int64) ([]*APIKey, error)
+	AdminBatchResetAPIKey7dUsage(ctx context.Context, keyIDs []int64, groupID int64) ([]*APIKey, error)
 
 	// ReplaceUserGroup 替换用户的专属分组：授予新分组权限、迁移 Key、移除旧分组权限
 	ReplaceUserGroup(ctx context.Context, userID, oldGroupID, newGroupID int64) (*ReplaceUserGroupResult, error)

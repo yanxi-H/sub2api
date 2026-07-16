@@ -190,6 +190,41 @@ type AccountWithConcurrency struct {
 	CurrentRPM        *int     `json:"current_rpm,omitempty"`         // 当前分钟 RPM 计数
 }
 
+type AccountUsageWindowItem struct {
+	ID                  int64                  `json:"id"`
+	Name                string                 `json:"name"`
+	Platform            string                 `json:"platform"`
+	Type                string                 `json:"type"`
+	Status              string                 `json:"status"`
+	FiveHour            *service.UsageProgress `json:"five_hour"`
+	SevenDay            *service.UsageProgress `json:"seven_day"`
+	UpdatedAt           *time.Time             `json:"updated_at"`
+	SupportsLiveRefresh bool                   `json:"supports_live_refresh"`
+	RefreshError        string                 `json:"refresh_error,omitempty"`
+}
+
+type RefreshAccountUsageWindowsRequest struct {
+	AccountIDs []int64 `json:"account_ids" binding:"required"`
+}
+
+func accountUsageWindowItem(account *service.Account, usage *service.UsageInfo) AccountUsageWindowItem {
+	item := AccountUsageWindowItem{}
+	if account != nil {
+		item.ID = account.ID
+		item.Name = account.Name
+		item.Platform = account.Platform
+		item.Type = account.Type
+		item.Status = account.Status
+		item.SupportsLiveRefresh = service.SupportsLiveAccountUsageRefresh(account)
+	}
+	if usage != nil {
+		item.FiveHour = usage.FiveHour
+		item.SevenDay = usage.SevenDay
+		item.UpdatedAt = usage.UpdatedAt
+	}
+	return item
+}
+
 type AccountSchedulerScore struct {
 	BaseScore             float64 `json:"base_score"`
 	StickyScore           float64 `json:"sticky_score"`
@@ -667,6 +702,100 @@ func (h *AccountHandler) List(c *gin.Context) {
 	}
 
 	response.Paginated(c, result, total, page, pageSize)
+}
+
+// ListUsageWindows returns paginated 5h/7d usage snapshots without contacting upstream providers.
+// GET /api/v1/admin/accounts/usage-windows
+func (h *AccountHandler) ListUsageWindows(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	search := strings.TrimSpace(c.Query("search"))
+	if len(search) > 100 {
+		search = search[:100]
+	}
+
+	accounts, total, err := h.adminService.ListAccounts(
+		c.Request.Context(), page, pageSize, "", "", "", search, 0, "", "name", "asc",
+	)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	now := time.Now()
+	items := make([]AccountUsageWindowItem, len(accounts))
+	for i := range accounts {
+		account := &accounts[i]
+		items[i] = accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, now))
+	}
+	response.Paginated(c, items, total, page, pageSize)
+}
+
+// RefreshUsageWindows performs an explicit, resource-bounded upstream refresh for selected accounts.
+// POST /api/v1/admin/accounts/usage-windows/refresh
+func (h *AccountHandler) RefreshUsageWindows(c *gin.Context) {
+	var req RefreshAccountUsageWindowsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: account_ids is required")
+		return
+	}
+	if len(req.AccountIDs) == 0 || len(req.AccountIDs) > 20 {
+		response.BadRequest(c, "account_ids must contain between 1 and 20 items")
+		return
+	}
+
+	seen := make(map[int64]struct{}, len(req.AccountIDs))
+	ids := make([]int64, 0, len(req.AccountIDs))
+	for _, id := range req.AccountIDs {
+		if id <= 0 {
+			response.BadRequest(c, "account_ids must contain positive IDs")
+			return
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	accounts, err := h.adminService.GetAccountsByIDs(c.Request.Context(), ids)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	results := make([]AccountUsageWindowItem, len(accounts))
+	g, gctx := errgroup.WithContext(c.Request.Context())
+	g.SetLimit(2)
+	for i := range accounts {
+		i := i
+		account := accounts[i]
+		g.Go(func() error {
+			item := accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, time.Now()))
+			if !item.SupportsLiveRefresh {
+				item.RefreshError = "LIVE_REFRESH_UNSUPPORTED"
+				results[i] = item
+				return nil
+			}
+			if h.accountUsageService == nil {
+				item.RefreshError = "USAGE_SERVICE_UNAVAILABLE"
+				results[i] = item
+				return nil
+			}
+
+			usage, refreshErr := h.accountUsageService.GetUsage(gctx, account.ID, true)
+			if refreshErr != nil {
+				slog.Warn("dashboard_account_usage_live_refresh_failed", "account_id", account.ID, "error", refreshErr)
+				item.RefreshError = "UPSTREAM_QUERY_FAILED"
+			} else {
+				item = accountUsageWindowItem(account, usage)
+			}
+			results[i] = item
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	response.Success(c, results)
 }
 
 func buildAccountsListETag(

@@ -264,6 +264,8 @@
           </div>
         </div>
 
+        <RateLimitOverviewPanel />
+
         <!-- Charts Section -->
         <div class="space-y-6">
           <!-- Date Range Filter -->
@@ -362,6 +364,7 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
+import RateLimitOverviewPanel from '@/components/admin/dashboard/RateLimitOverviewPanel.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 import {

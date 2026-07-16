@@ -11,6 +11,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type AdminBatchAPIKeyRequest struct {
+	APIKeyIDs []int64 `json:"api_key_ids" binding:"required"`
+	GroupID   *int64  `json:"group_id" binding:"required"`
+}
+
+type AdminBatchSyncAPIKey7dWindowRequest struct {
+	APIKeyIDs []int64 `json:"api_key_ids" binding:"required"`
+	GroupID   *int64  `json:"group_id" binding:"required"`
+	AccountID int64   `json:"account_id" binding:"required"`
+}
+
 // AdminAPIKeyHandler handles admin API key management
 type AdminAPIKeyHandler struct {
 	adminService service.AdminService
@@ -125,4 +136,48 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 		GrantedGroupName:       result.GrantedGroupName,
 	}
 	response.Success(c, resp)
+}
+
+// BatchSync7dWindow aligns selected API keys to an upstream account's known 7-day window.
+func (h *AdminAPIKeyHandler) BatchSync7dWindow(c *gin.Context) {
+	var req AdminBatchSyncAPIKey7dWindowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	keys, err := h.adminService.AdminBatchSyncAPIKey7dWindow(c.Request.Context(), req.APIKeyIDs, *req.GroupID, req.AccountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, adminBatchAPIKeyResponse(keys))
+}
+
+// BatchReset7dUsage resets only the selected API keys' 7-day usage.
+func (h *AdminAPIKeyHandler) BatchReset7dUsage(c *gin.Context) {
+	var req AdminBatchAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	keys, err := h.adminService.AdminBatchResetAPIKey7dUsage(c.Request.Context(), req.APIKeyIDs, *req.GroupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, adminBatchAPIKeyResponse(keys))
+}
+
+func adminBatchAPIKeyResponse(keys []*service.APIKey) struct {
+	Items        []*dto.APIKey `json:"items"`
+	UpdatedCount int           `json:"updated_count"`
+} {
+	items := make([]*dto.APIKey, 0, len(keys))
+	for _, key := range keys {
+		items = append(items, dto.APIKeyFromService(key))
+	}
+	return struct {
+		Items        []*dto.APIKey `json:"items"`
+		UpdatedCount int           `json:"updated_count"`
+	}{Items: items, UpdatedCount: len(items)}
 }

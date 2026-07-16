@@ -972,6 +972,213 @@ func (s *adminServiceImpl) AdminSetAPIKeyWindowStart(ctx context.Context, keyID 
 	return apiKey, nil
 }
 
+const maxAdminAPIKeyBatchSize = 1000
+
+type adminAPIKey7dBatchRepository interface {
+	BatchSet7dWindowStart(ctx context.Context, keyIDs []int64, groupID *int64, windowStart time.Time) (int, error)
+	BatchReset7dUsage(ctx context.Context, keyIDs []int64, groupID *int64) (int, error)
+}
+
+type adminAPIKeyBatchReader interface {
+	GetByIDs(ctx context.Context, keyIDs []int64) ([]*APIKey, error)
+}
+
+// AdminBatchSyncAPIKey7dWindow aligns selected API keys to one upstream account's known 7-day window.
+func (s *adminServiceImpl) AdminBatchSyncAPIKey7dWindow(ctx context.Context, keyIDs []int64, groupID, accountID int64) ([]*APIKey, error) {
+	if groupID < 0 {
+		return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
+	}
+	if accountID <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_ACCOUNT_ID", "account_id must be positive")
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("get sync account: %w", err)
+	}
+	resetAt, ok := accountSevenDayResetAt(account, time.Now())
+	if !ok {
+		return nil, ErrAPIKey7dWindowSyncUnavailable
+	}
+	if !accountBelongsToAPIKeyGroup(account, groupID) {
+		return nil, infraerrors.BadRequest("ACCOUNT_GROUP_MISMATCH", "sync account does not belong to the selected API key group")
+	}
+	windowStart := resetAt.Add(-RateLimitWindow7d)
+	return s.adminBatchUpdateAPIKeys(ctx, keyIDs, groupID,
+		func(apiKey *APIKey) { apiKey.Window7dStart = &windowStart },
+		func(ctx context.Context, repo adminAPIKey7dBatchRepository, ids []int64, groupID *int64) (int, error) {
+			return repo.BatchSet7dWindowStart(ctx, ids, groupID, windowStart)
+		},
+	)
+}
+
+// AdminBatchResetAPIKey7dUsage resets only usage while preserving the selected API keys' 7-day window.
+func (s *adminServiceImpl) AdminBatchResetAPIKey7dUsage(ctx context.Context, keyIDs []int64, groupID int64) ([]*APIKey, error) {
+	if groupID < 0 {
+		return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
+	}
+	return s.adminBatchUpdateAPIKeys(ctx, keyIDs, groupID,
+		func(apiKey *APIKey) {
+			apiKey.Usage7d = 0
+		},
+		func(ctx context.Context, repo adminAPIKey7dBatchRepository, ids []int64, groupID *int64) (int, error) {
+			return repo.BatchReset7dUsage(ctx, ids, groupID)
+		},
+	)
+}
+
+func (s *adminServiceImpl) adminBatchUpdateAPIKeys(
+	ctx context.Context,
+	keyIDs []int64,
+	groupID int64,
+	update func(*APIKey),
+	batchUpdate func(context.Context, adminAPIKey7dBatchRepository, []int64, *int64) (int, error),
+) ([]*APIKey, error) {
+	ids, err := normalizeAdminAPIKeyBatchIDs(keyIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	opCtx := ctx
+	var tx *dbent.Tx
+	if s.entClient != nil {
+		tx, err = s.entClient.Tx(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("begin api key batch update: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		opCtx = dbent.NewTxContext(ctx, tx)
+	}
+
+	apiKeys, err := s.loadAdminBatchAPIKeys(opCtx, ids, groupID)
+	if err != nil {
+		return nil, err
+	}
+	var groupIDFilter *int64
+	if groupID > 0 {
+		groupIDFilter = &groupID
+	}
+
+	if batchRepo, ok := s.apiKeyRepo.(adminAPIKey7dBatchRepository); ok {
+		updatedCount, updateErr := batchUpdate(opCtx, batchRepo, ids, groupIDFilter)
+		if updateErr != nil {
+			return nil, fmt.Errorf("batch update api keys: %w", updateErr)
+		}
+		if updatedCount != len(ids) {
+			return nil, fmt.Errorf("batch update api keys: expected %d rows, updated %d", len(ids), updatedCount)
+		}
+		for _, apiKey := range apiKeys {
+			update(apiKey)
+		}
+	} else {
+		for _, apiKey := range apiKeys {
+			update(apiKey)
+			if updateErr := s.apiKeyRepo.Update(opCtx, apiKey); updateErr != nil {
+				return nil, fmt.Errorf("update api key %d: %w", apiKey.ID, updateErr)
+			}
+		}
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("commit api key batch update: %w", err)
+		}
+	}
+
+	for _, apiKey := range apiKeys {
+		if s.authCacheInvalidator != nil {
+			s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+		}
+		if s.billingCacheService != nil {
+			_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
+		}
+	}
+	return apiKeys, nil
+}
+
+func (s *adminServiceImpl) loadAdminBatchAPIKeys(ctx context.Context, ids []int64, groupID int64) ([]*APIKey, error) {
+	if reader, ok := s.apiKeyRepo.(adminAPIKeyBatchReader); ok {
+		rows, err := reader.GetByIDs(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("get api keys: %w", err)
+		}
+		byID := make(map[int64]*APIKey, len(rows))
+		for _, apiKey := range rows {
+			byID[apiKey.ID] = apiKey
+		}
+		apiKeys := make([]*APIKey, 0, len(ids))
+		for _, id := range ids {
+			apiKey, exists := byID[id]
+			if !exists {
+				return nil, fmt.Errorf("get api key %d: %w", id, ErrAPIKeyNotFound)
+			}
+			if !apiKeyBelongsToAdminGroup(apiKey, groupID) {
+				return nil, infraerrors.BadRequest("API_KEY_GROUP_MISMATCH", fmt.Sprintf("api key %d does not belong to group %d", id, groupID))
+			}
+			apiKeys = append(apiKeys, apiKey)
+		}
+		return apiKeys, nil
+	}
+
+	apiKeys := make([]*APIKey, 0, len(ids))
+	for _, id := range ids {
+		apiKey, err := s.apiKeyRepo.GetByID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("get api key %d: %w", id, err)
+		}
+		if !apiKeyBelongsToAdminGroup(apiKey, groupID) {
+			return nil, infraerrors.BadRequest("API_KEY_GROUP_MISMATCH", fmt.Sprintf("api key %d does not belong to group %d", id, groupID))
+		}
+		apiKeys = append(apiKeys, apiKey)
+	}
+	return apiKeys, nil
+}
+
+func apiKeyBelongsToAdminGroup(apiKey *APIKey, groupID int64) bool {
+	if apiKey == nil {
+		return false
+	}
+	if groupID == 0 {
+		return apiKey.GroupID == nil
+	}
+	return apiKey.GroupID != nil && *apiKey.GroupID == groupID
+}
+
+func accountBelongsToAPIKeyGroup(account *Account, groupID int64) bool {
+	if account == nil {
+		return false
+	}
+	if groupID == 0 {
+		return len(account.GroupIDs) == 0
+	}
+	for _, accountGroupID := range account.GroupIDs {
+		if accountGroupID == groupID {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeAdminAPIKeyBatchIDs(keyIDs []int64) ([]int64, error) {
+	if len(keyIDs) == 0 {
+		return nil, infraerrors.BadRequest("API_KEY_IDS_REQUIRED", "api_key_ids must not be empty")
+	}
+	if len(keyIDs) > maxAdminAPIKeyBatchSize {
+		return nil, infraerrors.BadRequest("API_KEY_BATCH_TOO_LARGE", fmt.Sprintf("api_key_ids must contain at most %d items", maxAdminAPIKeyBatchSize))
+	}
+	seen := make(map[int64]struct{}, len(keyIDs))
+	ids := make([]int64, 0, len(keyIDs))
+	for _, keyID := range keyIDs {
+		if keyID <= 0 {
+			return nil, infraerrors.BadRequest("INVALID_API_KEY_ID", "api_key_ids must contain only positive IDs")
+		}
+		if _, exists := seen[keyID]; exists {
+			continue
+		}
+		seen[keyID] = struct{}{}
+		ids = append(ids, keyID)
+	}
+	return ids, nil
+}
+
 // ReplaceUserGroup 替换用户的专属分组
 func (s *adminServiceImpl) ReplaceUserGroup(ctx context.Context, userID, oldGroupID, newGroupID int64) (*ReplaceUserGroupResult, error) {
 	if oldGroupID == newGroupID {
