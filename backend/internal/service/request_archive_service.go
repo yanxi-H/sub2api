@@ -55,6 +55,27 @@ type RequestArchiveService struct {
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 	cfgStore func() RequestArchiveConfig
+	// 配置缓存:避免每次请求都查 DB。TTL 10 秒。
+	cfgMu       sync.Mutex
+	cfgCached   RequestArchiveConfig
+	cfgCachedAt time.Time
+}
+
+const requestArchiveCfgCacheTTL = 10 * time.Second
+
+// cachedConfig 返回带短期缓存的配置,避免高并发下每请求查 DB。
+func (s *RequestArchiveService) cachedConfig() RequestArchiveConfig {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	now := time.Now()
+	if now.Sub(s.cfgCachedAt) < requestArchiveCfgCacheTTL {
+		return s.cfgCached
+	}
+	if s.cfgStore != nil {
+		s.cfgCached = s.cfgStore()
+	}
+	s.cfgCachedAt = now
+	return s.cfgCached
 }
 
 // NewRequestArchiveService 创建存档服务。cfgStore 返回当前配置(允许动态开关)。
@@ -200,12 +221,12 @@ func requestArchiveCurrentConfig(cfgStore func() RequestArchiveConfig) RequestAr
 	return cfg
 }
 
-// IsEnabled 报告存档是否启用。
+// IsEnabled 报告存档是否启用(带缓存,避免每请求查 DB)。
 func (s *RequestArchiveService) IsEnabled() bool {
 	if s == nil || s.cfgStore == nil {
 		return false
 	}
-	return s.cfgStore().Enabled
+	return s.cachedConfig().Enabled
 }
 
 // Repository 返回底层 repo(供 handler 查询)。
