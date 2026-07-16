@@ -72,9 +72,8 @@
           {{ t('admin.requestArchive.disabledHint') }}
         </div>
 
-        <div class="card overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
+        <div class="table-wrapper overflow-x-auto">
+          <table class="w-full text-left text-sm">
               <thead class="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500 dark:border-dark-600 dark:bg-dark-700/50">
                 <tr>
                   <th class="px-4 py-3 font-medium">{{ t('admin.requestArchive.time') }}</th>
@@ -110,7 +109,6 @@
                 </tr>
               </tbody>
             </table>
-          </div>
         </div>
       </template>
 
