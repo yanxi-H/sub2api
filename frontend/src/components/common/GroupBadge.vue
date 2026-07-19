@@ -11,17 +11,7 @@
     <span class="truncate">{{ name }}</span>
     <!-- Right side label -->
     <span v-if="showLabel" :class="labelClass">
-      <template v-if="hasCustomRate">
-        <!-- 原倍率删除线 + 专属倍率高亮 -->
-        <span class="line-through opacity-50 mr-0.5">{{ rateMultiplier }}x</span>
-        <span class="font-bold">{{ userRateMultiplier }}x</span>
-      </template>
-      <template v-else>
-        {{ labelText }}
-      </template>
-    </span>
-    <span v-if="hasPeakRate" :class="peakRateClass" :title="peakRateTitle">
-      {{ peakRateText }}
+      {{ labelText }}
     </span>
   </span>
 </template>
@@ -30,8 +20,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { SubscriptionType, GroupPlatform } from '@/types'
-import { useAppStore } from '@/stores/app'
-import { formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 import PlatformIcon from './PlatformIcon.vue'
 
 interface Props {
@@ -67,50 +55,17 @@ const { t } = useI18n()
 
 const isSubscription = computed(() => props.subscriptionType === 'subscription')
 
-// 是否有专属倍率（且与默认倍率不同）
-const hasCustomRate = computed(() => {
-  return (
-    props.userRateMultiplier !== null &&
-    props.userRateMultiplier !== undefined &&
-    props.rateMultiplier !== undefined &&
-    props.userRateMultiplier !== props.rateMultiplier
-  )
-})
-
-const appStore = useAppStore()
-
-const hasPeakRate = computed(() => {
-  return Boolean(props.showRate && props.peakRateEnabled && props.peakStart && props.peakEnd)
-})
-
-const peakRateText = computed(() => {
-  return formatPeakRateWindow(
-    {
-      peak_rate_enabled: props.peakRateEnabled,
-      peak_start: props.peakStart,
-      peak_end: props.peakEnd,
-      peak_rate_multiplier: props.peakRateMultiplier
-    },
-    serverTimezoneLabel(appStore.cachedPublicSettings?.server_utc_offset)
-  )
-})
-
-const peakRateTitle = computed(() => {
-  return t('common.peakRateTooltip', { window: peakRateText.value })
-})
-
 // 是否显示右侧标签
 const showLabel = computed(() => {
   if (!props.showRate) return false
-  // 订阅类型：显示天数或"订阅"
+  // 订阅类型：显示天数或"订阅"（不显示倍率）
   if (isSubscription.value) return true
-  // 标准类型：显示倍率（包括专属倍率）
-  return props.rateMultiplier !== undefined || hasCustomRate.value
+  // 标准类型：不显示倍率（隐藏用户可见的费率信息）
+  return false
 })
 
 // Label text
 const labelText = computed(() => {
-  const rateLabel = props.rateMultiplier !== undefined ? `${props.rateMultiplier}x` : ''
   if (isSubscription.value && !props.alwaysShowRate) {
     // 如果有剩余天数，显示天数
     if (props.daysRemaining !== null && props.daysRemaining !== undefined) {
@@ -122,7 +77,8 @@ const labelText = computed(() => {
     // 否则显示"订阅"
     return t('groups.subscription')
   }
-  return rateLabel
+  // 标准类型：不显示倍率
+  return ''
 })
 
 // Label style based on type and days remaining
@@ -163,10 +119,6 @@ const labelClass = computed(() => {
     return `${base} bg-zinc-300/70 text-zinc-800 dark:bg-zinc-700/60 dark:text-zinc-200`
   }
   return `${base} bg-violet-200/60 text-violet-800 dark:bg-violet-800/40 dark:text-violet-300`
-})
-
-const peakRateClass = computed(() => {
-  return 'px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
 })
 
 // Badge color based on platform and subscription type
