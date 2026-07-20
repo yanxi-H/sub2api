@@ -63,11 +63,17 @@ type AccountHandler struct {
 	tokenCacheInvalidator   service.TokenCacheInvalidator
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
+	apiKeyRepo              service.APIKeyRepository
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
 func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamBillingProbeService) {
 	h.upstreamBillingProbe = probe
+}
+
+// SetAPIKeyRepository 注入 API Key 仓储,用于账号额度分配概览查询。
+func (h *AccountHandler) SetAPIKeyRepository(repo service.APIKeyRepository) {
+	h.apiKeyRepo = repo
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -203,6 +209,10 @@ type AccountUsageWindowItem struct {
 	UpdatedAt           *time.Time             `json:"updated_at"`
 	SupportsLiveRefresh bool                   `json:"supports_live_refresh"`
 	RefreshError        string                 `json:"refresh_error,omitempty"`
+	// 账号额度分配概览
+	QuotaLimit       float64 `json:"quota_limit"`         // 账号总额度(quota_limit)
+	AllocatedLimit   float64 `json:"allocated_limit"`     // 已分配:该账号分组下所有 Key 的 7d 限额之和
+	AvailableLimit   float64 `json:"available_limit"`     // 剩余可分配 = 总额度 - 已分配(超了为负)
 }
 
 type RefreshAccountUsageWindowsRequest struct {
@@ -724,10 +734,41 @@ func (h *AccountHandler) ListUsageWindows(c *gin.Context) {
 	}
 
 	now := time.Now()
+
+	// 批量查询所有账号涉及的分组下 Key 的 7d 限额总和(用于额度分配概览)
+	groupAllocMap := map[int64]float64{}
+	if h.apiKeyRepo != nil {
+		groupIDSet := map[int64]struct{}{}
+		for i := range accounts {
+			for _, gid := range accounts[i].GroupIDs {
+				groupIDSet[gid] = struct{}{}
+			}
+		}
+		if len(groupIDSet) > 0 {
+			groupIDs := make([]int64, 0, len(groupIDSet))
+			for gid := range groupIDSet {
+				groupIDs = append(groupIDs, gid)
+			}
+			if m, err := h.apiKeyRepo.SumRateLimit7dByGroupIDs(c.Request.Context(), groupIDs); err == nil {
+				groupAllocMap = m
+			}
+		}
+	}
+
 	items := make([]AccountUsageWindowItem, len(accounts))
 	for i := range accounts {
 		account := &accounts[i]
-		items[i] = accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, now))
+		item := accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, now))
+		// 计算额度分配概览
+		quotaLimit := account.GetQuotaLimit()
+		allocated := 0.0
+		for _, gid := range account.GroupIDs {
+			allocated += groupAllocMap[gid]
+		}
+		item.QuotaLimit = quotaLimit
+		item.AllocatedLimit = allocated
+		item.AvailableLimit = quotaLimit - allocated
+		items[i] = item
 	}
 	response.Paginated(c, items, total, page, pageSize)
 }

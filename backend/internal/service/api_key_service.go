@@ -77,6 +77,9 @@ type APIKeyRepository interface {
 	CountByUserID(ctx context.Context, userID int64) (int64, error)
 	ExistsByKey(ctx context.Context, key string) (bool, error)
 	ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]APIKey, *pagination.PaginationResult, error)
+	// SumRateLimit7dByGroupIDs 批量查询多个分组下所有未删除 Key 的 7d 限额总和。
+	// 返回 map[groupID]float64。用于账号额度分配概览。
+	SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error)
 	SearchAPIKeys(ctx context.Context, userID int64, keyword string, limit int) ([]APIKey, error)
 	ClearGroupIDByGroupID(ctx context.Context, groupID int64) (int64, error)
 	// UpdateGroupIDByUserAndGroup 将用户下绑定 oldGroupID 的所有 Key 迁移到 newGroupID

@@ -170,6 +170,10 @@ func (f fakeAPIKeyRepo) UpdateGroupIDByUserAndGroup(ctx context.Context, userID,
 	return 0, errors.New("not implemented")
 }
 
+func (f fakeAPIKeyRepo) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
+	return map[int64]float64{}, nil
+}
+
 func (f fakeGoogleSubscriptionRepo) Create(ctx context.Context, sub *service.UserSubscription) error {
 	return errors.New("not implemented")
 }

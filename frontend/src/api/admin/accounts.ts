@@ -37,6 +37,9 @@ export interface AccountUsageWindowItem {
   updated_at: string | null
   supports_live_refresh: boolean
   refresh_error?: string
+  quota_limit?: number
+  allocated_limit?: number
+  available_limit?: number
 }
 
 export async function listUsageWindows(

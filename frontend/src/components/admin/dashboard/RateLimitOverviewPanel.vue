@@ -156,6 +156,23 @@
                 />
               </div>
             </div>
+            <!-- 账号额度分配概览 -->
+            <div class="border-t border-gray-100 px-3.5 py-2 dark:border-dark-700/70">
+              <div class="flex items-center justify-between gap-2 text-[11px]">
+                <span class="text-gray-400">{{ t('admin.dashboard.rateLimits.quotaAllocation') }}</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-gray-500 dark:text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.quotaTotal') }}: <span class="font-medium text-gray-700 dark:text-gray-200">{{ formatUsd(item.quota_limit ?? 0) }}</span>
+                  </span>
+                  <span class="text-gray-500 dark:text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.allocated') }}: <span class="font-medium text-gray-700 dark:text-gray-200">{{ formatUsd(item.allocated_limit ?? 0) }}</span>
+                  </span>
+                  <span :class="(item.available_limit ?? 0) < 0 ? 'font-semibold text-red-600 dark:text-red-400' : 'font-medium text-emerald-600 dark:text-emerald-400'">
+                    {{ t('admin.dashboard.rateLimits.available') }}: {{ formatUsd(item.available_limit ?? 0) }}
+                  </span>
+                </div>
+              </div>
+            </div>
           </article>
         </div>
       </template>

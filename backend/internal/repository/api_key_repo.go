@@ -726,6 +726,32 @@ func (r *apiKeyRepository) ListByGroupID(ctx context.Context, groupID int64, par
 	return outKeys, paginationResultFromTotal(int64(total), params), nil
 }
 
+// SumRateLimit7dByGroupIDs 批量查询多个分组下所有未删除 Key 的 7d 限额总和。
+func (r *apiKeyRepository) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
+	result := make(map[int64]float64, len(groupIDs))
+	if len(groupIDs) == 0 || r.sql == nil {
+		return result, nil
+	}
+	// 用 raw SQL 一次查出所有分组的 7d 限额总和
+	query := `SELECT group_id, COALESCE(SUM(rate_limit_7d), 0) FROM api_keys
+		WHERE deleted_at IS NULL AND group_id = ANY($1::bigint[])
+		GROUP BY group_id`
+	rows, err := r.sql.QueryContext(ctx, query, pq.Array(groupIDs))
+	if err != nil {
+		return nil, fmt.Errorf("sum rate limit 7d by group ids: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var gid int64
+		var sum float64
+		if err := rows.Scan(&gid, &sum); err != nil {
+			return nil, fmt.Errorf("scan rate limit sum: %w", err)
+		}
+		result[gid] = sum
+	}
+	return result, rows.Err()
+}
+
 func apiKeyListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {
 	sortBy := strings.ToLower(strings.TrimSpace(params.SortBy))
 	sortOrder := params.NormalizedSortOrder(pagination.SortOrderDesc)
