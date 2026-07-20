@@ -8,10 +8,39 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetClientIP resolves a client address only through Gin's configured trusted
-// proxy chain. Forwarding headers from a direct or untrusted peer are ignored.
+// GetClientIP 从请求中提取客户端真实 IP 地址(用于 usage_log 等非安全敏感场景)。
+// 按以下优先级检查 Header:
+// 1. CF-Connecting-IP (Cloudflare)
+// 2. X-Real-IP (Nginx/Caddy)
+// 3. X-Forwarded-For (取第一个非私有 IP)
+// 4. c.ClientIP() (Gin trusted_proxies 解析链)
 func GetClientIP(c *gin.Context) string {
-	return GetTrustedClientIP(c)
+	if c == nil {
+		return ""
+	}
+	// 1. Cloudflare
+	if ip := c.GetHeader("CF-Connecting-IP"); ip != "" {
+		return normalizeIP(ip)
+	}
+	// 2. X-Real-IP
+	if ip := c.GetHeader("X-Real-IP"); ip != "" {
+		return normalizeIP(ip)
+	}
+	// 3. X-Forwarded-For (取第一个公网 IP,全是私有则取第一个)
+	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
+		ips := strings.Split(xff, ",")
+		for _, ip := range ips {
+			ip = strings.TrimSpace(ip)
+			if ip != "" && !isPrivateIP(ip) {
+				return normalizeIP(ip)
+			}
+		}
+		if len(ips) > 0 {
+			return normalizeIP(strings.TrimSpace(ips[0]))
+		}
+	}
+	// 4. Gin trusted_proxies 解析链
+	return normalizeIP(c.ClientIP())
 }
 
 // GetTrustedClientIP 从 Gin 的可信代理解析链提取客户端 IP。
@@ -39,6 +68,40 @@ func normalizeIP(ip string) string {
 		return host
 	}
 	return ip
+}
+
+// privateNets 预编译私有 IP CIDR 块，避免每次调用 isPrivateIP 时重复解析
+var privateNets []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+	} {
+		_, block, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic("invalid CIDR: " + cidr)
+		}
+		privateNets = append(privateNets, block)
+	}
+}
+
+// isPrivateIP 判断 IP 是否为私有/内网地址。
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	for _, block := range privateNets {
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // CompiledIPRules 表示预编译的 IP 匹配规则。

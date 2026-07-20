@@ -97,3 +97,37 @@ func TestGetSecurityClientIPUsesConfiguredTrustedProxy(t *testing.T) {
 
 	require.Equal(t, "1.2.3.4", w.Body.String())
 }
+
+// TestGetClientIPReadsForwardedHeaders 验证 GetClientIP 从 header 提取真实 IP(回归测试)。
+// 场景:无 trusted_proxies 配置时,反代(Caddy)转发的 X-Forwarded-For 应被正确读取。
+func TestGetClientIPReadsForwardedHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	require.NoError(t, r.SetTrustedProxies(nil))
+
+	tests := []struct {
+		name   string
+		header string
+		value  string
+		want   string
+	}{
+		{name: "CF-Connecting-IP", header: "CF-Connecting-IP", value: "203.0.113.5", want: "203.0.113.5"},
+		{name: "X-Real-IP", header: "X-Real-IP", value: "198.51.100.10", want: "198.51.100.10"},
+		{name: "X-Forwarded-For single", header: "X-Forwarded-For", value: "203.0.113.5", want: "203.0.113.5"},
+		{name: "X-Forwarded-For multi picks first public", header: "X-Forwarded-For", value: "172.16.0.1, 203.0.113.5", want: "203.0.113.5"},
+	}
+
+	r.GET("/t2", func(c *gin.Context) { c.String(200, GetClientIP(c)) })
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/t2", nil)
+			req.RemoteAddr = "172.18.0.1:12345" // docker 内网 IP(模拟 Caddy)
+			req.Header.Set(tc.header, tc.value)
+			r.ServeHTTP(w, req)
+			require.Equal(t, 200, w.Code)
+			require.Equal(t, tc.want, w.Body.String(), "GetClientIP 应从 %s 提取真实 IP", tc.header)
+		})
+	}
+}
