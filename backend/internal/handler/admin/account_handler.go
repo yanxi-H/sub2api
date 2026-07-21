@@ -209,6 +209,7 @@ type AccountUsageWindowItem struct {
 	UpdatedAt           *time.Time             `json:"updated_at"`
 	SupportsLiveRefresh bool                   `json:"supports_live_refresh"`
 	RefreshError        string                 `json:"refresh_error,omitempty"`
+	CurrentConcurrency  int                    `json:"current_concurrency"`
 	// 账号额度分配概览
 	QuotaLimit       float64 `json:"quota_limit"`         // 账号总额度(quota_limit)
 	AllocatedLimit   float64 `json:"allocated_limit"`     // 已分配:该账号分组下所有 Key 的 7d 限额之和
@@ -755,10 +756,24 @@ func (h *AccountHandler) ListUsageWindows(c *gin.Context) {
 		}
 	}
 
+	// 批量查询账号当前并发数
+	concurrencyMap := map[int64]int{}
+	if h.concurrencyService != nil && len(accounts) > 0 {
+		accountIDs := make([]int64, 0, len(accounts))
+		for i := range accounts {
+			accountIDs = append(accountIDs, accounts[i].ID)
+		}
+		if m, err := h.concurrencyService.GetAccountConcurrencyBatch(c.Request.Context(), accountIDs); err == nil {
+			concurrencyMap = m
+		}
+	}
+
 	items := make([]AccountUsageWindowItem, len(accounts))
 	for i := range accounts {
 		account := &accounts[i]
 		item := accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, now))
+		// 当前并发数
+		item.CurrentConcurrency = concurrencyMap[account.ID]
 		// 计算额度分配概览
 		quotaLimit := account.GetQuotaLimit()
 		allocated := 0.0

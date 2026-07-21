@@ -40,6 +40,7 @@ export interface AccountUsageWindowItem {
   quota_limit?: number
   allocated_limit?: number
   available_limit?: number
+  current_concurrency?: number
 }
 
 export async function listUsageWindows(

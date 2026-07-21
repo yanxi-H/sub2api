@@ -90,6 +90,7 @@ export default {
         quotaTotal: '总额度',
         allocated: '已分配',
         available: '剩余可分配',
+        currentConcurrency: '当前并发',
         searchPlaceholder: '搜索名称或用户',
         liveRefresh: '实时查询上游',
         liveRefreshHint: '实时查询当前页支持 5 小时/7 天额度的上游 AI 账号',

@@ -90,6 +90,7 @@ export default {
         quotaTotal: 'Total',
         allocated: 'Allocated',
         available: 'Available',
+        currentConcurrency: 'Concurrency',
         searchPlaceholder: 'Search name or owner',
         liveRefresh: 'Query Upstream',
         liveRefreshHint: 'Query upstream 5-hour and 7-day usage for supported AI accounts on this page',

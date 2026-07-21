@@ -546,6 +546,7 @@ func (s *APIKeyService) List(ctx context.Context, userID int64, params paginatio
 		if err != nil {
 			return nil, nil, fmt.Errorf("list api keys: %w", err)
 		}
+		s.fillCurrentConcurrency(ctx, keys)
 		return keys, pagination, nil
 	}
 	if normalizedAPIKeySortBy(params.SortBy) == apiKeySortCurrentConcurrency {

@@ -136,9 +136,19 @@
                   {{ refreshErrorLabel(item.refresh_error) }}
                 </p>
               </div>
-              <span class="flex-shrink-0 rounded-md px-2 py-1 text-[11px] font-medium" :class="statusClass(item.status)">
-                {{ statusLabel(item.status) }}
-              </span>
+              <div class="flex flex-shrink-0 items-center gap-1.5">
+                <span
+                  class="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] font-medium"
+                  :class="(item.current_concurrency ?? 0) > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400'"
+                  :title="t('admin.dashboard.rateLimits.currentConcurrency')"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full" :class="(item.current_concurrency ?? 0) > 0 ? 'bg-emerald-500' : 'bg-gray-400'"></span>
+                  {{ item.current_concurrency ?? 0 }}
+                </span>
+                <span class="rounded-md px-2 py-1 text-[11px] font-medium" :class="statusClass(item.status)">
+                  {{ statusLabel(item.status) }}
+                </span>
+              </div>
             </div>
             <div class="grid grid-cols-2 gap-3 px-3.5 py-3">
               <div class="min-w-0">
