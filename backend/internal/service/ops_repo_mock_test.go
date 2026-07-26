@@ -89,6 +89,10 @@ func (m *opsRepoMock) GetThroughputTrend(ctx context.Context, filter *OpsDashboa
 	return &OpsThroughputTrendResponse{}, nil
 }
 
+func (m *opsRepoMock) GetLatencyTrend(ctx context.Context, filter *OpsDashboardFilter, bucketSeconds int) (*OpsLatencyTrendResponse, error) {
+	return &OpsLatencyTrendResponse{}, nil
+}
+
 func (m *opsRepoMock) GetLatencyHistogram(ctx context.Context, filter *OpsDashboardFilter) (*OpsLatencyHistogramResponse, error) {
 	return &OpsLatencyHistogramResponse{}, nil
 }
@@ -99,6 +103,14 @@ func (m *opsRepoMock) GetErrorTrend(ctx context.Context, filter *OpsDashboardFil
 
 func (m *opsRepoMock) GetErrorDistribution(ctx context.Context, filter *OpsDashboardFilter) (*OpsErrorDistributionResponse, error) {
 	return &OpsErrorDistributionResponse{}, nil
+}
+
+func (m *opsRepoMock) GetUserErrorDistribution(ctx context.Context, filter *OpsDashboardFilter) (*OpsUserErrorDistributionResponse, error) {
+	return &OpsUserErrorDistributionResponse{}, nil
+}
+
+func (m *opsRepoMock) GetInvestigationErrorGroups(ctx context.Context, filter *OpsDashboardFilter) ([]*OpsInvestigationErrorGroup, error) {
+	return []*OpsInvestigationErrorGroup{}, nil
 }
 
 func (m *opsRepoMock) GetOpenAITokenStats(ctx context.Context, filter *OpsOpenAITokenStatsFilter) (*OpsOpenAITokenStatsResponse, error) {

@@ -781,6 +781,10 @@ func (s *stubAdminService) AdminBatchResetAPIKey7dUsage(ctx context.Context, key
 	return nil, nil
 }
 
+func (s *stubAdminService) GetAPIKey7dAllocations(ctx context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]service.APIKey7dAllocation, error) {
+	return map[int64]service.APIKey7dAllocation{}, nil
+}
+
 func (s *stubAdminService) ResetAccountQuota(ctx context.Context, id int64) error {
 	return nil
 }

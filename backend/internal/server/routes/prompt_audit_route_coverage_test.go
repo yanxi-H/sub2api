@@ -115,7 +115,8 @@ func TestPromptAuditAdminRoutesRejectUnauthenticatedAndNonAdminRequests(t *testi
 	})
 	auditLog := servermiddleware.AuditLogMiddleware(func(c *gin.Context) { c.Next() })
 	stepUp := servermiddleware.StepUpAuthMiddleware(func(c *gin.Context) { c.Next() })
-	RegisterAdminRoutes(router.Group("/api/v1"), handlers, adminAuth, auditLog, stepUp, nil)
+	alwaysStepUp := servermiddleware.AlwaysStepUpAuthMiddleware(func(c *gin.Context) { c.Next() })
+	RegisterAdminRoutes(router.Group("/api/v1"), handlers, adminAuth, auditLog, stepUp, alwaysStepUp, nil)
 
 	for _, tc := range []struct {
 		name       string
@@ -135,4 +136,23 @@ func TestPromptAuditAdminRoutesRejectUnauthenticatedAndNonAdminRequests(t *testi
 			require.Equal(t, tc.wantStatus, recorder.Code)
 		})
 	}
+}
+
+func TestPromptAuditEventDetailRequiresStepUp(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handlers := &handler.Handlers{Admin: &handler.AdminHandlers{
+		PromptAudit: securityaudit.NewPromptAdminHandler(nil),
+	}}
+	stepUpCalled := false
+	stepUp := servermiddleware.AlwaysStepUpAuthMiddleware(func(c *gin.Context) {
+		stepUpCalled = true
+		c.AbortWithStatus(http.StatusForbidden)
+	})
+	registerPromptAuditRoutes(router.Group("/api/v1/admin"), handlers, stepUp)
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/admin/prompt-audit/events/7", nil))
+	require.True(t, stepUpCalled)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 }
