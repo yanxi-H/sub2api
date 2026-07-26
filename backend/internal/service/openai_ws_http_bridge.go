@@ -373,6 +373,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			parseOpenAIWSResponseUsageFromCompletedEvent(upstreamMessage, &usage)
 		}
 		imageCounter.AddSSEData(upstreamMessage)
+		if eventType == "response.failed" {
+			markOpenAIStreamFailedEvent(c, upstreamMessage, extractOpenAISSEErrorMessage(upstreamMessage))
+		}
 
 		if needModelReplace && len(mappedModelBytes) > 0 && openAIWSEventMayContainModel(eventType) && strings.Contains(trimmedData, mappedModel) {
 			upstreamMessage = replaceOpenAIWSMessageModel(upstreamMessage, mappedModel, originalModel)

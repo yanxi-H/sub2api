@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -42,14 +44,23 @@ const (
 	waitQueueKeyPrefix = "concurrency:wait:"
 	// 账号级等待队列计数器格式: wait:account:{accountID}
 	accountWaitKeyPrefix = "wait:account:"
+	// Request-body lane keys share one hash tag so the atomic scope/user
+	// acquire script remains Redis Cluster compatible and the per-user active
+	// limit can span both the heavy and recovery lanes.
+	requestBodyLaneKeyPrefix     = "concurrency:request_body:"
+	requestBodyLaneWaitKeyPrefix = "wait:request_body:"
 
 	// 默认槽位过期时间（分钟），可通过配置覆盖
 	defaultSlotTTLMinutes = 15
+	// Admission leases are refreshed while a request is alive. Keeping this
+	// independent from the general concurrency TTL makes crash recovery fast.
+	requestBodyAdmissionLeaseTTLSeconds = 60
 
 	// 活跃索引用来替代后台任务全量 SCAN 槽位键。
 	// member 是账号/用户 ID，score 是“预计仍需关注到”的 Redis Unix 秒时间戳。
-	accountActiveIndexKey = "concurrency:account:active_index" // ZSET member=accountID, score=expireAtUnixSeconds
-	userActiveIndexKey    = "concurrency:user:active_index"    // ZSET member=userID, score=expireAtUnixSeconds
+	accountActiveIndexKey     = "concurrency:account:active_index"      // ZSET member=accountID, score=expireAtUnixSeconds
+	userActiveIndexKey        = "concurrency:user:active_index"         // ZSET member=userID, score=expireAtUnixSeconds
+	requestBodyActiveIndexKey = "concurrency:request_body:active_index" // ZSET member=userID, score=expireAtUnixSeconds
 
 	// 后台清理只按批处理索引候选，避免单次任务占用 Redis 太久。
 	activeIndexCleanupBatchSize  = 1000
@@ -67,7 +78,7 @@ var (
 	// ARGV[1] = maxConcurrency
 	// ARGV[2] = TTL（秒）
 	// ARGV[3] = requestID
-	// 返回 {是否成功, Redis 当前秒}，Go 侧复用同一时间源写活跃索引，省去额外 TIME 往返。
+	// 返回 {是否成功, Redis 当前秒, 普通与 Live 总槽位数}。
 	acquireScript = redis.NewScript(`
 		-- Redis 3.2-4.x compat: opt into effects replication so redis.call('TIME')
 		-- replicates correctly. No-op on Redis 5.0+ (effects replication is default).
@@ -92,7 +103,7 @@ var (
 		if exists ~= false then
 			redis.call('ZADD', key, now, requestID)
 			redis.call('EXPIRE', key, ttl)
-			return {1, now}
+			return {1, now, redis.call('ZCARD', key) + redis.call('ZCARD', liveKey)}
 		end
 
 		-- 检查是否达到并发上限
@@ -100,10 +111,10 @@ var (
 		if count < maxConcurrency then
 			redis.call('ZADD', key, now, requestID)
 			redis.call('EXPIRE', key, ttl)
-			return {1, now}
+			return {1, now, redis.call('ZCARD', key) + redis.call('ZCARD', liveKey)}
 		end
 
-		return {0, now}
+		return {0, now, count}
 	`)
 
 	// getCountScript 统计有序集合中的槽位数量并清理过期条目
@@ -202,6 +213,20 @@ var (
 		return 1
 	`)
 
+	// trackUserSlotStateScript records an unlimited user's request for stats only
+	// and returns the observed count plus Redis time.
+	trackUserSlotStateScript = redis.NewScript(`
+		redis.replicate_commands()
+		local key = KEYS[1]
+		local ttl = tonumber(ARGV[1])
+		local requestID = ARGV[2]
+		local now = tonumber(redis.call('TIME')[1])
+		redis.call('ZREMRANGEBYSCORE', key, '-inf', now - ttl)
+		redis.call('ZADD', key, now, requestID)
+		redis.call('EXPIRE', key, ttl)
+		return {redis.call('ZCARD', key), now}
+	`)
+
 	// acquireOpenAIWSIngressLeaseScript atomically reaps crashed members and
 	// acquires or refreshes one API-key-scoped ingress lease using Redis TIME.
 	acquireOpenAIWSIngressLeaseScript = redis.NewScript(`
@@ -263,15 +288,15 @@ var (
 		local now = tonumber(redis.call('TIME')[1])
 
 		if current >= tonumber(ARGV[1]) then
-			return {0, now}
+			return {0, now, current}
 		end
 
-		redis.call('INCR', KEYS[1])
+		local next = redis.call('INCR', KEYS[1])
 
 		-- Refresh TTL so long-running traffic doesn't expire active queue counters.
 		redis.call('EXPIRE', KEYS[1], ARGV[2])
 
-		return {1, now}
+		return {1, now, next}
 	`)
 
 	// incrementAccountWaitScript - account-level wait queue count (refresh TTL on each increment)
@@ -302,12 +327,34 @@ var (
 
 	// decrementWaitScript - same as before
 	decrementWaitScript = redis.NewScript(`
+			redis.replicate_commands()
 			local current = redis.call('GET', KEYS[1])
+			local remaining = 0
 			if current ~= false and tonumber(current) > 0 then
-				redis.call('DECR', KEYS[1])
+				remaining = redis.call('DECR', KEYS[1])
 			end
-			return 1
+			if remaining <= 0 then
+				remaining = 0
+				redis.call('DEL', KEYS[1])
+			end
+			local now = tonumber(redis.call('TIME')[1])
+			return {remaining, now}
 		`)
+
+	// releaseSlotStateScript atomically releases a user slot and returns the
+	// remaining count plus Redis time for realtime trend observation.
+	releaseSlotStateScript = redis.NewScript(`
+		redis.replicate_commands()
+		local ttl = tonumber(ARGV[1])
+		local now = tonumber(redis.call('TIME')[1])
+		redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - ttl)
+		redis.call('ZREM', KEYS[1], ARGV[2])
+		local remaining = redis.call('ZCARD', KEYS[1])
+		if remaining == 0 then
+			redis.call('DEL', KEYS[1])
+		end
+		return {remaining, now}
+	`)
 
 	// cleanupExpiredSlotsScript 清理单个账号/用户有序集合中过期槽位
 	// KEYS[1] = 有序集合键
@@ -352,6 +399,339 @@ var (
 		end
 		return {removed, remaining}
 	`)
+
+	requestBodyLaneAcquireScript = redis.NewScript(`
+		redis.replicate_commands()
+		local scopeKey = KEYS[1]
+		local userKey = KEYS[2]
+		local waitKey = KEYS[3]
+		local scopeWaitKey = KEYS[4]
+		local accountScopeKey = KEYS[5]
+		local maxPermits = tonumber(ARGV[1])
+		local weight = tonumber(ARGV[2])
+		local ttl = tonumber(ARGV[3])
+		local requestID = ARGV[4]
+		local lane = ARGV[5]
+		local scopeWaitMember = ARGV[6]
+		local accountMaxPermits = tonumber(ARGV[7])
+		local activeMember = lane .. ':' .. requestID
+		local pendingActiveMember = 'pending_active:' .. requestID
+		local now = tonumber(redis.call('TIME')[1])
+		local expireBefore = now - ttl
+
+		redis.call('ZREMRANGEBYSCORE', scopeKey, '-inf', expireBefore)
+		redis.call('ZREMRANGEBYSCORE', userKey, '-inf', expireBefore)
+		if accountMaxPermits > 0 then
+			redis.call('ZREMRANGEBYSCORE', accountScopeKey, '-inf', expireBefore)
+		end
+		if redis.call('ZSCORE', userKey, pendingActiveMember) ~= false then
+			redis.call('ZADD', userKey, now, pendingActiveMember)
+		end
+
+		local function state(result)
+			local heavyActive = 0
+			local recoveryActive = 0
+			local pendingActive = 0
+			local pendingWaiting = 0
+			local members = redis.call('ZRANGE', userKey, 0, -1)
+			for _, member in ipairs(members) do
+				if string.sub(member, 1, 6) == 'heavy:' then
+					heavyActive = heavyActive + 1
+				elseif string.sub(member, 1, 9) == 'recovery:' then
+					recoveryActive = recoveryActive + 1
+				elseif string.sub(member, 1, 15) == 'pending_active:' then
+					pendingActive = pendingActive + 1
+				elseif string.sub(member, 1, 16) == 'pending_waiting:' then
+					pendingWaiting = pendingWaiting + 1
+				end
+			end
+			local waitingLane = redis.call('GET', waitKey)
+			local heavyWaiting = 0
+			local recoveryWaiting = 0
+			if waitingLane and string.sub(waitingLane, 1, 6) == 'heavy:' then
+				heavyWaiting = 1
+			elseif waitingLane and string.sub(waitingLane, 1, 9) == 'recovery:' then
+				recoveryWaiting = 1
+			end
+			return {result, now, heavyActive, heavyWaiting, recoveryActive, recoveryWaiting, pendingActive, pendingWaiting}
+		end
+
+		if redis.call('ZSCORE', userKey, activeMember) ~= false then
+			redis.call('ZADD', userKey, now, activeMember)
+			for i = 1, weight do
+				redis.call('ZADD', scopeKey, now, requestID .. ':' .. i)
+				if accountMaxPermits > 0 then
+					redis.call('ZADD', accountScopeKey, now, requestID .. ':' .. i)
+				end
+			end
+			if redis.call('GET', waitKey) == activeMember then
+				redis.call('DEL', waitKey)
+				redis.call('ZREM', scopeWaitKey, scopeWaitMember)
+			end
+			redis.call('EXPIRE', userKey, ttl)
+			redis.call('EXPIRE', scopeKey, ttl)
+			if accountMaxPermits > 0 then redis.call('EXPIRE', accountScopeKey, ttl) end
+			return state(1)
+		end
+
+		local activeLaneCount = 0
+		local activeMembers = redis.call('ZRANGE', userKey, 0, -1)
+		for _, member in ipairs(activeMembers) do
+			if string.sub(member, 1, 6) == 'heavy:' or string.sub(member, 1, 9) == 'recovery:' then
+				activeLaneCount = activeLaneCount + 1
+			end
+		end
+		if activeLaneCount >= 1 then
+			return state(0)
+		end
+		if redis.call('ZCARD', scopeKey) + weight > maxPermits then
+			return state(0)
+		end
+		if accountMaxPermits > 0 and redis.call('ZCARD', accountScopeKey) + weight > accountMaxPermits then
+			return state(0)
+		end
+
+		redis.call('ZADD', userKey, now, activeMember)
+		for i = 1, weight do
+			redis.call('ZADD', scopeKey, now, requestID .. ':' .. i)
+			if accountMaxPermits > 0 then
+				redis.call('ZADD', accountScopeKey, now, requestID .. ':' .. i)
+			end
+		end
+		if redis.call('GET', waitKey) == activeMember then
+			redis.call('DEL', waitKey)
+			redis.call('ZREM', scopeWaitKey, scopeWaitMember)
+		end
+		redis.call('EXPIRE', userKey, ttl)
+		redis.call('EXPIRE', scopeKey, ttl)
+		if accountMaxPermits > 0 then redis.call('EXPIRE', accountScopeKey, ttl) end
+		return state(1)
+	`)
+
+	requestBodyLaneReleaseScript = redis.NewScript(`
+		redis.replicate_commands()
+		local requestID = ARGV[1]
+		local weight = tonumber(ARGV[2])
+		local lane = ARGV[3]
+		local ttl = tonumber(ARGV[4])
+		local now = tonumber(redis.call('TIME')[1])
+		redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', now - ttl)
+		redis.call('ZREM', KEYS[2], lane .. ':' .. requestID)
+		redis.call('ZREM', KEYS[2], requestID)
+		for i = 1, weight do
+			redis.call('ZREM', KEYS[1], requestID .. ':' .. i)
+			redis.call('ZREM', KEYS[4], requestID .. ':' .. i)
+		end
+		local heavyActive = 0
+		local recoveryActive = 0
+		local pendingActive = 0
+		local pendingWaiting = 0
+		local members = redis.call('ZRANGE', KEYS[2], 0, -1)
+		for _, member in ipairs(members) do
+			if string.sub(member, 1, 6) == 'heavy:' then
+				heavyActive = heavyActive + 1
+			elseif string.sub(member, 1, 9) == 'recovery:' then
+				recoveryActive = recoveryActive + 1
+			elseif string.sub(member, 1, 15) == 'pending_active:' then
+				pendingActive = pendingActive + 1
+			elseif string.sub(member, 1, 16) == 'pending_waiting:' then
+				pendingWaiting = pendingWaiting + 1
+			end
+		end
+		local waitingLane = redis.call('GET', KEYS[3])
+		local heavyWaiting = 0
+		local recoveryWaiting = 0
+		if waitingLane and string.sub(waitingLane, 1, 6) == 'heavy:' then
+			heavyWaiting = 1
+		elseif waitingLane and string.sub(waitingLane, 1, 9) == 'recovery:' then
+			recoveryWaiting = 1
+		end
+		return {now, heavyActive, heavyWaiting, recoveryActive, recoveryWaiting, pendingActive, pendingWaiting}
+	`)
+
+	requestBodyLaneRefreshScript = redis.NewScript(`
+		redis.replicate_commands()
+		local lane = ARGV[1]
+		local requestID = ARGV[2]
+		local weight = tonumber(ARGV[3])
+		local ttl = tonumber(ARGV[4])
+		local hasAccountScope = tonumber(ARGV[5])
+		local activeMember = lane .. ':' .. requestID
+		local pendingActiveMember = 'pending_active:' .. requestID
+		local now = tonumber(redis.call('TIME')[1])
+		local expireBefore = now - ttl
+		redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', expireBefore)
+		redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', expireBefore)
+		if hasAccountScope > 0 then redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', expireBefore) end
+		if redis.call('ZSCORE', KEYS[2], activeMember) == false then return 0 end
+		for i = 1, weight do
+			if redis.call('ZSCORE', KEYS[1], requestID .. ':' .. i) == false then return 0 end
+			if hasAccountScope > 0 and redis.call('ZSCORE', KEYS[3], requestID .. ':' .. i) == false then return 0 end
+		end
+		redis.call('ZADD', KEYS[2], now, activeMember)
+		if redis.call('ZSCORE', KEYS[2], pendingActiveMember) ~= false then
+			redis.call('ZADD', KEYS[2], now, pendingActiveMember)
+		end
+		for i = 1, weight do
+			redis.call('ZADD', KEYS[1], now, requestID .. ':' .. i)
+			if hasAccountScope > 0 then redis.call('ZADD', KEYS[3], now, requestID .. ':' .. i) end
+		end
+		redis.call('EXPIRE', KEYS[1], ttl)
+		redis.call('EXPIRE', KEYS[2], ttl)
+		if hasAccountScope > 0 then redis.call('EXPIRE', KEYS[3], ttl) end
+		return 1
+	`)
+
+	requestBodyLaneIncrementWaitScript = redis.NewScript(`
+		redis.replicate_commands()
+		local userKey = KEYS[1]
+		local waitKey = KEYS[2]
+		local scopeWaitKey = KEYS[3]
+		local lane = ARGV[1]
+		local ttl = tonumber(ARGV[2])
+		local waiterID = ARGV[4]
+		local maxScopeWait = tonumber(ARGV[5])
+		local scopeWaitMember = ARGV[6]
+		local waitValue = lane .. ':' .. waiterID
+		local now = tonumber(redis.call('TIME')[1])
+		redis.call('ZREMRANGEBYSCORE', userKey, '-inf', now - tonumber(ARGV[3]))
+		redis.call('ZREMRANGEBYSCORE', scopeWaitKey, '-inf', now - ttl)
+		local allowed = 0
+		local currentWaitValue = redis.call('GET', waitKey)
+		local currentScopeWait = redis.call('ZSCORE', scopeWaitKey, scopeWaitMember)
+		if currentWaitValue == false and (currentScopeWait ~= false or redis.call('ZCARD', scopeWaitKey) < maxScopeWait) then
+			redis.call('SET', waitKey, waitValue, 'EX', ttl)
+			redis.call('ZADD', scopeWaitKey, now, scopeWaitMember)
+			redis.call('EXPIRE', scopeWaitKey, ttl)
+			allowed = 1
+		elseif currentWaitValue == waitValue then
+			redis.call('EXPIRE', waitKey, ttl)
+			redis.call('ZADD', scopeWaitKey, now, scopeWaitMember)
+			redis.call('EXPIRE', scopeWaitKey, ttl)
+			allowed = 1
+		end
+		local heavyActive = 0
+		local recoveryActive = 0
+		local pendingActive = 0
+		local pendingWaiting = 0
+		local members = redis.call('ZRANGE', userKey, 0, -1)
+		for _, member in ipairs(members) do
+			if string.sub(member, 1, 6) == 'heavy:' then
+				heavyActive = heavyActive + 1
+			elseif string.sub(member, 1, 9) == 'recovery:' then
+				recoveryActive = recoveryActive + 1
+			elseif string.sub(member, 1, 15) == 'pending_active:' then
+				pendingActive = pendingActive + 1
+			elseif string.sub(member, 1, 16) == 'pending_waiting:' then
+				pendingWaiting = pendingWaiting + 1
+			end
+		end
+		local waitingLane = redis.call('GET', waitKey)
+		local heavyWaiting = 0
+		local recoveryWaiting = 0
+		if waitingLane and string.sub(waitingLane, 1, 6) == 'heavy:' then
+			heavyWaiting = 1
+		elseif waitingLane and string.sub(waitingLane, 1, 9) == 'recovery:' then
+			recoveryWaiting = 1
+		end
+		return {allowed, now, heavyActive, heavyWaiting, recoveryActive, recoveryWaiting, pendingActive, pendingWaiting}
+	`)
+
+	requestBodyLaneDecrementWaitScript = redis.NewScript(`
+		redis.replicate_commands()
+		local userKey = KEYS[1]
+		local waitKey = KEYS[2]
+		local scopeWaitKey = KEYS[3]
+		local lane = ARGV[1]
+		local ttl = tonumber(ARGV[2])
+		local waitValue = lane .. ':' .. ARGV[3]
+		local scopeWaitMember = ARGV[4]
+		local now = tonumber(redis.call('TIME')[1])
+		redis.call('ZREMRANGEBYSCORE', userKey, '-inf', now - ttl)
+		if redis.call('GET', waitKey) == waitValue then
+			redis.call('DEL', waitKey)
+		end
+		redis.call('ZREM', scopeWaitKey, scopeWaitMember)
+		local heavyActive = 0
+		local recoveryActive = 0
+		local pendingActive = 0
+		local pendingWaiting = 0
+		local members = redis.call('ZRANGE', userKey, 0, -1)
+		for _, member in ipairs(members) do
+			if string.sub(member, 1, 6) == 'heavy:' then
+				heavyActive = heavyActive + 1
+			elseif string.sub(member, 1, 9) == 'recovery:' then
+				recoveryActive = recoveryActive + 1
+			elseif string.sub(member, 1, 15) == 'pending_active:' then
+				pendingActive = pendingActive + 1
+			elseif string.sub(member, 1, 16) == 'pending_waiting:' then
+				pendingWaiting = pendingWaiting + 1
+			end
+		end
+		local waitingLane = redis.call('GET', waitKey)
+		local heavyWaiting = 0
+		local recoveryWaiting = 0
+		if waitingLane and string.sub(waitingLane, 1, 6) == 'heavy:' then
+			heavyWaiting = 1
+		elseif waitingLane and string.sub(waitingLane, 1, 9) == 'recovery:' then
+			recoveryWaiting = 1
+		end
+		return {now, heavyActive, heavyWaiting, recoveryActive, recoveryWaiting, pendingActive, pendingWaiting}
+	`)
+
+	requestBodyClassificationStateScript = redis.NewScript(`
+		redis.replicate_commands()
+		local userKey = KEYS[1]
+		local waitKey = KEYS[2]
+		local requestID = ARGV[1]
+		local active = ARGV[2] == '1'
+		local waiting = ARGV[3] == '1'
+		local ttl = tonumber(ARGV[4])
+		local now = tonumber(redis.call('TIME')[1])
+		redis.call('ZREMRANGEBYSCORE', userKey, '-inf', now - ttl)
+
+		local activeMember = 'pending_active:' .. requestID
+		local waitingMember = 'pending_waiting:' .. requestID
+		if active then
+			redis.call('ZADD', userKey, now, activeMember)
+		else
+			redis.call('ZREM', userKey, activeMember)
+		end
+		if waiting then
+			redis.call('ZADD', userKey, now, waitingMember)
+		else
+			redis.call('ZREM', userKey, waitingMember)
+		end
+
+		local heavyActive = 0
+		local recoveryActive = 0
+		local pendingActive = 0
+		local pendingWaiting = 0
+		local members = redis.call('ZRANGE', userKey, 0, -1)
+		for _, member in ipairs(members) do
+			if string.sub(member, 1, 6) == 'heavy:' then
+				heavyActive = heavyActive + 1
+			elseif string.sub(member, 1, 9) == 'recovery:' then
+				recoveryActive = recoveryActive + 1
+			elseif string.sub(member, 1, 15) == 'pending_active:' then
+				pendingActive = pendingActive + 1
+			elseif string.sub(member, 1, 16) == 'pending_waiting:' then
+				pendingWaiting = pendingWaiting + 1
+			end
+		end
+		local waitingLane = redis.call('GET', waitKey)
+		local heavyWaiting = 0
+		local recoveryWaiting = 0
+		if waitingLane and string.sub(waitingLane, 1, 6) == 'heavy:' then
+			heavyWaiting = 1
+		elseif waitingLane and string.sub(waitingLane, 1, 9) == 'recovery:' then
+			recoveryWaiting = 1
+		end
+		if redis.call('ZCARD', userKey) > 0 then
+			redis.call('EXPIRE', userKey, ttl)
+		end
+		return {now, heavyActive, heavyWaiting, recoveryActive, recoveryWaiting, pendingActive, pendingWaiting}
+	`)
 )
 
 type concurrencyCache struct {
@@ -359,6 +739,11 @@ type concurrencyCache struct {
 	slotTTLSeconds      int // 槽位过期时间（秒）
 	waitQueueTTLSeconds int // 等待队列过期时间（秒）
 }
+
+var _ service.RequestBodyAdmissionCache = (*concurrencyCache)(nil)
+var _ service.RequestBodyAdmissionStateCache = (*concurrencyCache)(nil)
+var _ service.RequestBodyAdmissionScopedWaitStateCache = (*concurrencyCache)(nil)
+var _ service.RequestBodyAdmissionLeaseCache = (*concurrencyCache)(nil)
 
 // NewConcurrencyCache 创建并发控制缓存
 // slotTTLMinutes: 槽位过期时间（分钟），0 或负数使用默认值 15 分钟
@@ -412,6 +797,46 @@ func waitQueueKey(userID int64) string {
 
 func accountWaitKey(accountID int64) string {
 	return fmt.Sprintf("%s%d", accountWaitKeyPrefix, accountID)
+}
+
+func requestBodyLaneScopeKey(lane service.RequestBodyLane, scopeID int64) string {
+	return fmt.Sprintf("%s{admission}:%s:scope:%d", requestBodyLaneKeyPrefix, lane, scopeID)
+}
+
+func requestBodyLaneScopeKeys(lane service.RequestBodyLane, accountID int64) (primary, account string, accountLimit int) {
+	if lane == service.RequestBodyLaneRecovery {
+		primary = requestBodyLaneScopeKey(lane, 0)
+		if accountID > 0 {
+			account = requestBodyLaneScopeKey(lane, accountID)
+			accountLimit = service.RequestBodyRecoveryAccountConcurrency
+		}
+		return primary, account, accountLimit
+	}
+	primary = requestBodyLaneScopeKey(lane, accountID)
+	return primary, primary, 0
+}
+
+func requestBodyLaneWaitScopeID(lane service.RequestBodyLane, scopeID int64) int64 {
+	if lane == service.RequestBodyLaneRecovery {
+		return 0
+	}
+	return scopeID
+}
+
+func requestBodyLaneUserKey(userID int64) string {
+	return fmt.Sprintf("%s{admission}:user:%d", requestBodyLaneKeyPrefix, userID)
+}
+
+func requestBodyLaneWaitKey(userID int64) string {
+	return fmt.Sprintf("%s{admission}:user:%d", requestBodyLaneWaitKeyPrefix, userID)
+}
+
+func requestBodyLaneScopeWaitKey(lane service.RequestBodyLane, scopeID int64) string {
+	return fmt.Sprintf("%s{admission}:%s:scope:%d", requestBodyLaneWaitKeyPrefix, lane, scopeID)
+}
+
+func requestBodyLaneScopeWaitMember(userID int64, waiterID string) string {
+	return fmt.Sprintf("%d:%s", userID, waiterID)
 }
 
 // redisUnixSeconds 统一使用 Redis 服务器时间，避免多实例本地时钟漂移导致索引提前/延后过期。
@@ -652,6 +1077,332 @@ func (c *concurrencyCache) ReleaseAccountSlot(ctx context.Context, accountID int
 	return nil
 }
 
+func (c *concurrencyCache) AcquireRequestBodyLane(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+	requestID string,
+) (bool, error) {
+	acquired, _, _, err := c.AcquireRequestBodyLaneWithState(ctx, lane, scopeID, userID, maxPermits, weight, requestID)
+	return acquired, err
+}
+
+func (c *concurrencyCache) AcquireRequestBodyLaneWithState(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+	requestID string,
+) (bool, service.RequestBodyLaneUserLoad, time.Time, error) {
+	if maxPermits <= 0 || weight <= 0 || requestID == "" {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, nil
+	}
+	primaryScopeKey, accountScopeKey, accountLimit := requestBodyLaneScopeKeys(lane, scopeID)
+	if accountScopeKey == "" {
+		accountScopeKey = primaryScopeKey
+	}
+	raw, err := requestBodyLaneAcquireScript.Run(
+		ctx,
+		c.rdb,
+		[]string{
+			primaryScopeKey,
+			requestBodyLaneUserKey(userID),
+			requestBodyLaneWaitKey(userID),
+			requestBodyLaneScopeWaitKey(lane, requestBodyLaneWaitScopeID(lane, scopeID)),
+			accountScopeKey,
+		},
+		maxPermits,
+		weight,
+		requestBodyAdmissionLeaseTTLSeconds,
+		requestID,
+		string(lane),
+		requestBodyLaneScopeWaitMember(userID, requestID),
+		accountLimit,
+	).Result()
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	result, err := redisScriptInt64At(raw, 0)
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body acquire result: %w", err)
+	}
+	now, err := redisScriptInt64At(raw, 1)
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body acquire time: %w", err)
+	}
+	state, err := requestBodyLaneUserLoadAt(raw, 2)
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	c.refreshRequestBodyActiveIndexAt(ctx, userID, state, now)
+	return result == 1, state, time.Unix(now, 0).UTC(), nil
+}
+
+func (c *concurrencyCache) ReleaseRequestBodyLane(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	weight int,
+	requestID string,
+) error {
+	_, _, err := c.ReleaseRequestBodyLaneWithState(ctx, lane, scopeID, userID, weight, requestID)
+	return err
+}
+
+func (c *concurrencyCache) ReleaseRequestBodyLaneWithState(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	weight int,
+	requestID string,
+) (service.RequestBodyLaneUserLoad, time.Time, error) {
+	if weight <= 0 {
+		weight = 1
+	}
+	primaryScopeKey, accountScopeKey, _ := requestBodyLaneScopeKeys(lane, scopeID)
+	if accountScopeKey == "" {
+		accountScopeKey = primaryScopeKey
+	}
+	raw, err := requestBodyLaneReleaseScript.Run(
+		ctx,
+		c.rdb,
+		[]string{primaryScopeKey, requestBodyLaneUserKey(userID), requestBodyLaneWaitKey(userID), accountScopeKey},
+		requestID,
+		weight,
+		string(lane),
+		requestBodyAdmissionLeaseTTLSeconds,
+	).Result()
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	now, err := redisScriptInt64At(raw, 0)
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body release time: %w", err)
+	}
+	state, err := requestBodyLaneUserLoadAt(raw, 1)
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	c.refreshRequestBodyActiveIndexAt(ctx, userID, state, now)
+	return state, time.Unix(now, 0).UTC(), nil
+}
+
+func (c *concurrencyCache) RefreshRequestBodyLane(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	weight int,
+	requestID string,
+) (bool, error) {
+	if c == nil || c.rdb == nil || requestID == "" {
+		return false, nil
+	}
+	if weight <= 0 {
+		weight = 1
+	}
+	primaryScopeKey, accountScopeKey, accountLimit := requestBodyLaneScopeKeys(lane, scopeID)
+	if accountScopeKey == "" {
+		accountScopeKey = primaryScopeKey
+	}
+	result, err := requestBodyLaneRefreshScript.Run(
+		ctx,
+		c.rdb,
+		[]string{primaryScopeKey, requestBodyLaneUserKey(userID), accountScopeKey},
+		string(lane), requestID, weight, requestBodyAdmissionLeaseTTLSeconds, accountLimit,
+	).Int()
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+func (c *concurrencyCache) IncrementRequestBodyLaneWaitCount(ctx context.Context, userID int64, maxWait int, waiterID string) (bool, error) {
+	allowed, _, _, err := c.IncrementRequestBodyLaneWaitCountWithState(ctx, service.RequestBodyLaneHeavy, userID, maxWait, waiterID)
+	return allowed, err
+}
+
+func (c *concurrencyCache) IncrementRequestBodyLaneWaitCountWithState(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	userID int64,
+	maxWait int,
+	waiterID string,
+) (bool, service.RequestBodyLaneUserLoad, time.Time, error) {
+	return c.IncrementRequestBodyLaneScopedWaitCountWithState(ctx, lane, userID, userID, maxWait, waiterID)
+}
+
+func (c *concurrencyCache) IncrementRequestBodyLaneScopedWaitCountWithState(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	maxScopeWait int,
+	waiterID string,
+) (bool, service.RequestBodyLaneUserLoad, time.Time, error) {
+	if maxScopeWait <= 0 || waiterID == "" {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, nil
+	}
+	waitScopeID := requestBodyLaneWaitScopeID(lane, scopeID)
+	raw, err := requestBodyLaneIncrementWaitScript.Run(
+		ctx,
+		c.rdb,
+		[]string{
+			requestBodyLaneUserKey(userID),
+			requestBodyLaneWaitKey(userID),
+			requestBodyLaneScopeWaitKey(lane, waitScopeID),
+		},
+		string(lane),
+		c.waitQueueTTLSeconds,
+		requestBodyAdmissionLeaseTTLSeconds,
+		waiterID,
+		maxScopeWait,
+		requestBodyLaneScopeWaitMember(userID, waiterID),
+	).Result()
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	result, err := redisScriptInt64At(raw, 0)
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body wait result: %w", err)
+	}
+	now, err := redisScriptInt64At(raw, 1)
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body wait time: %w", err)
+	}
+	state, err := requestBodyLaneUserLoadAt(raw, 2)
+	if err != nil {
+		return false, service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	c.refreshRequestBodyActiveIndexAt(ctx, userID, state, now)
+	return result == 1, state, time.Unix(now, 0).UTC(), nil
+}
+
+func (c *concurrencyCache) DecrementRequestBodyLaneWaitCount(ctx context.Context, userID int64, waiterID string) error {
+	_, _, err := c.DecrementRequestBodyLaneWaitCountWithState(ctx, service.RequestBodyLaneHeavy, userID, waiterID)
+	return err
+}
+
+func (c *concurrencyCache) DecrementRequestBodyLaneWaitCountWithState(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	userID int64,
+	waiterID string,
+) (service.RequestBodyLaneUserLoad, time.Time, error) {
+	return c.DecrementRequestBodyLaneScopedWaitCountWithState(ctx, lane, userID, userID, waiterID)
+}
+
+func (c *concurrencyCache) DecrementRequestBodyLaneScopedWaitCountWithState(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	waiterID string,
+) (service.RequestBodyLaneUserLoad, time.Time, error) {
+	waitScopeID := requestBodyLaneWaitScopeID(lane, scopeID)
+	raw, err := requestBodyLaneDecrementWaitScript.Run(
+		ctx,
+		c.rdb,
+		[]string{
+			requestBodyLaneUserKey(userID),
+			requestBodyLaneWaitKey(userID),
+			requestBodyLaneScopeWaitKey(lane, waitScopeID),
+		},
+		string(lane),
+		requestBodyAdmissionLeaseTTLSeconds,
+		waiterID,
+		requestBodyLaneScopeWaitMember(userID, waiterID),
+	).Result()
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	now, err := redisScriptInt64At(raw, 0)
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body decrement time: %w", err)
+	}
+	state, err := requestBodyLaneUserLoadAt(raw, 1)
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	c.refreshRequestBodyActiveIndexAt(ctx, userID, state, now)
+	return state, time.Unix(now, 0).UTC(), nil
+}
+
+func (c *concurrencyCache) SetRequestBodyClassificationStateWithState(
+	ctx context.Context,
+	userID int64,
+	requestID string,
+	active, waiting bool,
+) (service.RequestBodyLaneUserLoad, time.Time, error) {
+	if requestID == "" {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, errors.New("request body classification request ID is required")
+	}
+	raw, err := requestBodyClassificationStateScript.Run(
+		ctx,
+		c.rdb,
+		[]string{requestBodyLaneUserKey(userID), requestBodyLaneWaitKey(userID)},
+		requestID,
+		boolToRedisInt(active),
+		boolToRedisInt(waiting),
+		c.slotTTLSeconds,
+	).Result()
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	now, err := redisScriptInt64At(raw, 0)
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, fmt.Errorf("parse request body classification time: %w", err)
+	}
+	state, err := requestBodyLaneUserLoadAt(raw, 1)
+	if err != nil {
+		return service.RequestBodyLaneUserLoad{}, time.Time{}, err
+	}
+	c.refreshRequestBodyActiveIndexAt(ctx, userID, state, now)
+	return state, time.Unix(now, 0).UTC(), nil
+}
+
+func boolToRedisInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func requestBodyLaneUserLoadAt(raw any, offset int) (service.RequestBodyLaneUserLoad, error) {
+	values := make([]int64, 6)
+	for index := range values {
+		value, err := redisScriptInt64At(raw, offset+index)
+		if err != nil {
+			return service.RequestBodyLaneUserLoad{}, fmt.Errorf("parse request body lane state value %d: %w", index, err)
+		}
+		values[index] = value
+	}
+	return service.RequestBodyLaneUserLoad{
+		HeavyActive:     int(values[0]),
+		HeavyWaiting:    int(values[1]),
+		RecoveryActive:  int(values[2]),
+		RecoveryWaiting: int(values[3]),
+		PendingActive:   int(values[4]),
+		PendingWaiting:  int(values[5]),
+	}, nil
+}
+
+func requestBodyLaneUserLoadActive(state service.RequestBodyLaneUserLoad) bool {
+	return state.HeavyActive > 0 || state.HeavyWaiting > 0 || state.RecoveryActive > 0 || state.RecoveryWaiting > 0 ||
+		state.PendingActive > 0 || state.PendingWaiting > 0
+}
+
+func (c *concurrencyCache) refreshRequestBodyActiveIndexAt(ctx context.Context, userID int64, state service.RequestBodyLaneUserLoad, now int64) {
+	member := strconv.FormatInt(userID, 10)
+	if !requestBodyLaneUserLoadActive(state) {
+		c.removeActiveIndexMembers(ctx, requestBodyActiveIndexKey, []string{member})
+		return
+	}
+	ttl := requestBodyAdmissionLeaseTTLSeconds
+	if (state.HeavyWaiting > 0 || state.RecoveryWaiting > 0) && c.waitQueueTTLSeconds > ttl {
+		ttl = c.waitQueueTTLSeconds
+	}
+	c.touchActiveIndexAt(ctx, requestBodyActiveIndexKey, userID, now+int64(ttl))
+}
+
 func (c *concurrencyCache) GetAccountConcurrency(ctx context.Context, accountID int64) (int, error) {
 	key := accountSlotKey(accountID)
 	// 时间戳在 Lua 脚本内使用 Redis TIME 命令获取
@@ -706,27 +1457,49 @@ func (c *concurrencyCache) GetAccountConcurrencyBatch(ctx context.Context, accou
 // User slot operations
 
 func (c *concurrencyCache) AcquireUserSlot(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {
+	acquired, _, _, err := c.AcquireUserSlotWithState(ctx, userID, maxConcurrency, requestID)
+	return acquired, err
+}
+
+func (c *concurrencyCache) AcquireUserSlotWithState(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, int, time.Time, error) {
 	key := userSlotKey(userID)
-	// 时间戳在 Lua 脚本内使用 Redis TIME 命令获取，确保多实例时钟一致
-	result, now, err := runScriptInt64Pair(ctx, c.rdb, acquireScript, []string{key, liveUserSlotKey(userID)}, maxConcurrency, c.slotTTLSeconds, requestID)
+	// 时间戳在 Lua 脚本内使用 Redis TIME 命令获取，确保多实例时钟一致。
+	// Live 会话与普通请求共享用户并发上限，返回值同时用于并发趋势打点。
+	result, now, current, err := runScriptInt64Triple(ctx, c.rdb, acquireScript, []string{key, liveUserSlotKey(userID)}, maxConcurrency, c.slotTTLSeconds, requestID)
 	if err != nil {
-		return false, err
+		return false, 0, time.Time{}, err
 	}
 	if result == 1 {
 		// 成功占槽后标记活跃用户，避免启动清理依赖全量 SCAN。
 		c.touchActiveIndexAt(ctx, userActiveIndexKey, userID, now+int64(c.slotTTLSeconds))
 	}
-	return result == 1, nil
+	return result == 1, int(current), time.Unix(now, 0).UTC(), nil
+}
+
+func (c *concurrencyCache) TrackUserSlotWithState(ctx context.Context, userID int64, requestID string) (int, time.Time, error) {
+	key := userSlotKey(userID)
+	current, now, err := runScriptInt64Pair(ctx, c.rdb, trackUserSlotStateScript, []string{key}, c.slotTTLSeconds, requestID)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	c.touchActiveIndexAt(ctx, userActiveIndexKey, userID, now+int64(c.slotTTLSeconds))
+	return int(current), time.Unix(now, 0).UTC(), nil
 }
 
 func (c *concurrencyCache) ReleaseUserSlot(ctx context.Context, userID int64, requestID string) error {
+	_, _, err := c.ReleaseUserSlotWithState(ctx, userID, requestID)
+	return err
+}
+
+func (c *concurrencyCache) ReleaseUserSlotWithState(ctx context.Context, userID int64, requestID string) (int, time.Time, error) {
 	key := userSlotKey(userID)
-	if err := c.rdb.ZRem(ctx, key, requestID).Err(); err != nil {
-		return err
+	remaining, now, err := runScriptInt64Pair(ctx, c.rdb, releaseSlotStateScript, []string{key}, c.slotTTLSeconds, requestID)
+	if err != nil {
+		return 0, time.Time{}, err
 	}
 	// 释放后按 Redis 中剩余负载修正索引状态。
 	c.refreshUserActiveIndex(ctx, userID)
-	return nil
+	return int(remaining), time.Unix(now, 0).UTC(), nil
 }
 
 func (c *concurrencyCache) GetUserConcurrency(ctx context.Context, userID int64) (int, error) {
@@ -887,26 +1660,39 @@ func (c *concurrencyCache) GetAPIKeyConcurrencyBatch(ctx context.Context, apiKey
 // Wait queue operations
 
 func (c *concurrencyCache) IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error) {
+	incremented, _, _, err := c.IncrementWaitCountWithState(ctx, userID, maxWait)
+	return incremented, err
+}
+
+func (c *concurrencyCache) IncrementWaitCountWithState(ctx context.Context, userID int64, maxWait int) (bool, int, time.Time, error) {
 	key := waitQueueKey(userID)
-	result, now, err := runScriptInt64Pair(ctx, c.rdb, incrementWaitScript, []string{key}, maxWait, c.waitQueueTTLSeconds)
+	result, now, current, err := runScriptInt64Triple(ctx, c.rdb, incrementWaitScript, []string{key}, maxWait, c.waitQueueTTLSeconds)
 	if err != nil {
-		return false, err
+		return false, 0, time.Time{}, err
 	}
 	if result == 1 {
 		// 等待队列也会让用户保持“活跃”，否则槽位为 0 时后台任务可能漏看等待计数。
 		c.touchActiveIndexAt(ctx, userActiveIndexKey, userID, now+int64(c.waitQueueTTLSeconds))
 	}
-	return result == 1, nil
+	return result == 1, int(current), time.Unix(now, 0).UTC(), nil
 }
 
 func (c *concurrencyCache) DecrementWaitCount(ctx context.Context, userID int64) error {
+	_, _, err := c.DecrementWaitCountWithState(ctx, userID)
+	return err
+}
+
+func (c *concurrencyCache) DecrementWaitCountWithState(ctx context.Context, userID int64) (int, time.Time, error) {
 	key := waitQueueKey(userID)
-	_, err := decrementWaitScript.Run(ctx, c.rdb, []string{key}).Result()
+	remaining, now, err := runScriptInt64Pair(ctx, c.rdb, decrementWaitScript, []string{key})
 	if err == nil {
 		// 等待数减少后重新判断是否还需要保留索引。
 		c.refreshUserActiveIndex(ctx, userID)
 	}
-	return err
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	return int(remaining), time.Unix(now, 0).UTC(), nil
 }
 
 // Account wait queue operations
@@ -1148,6 +1934,9 @@ func (c *concurrencyCache) CleanupStaleProcessSlots(ctx context.Context, activeR
 	if err := c.sweepLegacyWaitKeysOnce(ctx); err != nil {
 		return err
 	}
+	if err := c.cleanupStaleRequestBodyAdmissionSlots(ctx, activeRequestPrefix); err != nil {
+		return err
+	}
 	now, err := c.redisUnixSeconds(ctx)
 	if err != nil {
 		return err
@@ -1166,6 +1955,122 @@ func (c *concurrencyCache) CleanupStaleProcessSlots(ctx context.Context, activeR
 		return err
 	}
 	return c.cleanupStaleProcessSlotsForIndex(ctx, userSlotIndex, userMembers, activeRequestPrefix, now)
+}
+
+func requestBodyAdmissionMemberHasProcessPrefix(member, activeRequestPrefix string) bool {
+	for _, part := range strings.Split(member, ":") {
+		if strings.HasPrefix(part, activeRequestPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestBodyAdmissionUserIDFromKey(key, keyPrefix string) (int64, bool) {
+	rawID := strings.TrimPrefix(key, keyPrefix)
+	if rawID == key || rawID == "" || strings.Contains(rawID, ":") {
+		return 0, false
+	}
+	userID, err := strconv.ParseInt(rawID, 10, 64)
+	return userID, err == nil && userID > 0
+}
+
+// cleanupStaleRequestBodyAdmissionSlots removes leases left by a terminated
+// process. These keys are not covered by the account/user active indexes and a
+// stale global recovery member would otherwise block compaction for one full
+// slot TTL after an OOM restart.
+func (c *concurrencyCache) cleanupStaleRequestBodyAdmissionSlots(ctx context.Context, activeRequestPrefix string) error {
+	activeUsers := make(map[int64]struct{})
+	cleanupZSet := func(key string) (bool, error) {
+		members, err := c.rdb.ZRange(ctx, key, 0, -1).Result()
+		if err != nil {
+			return false, err
+		}
+		stale := make([]any, 0, len(members))
+		hasActive := false
+		for _, member := range members {
+			if requestBodyAdmissionMemberHasProcessPrefix(member, activeRequestPrefix) {
+				hasActive = true
+				continue
+			}
+			stale = append(stale, member)
+		}
+		if len(stale) > 0 {
+			if err := c.rdb.ZRem(ctx, key, stale...).Err(); err != nil {
+				return false, err
+			}
+		}
+		return hasActive, nil
+	}
+
+	patterns := []struct {
+		pattern       string
+		userKeyPrefix string
+		waitKeys      bool
+	}{
+		{pattern: requestBodyLaneKeyPrefix + "{admission}:*", userKeyPrefix: requestBodyLaneKeyPrefix + "{admission}:user:"},
+		{pattern: requestBodyLaneWaitKeyPrefix + "{admission}:*", userKeyPrefix: requestBodyLaneWaitKeyPrefix + "{admission}:user:", waitKeys: true},
+	}
+	for _, item := range patterns {
+		var cursor uint64
+		for {
+			keys, next, err := c.rdb.Scan(ctx, cursor, item.pattern, 200).Result()
+			if err != nil {
+				return fmt.Errorf("scan request body admission keys %s: %w", item.pattern, err)
+			}
+			for _, key := range keys {
+				hasActive := false
+				if item.waitKeys && strings.HasPrefix(key, item.userKeyPrefix) {
+					value, getErr := c.rdb.Get(ctx, key).Result()
+					if getErr != nil && !errors.Is(getErr, redis.Nil) {
+						return fmt.Errorf("read request body wait key %s: %w", key, getErr)
+					}
+					hasActive = getErr == nil && requestBodyAdmissionMemberHasProcessPrefix(value, activeRequestPrefix)
+					if getErr == nil && !hasActive {
+						if err := c.rdb.Del(ctx, key).Err(); err != nil {
+							return fmt.Errorf("delete stale request body wait key %s: %w", key, err)
+						}
+					}
+				} else {
+					hasActive, err = cleanupZSet(key)
+					if err != nil {
+						return fmt.Errorf("clean stale request body admission key %s: %w", key, err)
+					}
+				}
+				if hasActive {
+					if userID, ok := requestBodyAdmissionUserIDFromKey(key, item.userKeyPrefix); ok {
+						activeUsers[userID] = struct{}{}
+					}
+				}
+			}
+			cursor = next
+			if cursor == 0 {
+				break
+			}
+		}
+	}
+
+	if err := c.rdb.Del(ctx, requestBodyActiveIndexKey).Err(); err != nil {
+		return fmt.Errorf("reset request body active index: %w", err)
+	}
+	if len(activeUsers) == 0 {
+		return nil
+	}
+	now, err := c.redisUnixSeconds(ctx)
+	if err != nil {
+		return err
+	}
+	entries := make([]redis.Z, 0, len(activeUsers))
+	for userID := range activeUsers {
+		entries = append(entries, redis.Z{
+			Score:  float64(now + int64(c.slotTTLSeconds)),
+			Member: strconv.FormatInt(userID, 10),
+		})
+	}
+	if err := c.rdb.ZAdd(ctx, requestBodyActiveIndexKey, entries...).Err(); err != nil {
+		return fmt.Errorf("rebuild request body active index: %w", err)
+	}
+	return nil
 }
 
 // sweepLegacyWaitKeysOnce 一次性清扫活跃索引机制上线前遗留的等待计数键。

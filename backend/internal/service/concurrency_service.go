@@ -61,6 +61,113 @@ type APIKeyConcurrencyCache interface {
 	GetAPIKeyConcurrencyBatch(ctx context.Context, apiKeyIDs []int64) (map[int64]int, error)
 }
 
+// RequestBodyAdmissionCache is optional so existing cache implementations and
+// tests remain compatible. Production Redis implements it to coordinate body
+// lanes across all application instances.
+type RequestBodyAdmissionCache interface {
+	AcquireRequestBodyLane(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, maxPermits, weight int, requestID string) (bool, error)
+	ReleaseRequestBodyLane(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, weight int, requestID string) error
+	IncrementRequestBodyLaneWaitCount(ctx context.Context, userID int64, maxWait int, waiterID string) (bool, error)
+	DecrementRequestBodyLaneWaitCount(ctx context.Context, userID int64, waiterID string) error
+}
+
+// RequestBodyLaneUserLoad is the per-user state shared by the heavy and
+// recovery admission lanes. Normal traffic is derived from the base user slot
+// state after these isolated lanes are removed.
+type RequestBodyLaneUserLoad struct {
+	HeavyActive     int
+	HeavyWaiting    int
+	RecoveryActive  int
+	RecoveryWaiting int
+	PendingActive   int
+	PendingWaiting  int
+}
+
+// RequestBodyAdmissionStateCache adds state observations to admission
+// mutations. It is optional so alternative ConcurrencyCache implementations
+// do not need to implement monitoring-specific behavior.
+type RequestBodyAdmissionStateCache interface {
+	AcquireRequestBodyLaneWithState(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, maxPermits, weight int, requestID string) (bool, RequestBodyLaneUserLoad, time.Time, error)
+	ReleaseRequestBodyLaneWithState(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, weight int, requestID string) (RequestBodyLaneUserLoad, time.Time, error)
+	IncrementRequestBodyLaneWaitCountWithState(ctx context.Context, lane RequestBodyLane, userID int64, maxWait int, waiterID string) (bool, RequestBodyLaneUserLoad, time.Time, error)
+	DecrementRequestBodyLaneWaitCountWithState(ctx context.Context, lane RequestBodyLane, userID int64, waiterID string) (RequestBodyLaneUserLoad, time.Time, error)
+	SetRequestBodyClassificationStateWithState(ctx context.Context, userID int64, requestID string, active, waiting bool) (RequestBodyLaneUserLoad, time.Time, error)
+}
+
+// RequestBodyAdmissionLeaseCache refreshes short-lived admission leases while
+// the owning request is still running. Implementations must only refresh an
+// existing lease and must never recreate a lease that has already been lost.
+type RequestBodyAdmissionLeaseCache interface {
+	RefreshRequestBodyLane(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, weight int, requestID string) (bool, error)
+}
+
+type requestBodyAdmissionLeaseLossCancelKey struct{}
+type requestBodyAdmissionUpstreamContextKey struct{}
+
+// WithRequestBodyAdmissionLeaseLossCancel lets the admission owner stop the
+// upstream request if Redis confirms that its distributed lease disappeared.
+func WithRequestBodyAdmissionLeaseLossCancel(ctx context.Context, cancel context.CancelFunc) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if cancel == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, requestBodyAdmissionLeaseLossCancelKey{}, cancel)
+}
+
+// WithRequestBodyAdmissionUpstreamContext carries an upstream lifecycle that is
+// detached from the client connection but still observes admission lease loss
+// and recovery execution deadlines.
+func WithRequestBodyAdmissionUpstreamContext(ctx, upstream context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if upstream == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, requestBodyAdmissionUpstreamContextKey{}, upstream)
+}
+
+func RequestBodyAdmissionUpstreamContext(ctx context.Context) (context.Context, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	upstream, ok := ctx.Value(requestBodyAdmissionUpstreamContextKey{}).(context.Context)
+	return upstream, ok && upstream != nil
+}
+
+func cancelRequestBodyAdmissionLeaseOwner(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	if cancel, ok := ctx.Value(requestBodyAdmissionLeaseLossCancelKey{}).(context.CancelFunc); ok && cancel != nil {
+		cancel()
+	}
+}
+
+func refreshRequestBodyAdmissionLease(
+	ctx context.Context,
+	cache RequestBodyAdmissionLeaseCache,
+	lane RequestBodyLane,
+	scopeID, userID int64,
+	weight int,
+	requestID string,
+) (bool, error) {
+	refreshed, err := cache.RefreshRequestBodyLane(ctx, lane, scopeID, userID, weight, requestID)
+	if err == nil && !refreshed {
+		cancelRequestBodyAdmissionLeaseOwner(ctx)
+	}
+	return refreshed, err
+}
+
+// RequestBodyAdmissionScopedWaitStateCache additionally bounds queued bodies by
+// lane scope: account for heavy requests and global for recovery requests.
+type RequestBodyAdmissionScopedWaitStateCache interface {
+	IncrementRequestBodyLaneScopedWaitCountWithState(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, maxScopeWait int, waiterID string) (bool, RequestBodyLaneUserLoad, time.Time, error)
+	DecrementRequestBodyLaneScopedWaitCountWithState(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, waiterID string) (RequestBodyLaneUserLoad, time.Time, error)
+}
+
 // OpenAIWSIngressLeaseCache owns the short-lived distributed lease used to
 // bound live client WebSocket sessions. It is deliberately independent of the
 // request-slot namespace: idle ingress connections do not occupy turn slots.
@@ -75,6 +182,8 @@ const (
 	openAIWSIngressLeaseRefreshInterval = 20 * time.Second
 	openAIWSIngressLeaseOperationTO     = 2 * time.Second
 )
+
+const requestBodyAdmissionLeaseRefreshInterval = 15 * time.Second
 
 var ErrOpenAIWSIngressLeaseLost = errors.New("openai websocket ingress lease lost")
 
@@ -229,7 +338,8 @@ const (
 
 // ConcurrencyService 管理账号和用户的并发限制。
 type ConcurrencyService struct {
-	cache ConcurrencyCache
+	cache         ConcurrencyCache
+	trendRecorder *userConcurrencyTrendRecorder
 
 	accountLoadCacheTTL atomic.Int64
 	accountLoadCacheMu  sync.RWMutex
@@ -250,6 +360,20 @@ func NewConcurrencyService(cache ConcurrencyCache) *ConcurrencyService {
 	}
 	svc.SetAccountLoadBatchCacheTTL(defaultAccountLoadBatchCacheTTL)
 	return svc
+}
+
+func (s *ConcurrencyService) StartTrendRecorder() {
+	if s == nil || s.trendRecorder != nil {
+		return
+	}
+	s.trendRecorder = newUserConcurrencyTrendRecorder(s.cache)
+}
+
+func (s *ConcurrencyService) Stop() {
+	if s == nil || s.trendRecorder == nil {
+		return
+	}
+	s.trendRecorder.stop()
 }
 
 // AcquireOpenAIWSIngressLease atomically reserves one live ingress connection
@@ -308,8 +432,10 @@ func (s *ConcurrencyService) SetAccountLoadBatchCacheTTL(ttl time.Duration) {
 
 // AcquireResult represents the result of acquiring a concurrency slot
 type AcquireResult struct {
-	Acquired    bool
-	ReleaseFunc func() // Must be called when done (typically via defer)
+	Acquired             bool
+	ReleaseFunc          func() // Must be called when done (typically via defer)
+	ResolveNormalFunc    func() // Optional: resolves a pending request-body classification as normal.
+	ReserveNonNormalFunc func() // Optional: restores the reservation when failover changes the lane.
 }
 
 type AccountWithConcurrency struct {
@@ -375,29 +501,268 @@ func (s *ConcurrencyService) AcquireAccountSlot(ctx context.Context, accountID i
 	}, nil
 }
 
+// AcquireRequestBodyLane atomically enforces the account/global lane capacity
+// and one active large request per user. Missing optional cache support is a
+// compatibility no-op; a configured cache error is returned to avoid silently
+// disabling isolation during Redis degradation.
+func (s *ConcurrencyService) AcquireRequestBodyLane(
+	ctx context.Context,
+	lane RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+) (*AcquireResult, error) {
+	return s.acquireRequestBodyLane(ctx, lane, scopeID, userID, maxPermits, weight, generateRequestID())
+}
+
+func (s *ConcurrencyService) AcquireRequestBodyLaneWithRequestID(
+	ctx context.Context,
+	lane RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+	requestID string,
+) (*AcquireResult, error) {
+	if requestID == "" {
+		requestID = generateRequestID()
+	}
+	return s.acquireRequestBodyLane(ctx, lane, scopeID, userID, maxPermits, weight, requestID)
+}
+
+func (s *ConcurrencyService) NewRequestBodyLaneRequestID() string {
+	return generateRequestID()
+}
+
+func (s *ConcurrencyService) acquireRequestBodyLane(
+	ctx context.Context,
+	lane RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+	requestID string,
+) (*AcquireResult, error) {
+	cache, ok := s.cache.(RequestBodyAdmissionCache)
+	if !ok || cache == nil || maxPermits <= 0 {
+		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	if weight <= 0 {
+		weight = 1
+	}
+	var acquired bool
+	var err error
+	if stateCache, supportsState := cache.(RequestBodyAdmissionStateCache); supportsState {
+		var state RequestBodyLaneUserLoad
+		var observedAt time.Time
+		acquired, state, observedAt, err = stateCache.AcquireRequestBodyLaneWithState(ctx, lane, scopeID, userID, maxPermits, weight, requestID)
+		if err == nil {
+			s.observeRequestBodyLaneState(userID, state, observedAt)
+		}
+	} else {
+		acquired, err = cache.AcquireRequestBodyLane(ctx, lane, scopeID, userID, maxPermits, weight, requestID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !acquired {
+		return &AcquireResult{Acquired: false}, nil
+	}
+	leaseOwnerCtx := ctx
+	if upstreamCtx, ok := RequestBodyAdmissionUpstreamContext(ctx); ok {
+		leaseOwnerCtx = upstreamCtx
+	}
+	leaseDone := make(chan struct{})
+	var releaseOnce sync.Once
+	if leaseCache, supportsRefresh := cache.(RequestBodyAdmissionLeaseCache); supportsRefresh {
+		go func() {
+			ticker := time.NewTicker(requestBodyAdmissionLeaseRefreshInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					refreshCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					refreshOwnerCtx := WithRequestBodyAdmissionLeaseLossCancel(refreshCtx, func() {
+						cancelRequestBodyAdmissionLeaseOwner(leaseOwnerCtx)
+					})
+					refreshed, refreshErr := refreshRequestBodyAdmissionLease(refreshOwnerCtx, leaseCache, lane, scopeID, userID, weight, requestID)
+					cancel()
+					if refreshErr != nil {
+						logger.LegacyPrintf("service.concurrency", "Warning: refresh request body %s lane failed: %v", lane, refreshErr)
+						continue
+					}
+					if !refreshed {
+						logger.LegacyPrintf("service.concurrency", "Warning: request body %s lane lease was lost (req=%s)", lane, requestID)
+						return
+					}
+				case <-leaseDone:
+					return
+				case <-leaseOwnerCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+	return &AcquireResult{
+		Acquired: true,
+		ReleaseFunc: func() {
+			releaseOnce.Do(func() {
+				close(leaseDone)
+				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if stateCache, supportsState := cache.(RequestBodyAdmissionStateCache); supportsState {
+					state, observedAt, releaseErr := stateCache.ReleaseRequestBodyLaneWithState(bgCtx, lane, scopeID, userID, weight, requestID)
+					if releaseErr == nil {
+						s.observeRequestBodyLaneState(userID, state, observedAt)
+						return
+					}
+					logger.LegacyPrintf("service.concurrency", "Warning: release request body %s lane failed: %v", lane, releaseErr)
+					return
+				}
+				if releaseErr := cache.ReleaseRequestBodyLane(bgCtx, lane, scopeID, userID, weight, requestID); releaseErr != nil {
+					logger.LegacyPrintf("service.concurrency", "Warning: release request body %s lane failed: %v", lane, releaseErr)
+				}
+			})
+		},
+	}, nil
+}
+
+func (s *ConcurrencyService) IncrementRequestBodyLaneWaitCount(
+	ctx context.Context,
+	lane RequestBodyLane,
+	scopeID, userID int64,
+	maxScopeWait int,
+	waiterID string,
+) (bool, error) {
+	cache, ok := s.cache.(RequestBodyAdmissionCache)
+	if !ok || cache == nil {
+		return true, nil
+	}
+	if maxScopeWait <= 0 || waiterID == "" {
+		return false, errors.New("request body lane wait limit and waiter ID are required")
+	}
+	var allowed bool
+	var err error
+	if scopedCache, supportsScopedWait := cache.(RequestBodyAdmissionScopedWaitStateCache); supportsScopedWait {
+		var state RequestBodyLaneUserLoad
+		var observedAt time.Time
+		allowed, state, observedAt, err = scopedCache.IncrementRequestBodyLaneScopedWaitCountWithState(
+			ctx, lane, scopeID, userID, maxScopeWait, waiterID,
+		)
+		if err == nil {
+			s.observeRequestBodyLaneState(userID, state, observedAt)
+		}
+	} else if stateCache, supportsState := cache.(RequestBodyAdmissionStateCache); supportsState {
+		var state RequestBodyLaneUserLoad
+		var observedAt time.Time
+		allowed, state, observedAt, err = stateCache.IncrementRequestBodyLaneWaitCountWithState(ctx, lane, userID, 1, waiterID)
+		if err == nil {
+			s.observeRequestBodyLaneState(userID, state, observedAt)
+		}
+	} else {
+		allowed, err = cache.IncrementRequestBodyLaneWaitCount(ctx, userID, 1, waiterID)
+	}
+	if err != nil {
+		return false, err
+	}
+	return allowed, nil
+}
+
+func (s *ConcurrencyService) DecrementRequestBodyLaneWaitCount(ctx context.Context, lane RequestBodyLane, scopeID, userID int64, waiterID string) {
+	cache, ok := s.cache.(RequestBodyAdmissionCache)
+	if !ok || cache == nil || waiterID == "" {
+		return
+	}
+	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if scopedCache, supportsScopedWait := cache.(RequestBodyAdmissionScopedWaitStateCache); supportsScopedWait {
+		state, observedAt, err := scopedCache.DecrementRequestBodyLaneScopedWaitCountWithState(bgCtx, lane, scopeID, userID, waiterID)
+		if err == nil {
+			s.observeRequestBodyLaneState(userID, state, observedAt)
+			return
+		}
+		logger.LegacyPrintf("service.concurrency", "Warning: decrement request body %s wait count failed: %v", lane, err)
+		return
+	}
+	if stateCache, supportsState := cache.(RequestBodyAdmissionStateCache); supportsState {
+		state, observedAt, err := stateCache.DecrementRequestBodyLaneWaitCountWithState(bgCtx, lane, userID, waiterID)
+		if err == nil {
+			s.observeRequestBodyLaneState(userID, state, observedAt)
+			return
+		}
+		logger.LegacyPrintf("service.concurrency", "Warning: decrement request body %s wait count failed: %v", lane, err)
+		return
+	}
+	if err := cache.DecrementRequestBodyLaneWaitCount(bgCtx, userID, waiterID); err != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: decrement request body %s wait count failed: %v", lane, err)
+	}
+}
+
 // AcquireUserSlot attempts to acquire a concurrency slot for a user.
 // If the user is at max concurrency, it waits until a slot is available or timeout.
 // Returns a release function that MUST be called when the request completes.
 func (s *ConcurrencyService) AcquireUserSlot(ctx context.Context, userID int64, maxConcurrency int) (*AcquireResult, error) {
+	return s.acquireUserSlot(ctx, userID, maxConcurrency, generateRequestID(), false, false)
+}
+
+func (s *ConcurrencyService) AcquireUserSlotForRequestBodyAdmission(
+	ctx context.Context,
+	userID int64,
+	maxConcurrency int,
+	requestID string,
+	wasWaiting bool,
+) (*AcquireResult, error) {
+	if requestID == "" {
+		requestID = generateRequestID()
+	}
+	return s.acquireUserSlot(ctx, userID, maxConcurrency, requestID, true, wasWaiting)
+}
+
+func (s *ConcurrencyService) acquireUserSlot(
+	ctx context.Context,
+	userID int64,
+	maxConcurrency int,
+	requestID string,
+	trackBodyClassification bool,
+	wasWaiting bool,
+) (*AcquireResult, error) {
 	// If maxConcurrency is 0 or negative, no limit
 	if maxConcurrency <= 0 {
+		if stateCache, ok := s.cache.(userConcurrencyStateCache); ok {
+			current, observedAt, err := stateCache.TrackUserSlotWithState(ctx, userID, requestID)
+			if err != nil {
+				logger.LegacyPrintf("service.concurrency", "Warning: failed to track unlimited user slot for %d: %v", userID, err)
+				return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+			}
+			return s.userSlotAcquireResult(stateCache, userID, requestID, current, observedAt, trackBodyClassification, wasWaiting), nil
+		}
 		return &AcquireResult{
-			Acquired:    true,
-			ReleaseFunc: func() {}, // no-op
+			Acquired:             true,
+			ReleaseFunc:          func() {},
+			ResolveNormalFunc:    func() {},
+			ReserveNonNormalFunc: func() {},
 		}, nil
 	}
 
-	// Generate unique request ID for this slot
-	requestID := generateRequestID()
-
-	acquired, err := s.cache.AcquireUserSlot(ctx, userID, maxConcurrency, requestID)
+	var acquired bool
+	var err error
+	if stateCache, ok := s.cache.(userConcurrencyStateCache); ok {
+		var current int
+		var observedAt time.Time
+		acquired, current, observedAt, err = stateCache.AcquireUserSlotWithState(ctx, userID, maxConcurrency, requestID)
+		if err == nil && acquired {
+			return s.userSlotAcquireResult(stateCache, userID, requestID, current, observedAt, trackBodyClassification, wasWaiting), nil
+		}
+		if err == nil {
+			s.observeUserConcurrencyState(userID, &current, nil, observedAt)
+		}
+	} else {
+		acquired, err = s.cache.AcquireUserSlot(ctx, userID, maxConcurrency, requestID)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	if acquired {
 		return &AcquireResult{
-			Acquired: true,
+			Acquired:             true,
+			ResolveNormalFunc:    func() {},
+			ReserveNonNormalFunc: func() {},
 			ReleaseFunc: func() {
 				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -412,6 +777,107 @@ func (s *ConcurrencyService) AcquireUserSlot(ctx context.Context, userID int64, 
 		Acquired:    false,
 		ReleaseFunc: nil,
 	}, nil
+}
+
+func (s *ConcurrencyService) userSlotAcquireResult(
+	stateCache userConcurrencyStateCache,
+	userID int64,
+	requestID string,
+	current int,
+	observedAt time.Time,
+	trackBodyClassification bool,
+	wasWaiting bool,
+) *AcquireResult {
+	var classificationMu sync.Mutex
+	classificationPending := false
+	var bodyState *RequestBodyLaneUserLoad
+	if trackBodyClassification {
+		if state, stateAt, err := s.setRequestBodyClassificationState(userID, requestID, true, wasWaiting); err != nil {
+			logger.LegacyPrintf("service.concurrency", "Warning: failed to mark request body classification pending for user %d (req=%s): %v", userID, requestID, err)
+		} else {
+			classificationPending = true
+			bodyState = &state
+			observedAt = stateAt
+		}
+	}
+	s.observeUserConcurrencyEvent(userID, &current, nil, bodyState, observedAt)
+
+	resolveNormal := func() {
+		classificationMu.Lock()
+		defer classificationMu.Unlock()
+		if !classificationPending {
+			return
+		}
+		state, stateAt, err := s.setRequestBodyClassificationState(userID, requestID, false, false)
+		if err != nil {
+			logger.LegacyPrintf("service.concurrency", "Warning: failed to resolve normal request body classification for user %d (req=%s): %v", userID, requestID, err)
+			return
+		}
+		classificationPending = false
+		s.observeUserConcurrencyEvent(userID, nil, nil, &state, stateAt)
+	}
+	reserveNonNormal := func() {
+		classificationMu.Lock()
+		defer classificationMu.Unlock()
+		if classificationPending {
+			return
+		}
+		state, stateAt, err := s.setRequestBodyClassificationState(userID, requestID, true, false)
+		if err != nil {
+			logger.LegacyPrintf("service.concurrency", "Warning: failed to reserve non-normal request body classification for user %d (req=%s): %v", userID, requestID, err)
+			return
+		}
+		classificationPending = true
+		s.observeUserConcurrencyEvent(userID, nil, nil, &state, stateAt)
+	}
+
+	return &AcquireResult{
+		Acquired:             true,
+		ResolveNormalFunc:    resolveNormal,
+		ReserveNonNormalFunc: reserveNonNormal,
+		ReleaseFunc: func() {
+			classificationMu.Lock()
+			defer classificationMu.Unlock()
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			remaining, releasedAt, releaseErr := stateCache.ReleaseUserSlotWithState(bgCtx, userID, requestID)
+			if releaseErr != nil {
+				logger.LegacyPrintf("service.concurrency", "Warning: failed to release user slot for %d (req=%s): %v", userID, requestID, releaseErr)
+				return
+			}
+			state, stateAt, stateErr := s.setRequestBodyClassificationStateWithContext(bgCtx, userID, requestID, false, false)
+			if stateErr != nil {
+				logger.LegacyPrintf("service.concurrency", "Warning: failed to clear request body classification for user %d (req=%s): %v", userID, requestID, stateErr)
+				s.observeUserConcurrencyState(userID, &remaining, nil, releasedAt)
+				return
+			}
+			classificationPending = false
+			s.observeUserConcurrencyEvent(userID, &remaining, nil, &state, stateAt)
+		},
+	}
+}
+
+func (s *ConcurrencyService) setRequestBodyClassificationState(
+	userID int64,
+	requestID string,
+	active, waiting bool,
+) (RequestBodyLaneUserLoad, time.Time, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.setRequestBodyClassificationStateWithContext(ctx, userID, requestID, active, waiting)
+}
+
+func (s *ConcurrencyService) setRequestBodyClassificationStateWithContext(
+	ctx context.Context,
+	userID int64,
+	requestID string,
+	active, waiting bool,
+) (RequestBodyLaneUserLoad, time.Time, error) {
+	cache, ok := s.cache.(RequestBodyAdmissionStateCache)
+	if !ok || cache == nil {
+		return RequestBodyLaneUserLoad{}, time.Time{}, errors.New("request body classification state cache is unavailable")
+	}
+	return cache.SetRequestBodyClassificationStateWithState(ctx, userID, requestID, active, waiting)
 }
 
 // TrackAPIKeySlot records one active request slot for an API key without
@@ -498,13 +964,56 @@ func (s *ConcurrencyService) IncrementWaitCount(ctx context.Context, userID int6
 		return true, nil
 	}
 
-	result, err := s.cache.IncrementWaitCount(ctx, userID, maxWait)
+	var result bool
+	var err error
+	if stateCache, ok := s.cache.(userConcurrencyStateCache); ok {
+		var current int
+		var observedAt time.Time
+		result, current, observedAt, err = stateCache.IncrementWaitCountWithState(ctx, userID, maxWait)
+		if err == nil {
+			s.observeUserConcurrencyState(userID, nil, &current, observedAt)
+		}
+	} else {
+		result, err = s.cache.IncrementWaitCount(ctx, userID, maxWait)
+	}
 	if err != nil {
 		// On error, allow the request to proceed (fail open)
 		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for user %d: %v", userID, err)
 		return true, nil
 	}
 	return result, nil
+}
+
+func (s *ConcurrencyService) IncrementWaitCountForRequestBodyAdmission(
+	ctx context.Context,
+	userID int64,
+	maxWait int,
+	requestID string,
+) (bool, error) {
+	if s.cache == nil {
+		return true, nil
+	}
+	stateCache, ok := s.cache.(userConcurrencyStateCache)
+	if !ok {
+		return s.IncrementWaitCount(ctx, userID, maxWait)
+	}
+	allowed, current, observedAt, err := stateCache.IncrementWaitCountWithState(ctx, userID, maxWait)
+	if err != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for user %d: %v", userID, err)
+		return true, nil
+	}
+	if !allowed {
+		s.observeUserConcurrencyState(userID, nil, &current, observedAt)
+		return false, nil
+	}
+	state, stateAt, stateErr := s.setRequestBodyClassificationStateWithContext(ctx, userID, requestID, false, true)
+	if stateErr != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: failed to mark request body wait classification for user %d (req=%s): %v", userID, requestID, stateErr)
+		s.observeUserConcurrencyState(userID, nil, &current, observedAt)
+		return true, nil
+	}
+	s.observeUserConcurrencyEvent(userID, nil, &current, &state, stateAt)
+	return true, nil
 }
 
 // DecrementWaitCount decrements the wait queue counter for a user.
@@ -518,9 +1027,48 @@ func (s *ConcurrencyService) DecrementWaitCount(ctx context.Context, userID int6
 	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	if stateCache, ok := s.cache.(userConcurrencyStateCache); ok {
+		current, observedAt, err := stateCache.DecrementWaitCountWithState(bgCtx, userID)
+		if err == nil {
+			s.observeUserConcurrencyState(userID, nil, &current, observedAt)
+			return
+		}
+		logger.LegacyPrintf("service.concurrency", "Warning: decrement wait count failed for user %d: %v", userID, err)
+		return
+	}
 	if err := s.cache.DecrementWaitCount(bgCtx, userID); err != nil {
 		logger.LegacyPrintf("service.concurrency", "Warning: decrement wait count failed for user %d: %v", userID, err)
 	}
+}
+
+func (s *ConcurrencyService) DecrementWaitCountForRequestBodyAdmission(
+	ctx context.Context,
+	userID int64,
+	requestID string,
+	keepActive bool,
+) {
+	if s.cache == nil {
+		return
+	}
+	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stateCache, ok := s.cache.(userConcurrencyStateCache)
+	if !ok {
+		s.DecrementWaitCount(ctx, userID)
+		return
+	}
+	current, observedAt, err := stateCache.DecrementWaitCountWithState(bgCtx, userID)
+	if err != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: decrement wait count failed for user %d: %v", userID, err)
+		return
+	}
+	state, stateAt, stateErr := s.setRequestBodyClassificationStateWithContext(bgCtx, userID, requestID, keepActive, false)
+	if stateErr != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: failed to clear request body wait classification for user %d (req=%s): %v", userID, requestID, stateErr)
+		s.observeUserConcurrencyState(userID, nil, &current, observedAt)
+		return
+	}
+	s.observeUserConcurrencyEvent(userID, nil, &current, &state, stateAt)
 }
 
 // IncrementAccountWaitCount increments the wait queue counter for an account.

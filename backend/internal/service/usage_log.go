@@ -168,8 +168,12 @@ type UsageLog struct {
 	OpenAIWSMode bool
 	DurationMs   *int
 	FirstTokenMs *int
-	UserAgent    *string
-	IPAddress    *string
+	// RequestBodyBytes records the inbound request body size in bytes.
+	RequestBodyBytes int64
+	// RequestBodyLane snapshots the admission lane selected for this request.
+	RequestBodyLane RequestBodyLane
+	UserAgent       *string
+	IPAddress       *string
 	// SessionID is the explicit client-provided request correlation identifier
 	// (e.g. the session_id / X-Session-Id headers). Nil when the client sent no
 	// valid session header. It is never derived from prompt_cache_key or content.

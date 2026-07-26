@@ -188,22 +188,50 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 
 	payload.FetchedAt = time.Now().Unix()
 	details := s.queryResetCreditDetails(callCtx, client, accessToken, chatGPTAccountID, fedRAMP, accountID)
-	if details != nil {
-		hasDetailCount := details.AvailableCount != nil
-		if payload.RateLimitResetCredits == nil {
-			payload.RateLimitResetCredits = &OpenAIRateLimitResetCredits{}
-		}
-		if details.CreditListPresent {
-			payload.RateLimitResetCredits.Credits = details.Credits
-		}
-		switch {
-		case hasDetailCount:
-			payload.RateLimitResetCredits.AvailableCount = *details.AvailableCount
-		case details.CreditListPresent:
-			payload.RateLimitResetCredits.AvailableCount = details.AvailableCreditCount
-		}
-	}
+	payload.RateLimitResetCredits = mergeOpenAIResetCreditDetails(payload.RateLimitResetCredits, details)
+	s.persistResetCreditSnapshot(ctx, accountID, payload.RateLimitResetCredits)
 	return &payload, nil
+}
+
+func mergeOpenAIResetCreditDetails(credits *OpenAIRateLimitResetCredits, details *openAIRateLimitResetCreditDetails) *OpenAIRateLimitResetCredits {
+	if details == nil {
+		return credits
+	}
+	if credits == nil {
+		credits = &OpenAIRateLimitResetCredits{}
+	}
+	if details.CreditListPresent {
+		credits.Credits = details.Credits
+	}
+	switch {
+	case details.AvailableCount != nil:
+		credits.AvailableCount = *details.AvailableCount
+	case details.CreditListPresent:
+		credits.AvailableCount = details.AvailableCreditCount
+	}
+	return credits
+}
+
+// persistResetCreditSnapshot stores only successful, explicit reset-credit
+// results. A missing upstream surface remains "not queried" rather than being
+// silently converted into a zero-card snapshot.
+func (s *OpenAIQuotaService) persistResetCreditSnapshot(ctx context.Context, accountID int64, credits *OpenAIRateLimitResetCredits) {
+	if s == nil || s.accountRepo == nil || credits == nil {
+		return
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil || !SupportsOpenAIResetCredits(account) {
+		return
+	}
+	snapshot := newOpenAIResetCreditSnapshot(credits, time.Now())
+	if snapshot == nil {
+		return
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{
+		OpenAIResetCreditSnapshotExtraKey: snapshot,
+	}); err != nil {
+		slog.Warn("openai_quota_reset_credit_snapshot_persist_failed", "account_id", accountID, "error", err)
+	}
 }
 
 func (s *OpenAIQuotaService) queryResetCreditDetails(ctx context.Context, client *req.Client, accessToken, chatGPTAccountID string, fedRAMP bool, accountID int64) *openAIRateLimitResetCreditDetails {
@@ -316,6 +344,12 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 		"code", payload.Code,
 		"windows_reset", payload.WindowsReset,
 	)
+	// A successful consume changes the dashboard count immediately. The detail
+	// request is best-effort: the reset itself must still succeed if upstream
+	// does not return the follow-up snapshot.
+	if credits := mergeOpenAIResetCreditDetails(nil, s.queryResetCreditDetails(callCtx, client, accessToken, chatGPTAccountID, fedRAMP, accountID)); credits != nil {
+		s.persistResetCreditSnapshot(ctx, accountID, credits)
+	}
 	return &payload, nil
 }
 

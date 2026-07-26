@@ -1063,6 +1063,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if isOpenAIWSTerminalEvent(eventType) {
 					s.handleOpenAIWSTerminalTransientFailure(ctx, account, capturedSessionModel, handshakeHeaders, payload)
 				}
+				if eventType == "response.failed" {
+					markOpenAIStreamFailedEvent(c, payload, extractOpenAISSEErrorMessage(payload))
+				}
 				if eventType == "error" {
 					s.handleOpenAIWSErrorEventTransientFailure(ctx, account, capturedSessionModel, handshakeHeaders, payload)
 				}

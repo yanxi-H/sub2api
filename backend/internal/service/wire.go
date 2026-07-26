@@ -314,6 +314,7 @@ func ProvideConcurrencyService(cache ConcurrencyCache, accountRepo AccountReposi
 	if err := svc.CleanupStaleProcessSlots(context.Background()); err != nil {
 		logger.LegacyPrintf("service.concurrency", "Warning: startup cleanup stale process slots failed: %v", err)
 	}
+	svc.StartTrendRecorder()
 	if cfg != nil {
 		svc.SetAccountLoadBatchCacheTTL(time.Duration(cfg.Gateway.Scheduling.LoadBatchCacheTTLMS) * time.Millisecond)
 		svc.StartSlotCleanupWorker(accountRepo, cfg.Gateway.Scheduling.SlotCleanupInterval)
@@ -572,6 +573,7 @@ func ProvideOpsService(
 	opsRepo OpsRepository,
 	settingRepo SettingRepository,
 	cfg *config.Config,
+	monitorCenter *MonitorCenterService,
 	accountRepo AccountRepository,
 	userRepo UserRepository,
 	concurrencyService *ConcurrencyService,
@@ -597,6 +599,7 @@ func ProvideOpsService(
 		antigravityGatewayService,
 		systemLogSink,
 	)
+	svc.SetMonitorCenterService(monitorCenter)
 	if settingService != nil {
 		svc.SetOpenAIQuotaAutoPauseSettingsSink(settingService.SetOpenAIQuotaAutoPauseSettings)
 		// Optional warm-up so the first scheduled request after process start observes
@@ -605,6 +608,10 @@ func ProvideOpsService(
 	}
 	svc.authCacheInvalidationWorker = authCacheInvalidationWorker
 	svc.apiKeyService = apiKeyService
+	if performanceRepo, ok := opsRepo.(opsRequestPerformanceBatchRepository); ok {
+		svc.performanceSink = NewOpsRequestPerformanceSink(performanceRepo)
+		svc.performanceSink.Start()
+	}
 	svc.StartRuntimeSettingsRefresh(context.Background())
 	return svc
 }
@@ -733,6 +740,7 @@ var ProviderSet = wire.NewSet(
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,
+	ProvideMonitorCenterService,
 	ProvideOpsService,
 	ProvideOpsIngressRejectAggregator,
 	ProvideAuditLogService,

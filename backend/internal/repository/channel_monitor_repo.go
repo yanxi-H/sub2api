@@ -282,6 +282,37 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 	return out, nil
 }
 
+// ListHistoryRange returns every sample in the bounded monitor-center window.
+// The handler currently limits this to three days, so even a 15-second monitor
+// remains bounded while avoiding the truncation caused by a fixed row limit.
+func (r *channelMonitorRepository) ListHistoryRange(
+	ctx context.Context,
+	monitorID int64,
+	model string,
+	start, end time.Time,
+) ([]*service.ChannelMonitorHistoryEntry, error) {
+	q := r.client.ChannelMonitorHistory.Query().Where(
+		channelmonitorhistory.MonitorIDEQ(monitorID),
+		channelmonitorhistory.CheckedAtGTE(start.UTC()),
+		channelmonitorhistory.CheckedAtLTE(end.UTC()),
+	)
+	if strings.TrimSpace(model) != "" {
+		q = q.Where(channelmonitorhistory.ModelEQ(model))
+	}
+	rows, err := q.Order(dbent.Desc(channelmonitorhistory.FieldCheckedAt)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list history range: %w", err)
+	}
+	out := make([]*service.ChannelMonitorHistoryEntry, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &service.ChannelMonitorHistoryEntry{
+			ID: row.ID, Model: row.Model, Status: string(row.Status), LatencyMs: row.LatencyMs,
+			PingLatencyMs: row.PingLatencyMs, Message: row.Message, CheckedAt: row.CheckedAt,
+		})
+	}
+	return out, nil
+}
+
 // ---------- 用户视图聚合（原生 SQL） ----------
 
 // ListLatestPerModel 用 DISTINCT ON 取每个 (monitor_id, model) 的最近一条记录。

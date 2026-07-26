@@ -309,6 +309,10 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 	if err != nil {
 		return nil, fmt.Errorf("normalize duplicate account extra: %w", err)
 	}
+	accountExtra, err = normalizeRequestBodyAdmissionExtra(input.Platform, accountExtra)
+	if err != nil {
+		return nil, fmt.Errorf("normalize duplicate request body admission extra: %w", err)
+	}
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
@@ -392,6 +396,101 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 		}
 	}
 	return normalized, nil
+}
+
+func validateRequestBodyAdmissionExtra(platform string, extra map[string]any) error {
+	if platform != PlatformOpenAI || extra == nil {
+		return nil
+	}
+	if raw, ok := extra[RequestBodyAdmissionEnabledExtraKey]; ok {
+		if _, valid := raw.(bool); !valid {
+			return infraerrors.BadRequest("REQUEST_BODY_ADMISSION_INVALID", "request_body_admission_enabled must be a boolean")
+		}
+	}
+
+	limits := []struct {
+		key          string
+		defaultValue int64
+	}{
+		{RequestBodyNormalLimitExtraKey, DefaultRequestBodyNormalLimitBytes},
+		{RequestBodyHeavyLimitExtraKey, DefaultRequestBodyHeavyLimitBytes},
+		{RequestBodyRecoveryLimitExtraKey, DefaultRequestBodyRecoveryLimitBytes},
+	}
+	values := make([]int64, 0, len(limits))
+	for _, limit := range limits {
+		value := limit.defaultValue
+		if raw, ok := extra[limit.key]; ok {
+			value = positiveExtraInt64(raw)
+			if value <= 0 {
+				return infraerrors.BadRequest("REQUEST_BODY_ADMISSION_INVALID", limit.key+" must be a positive number")
+			}
+		}
+		maxValue := MaxRequestBodyAdmissionLimitBytes
+		if limit.key == RequestBodyRecoveryLimitExtraKey {
+			maxValue = MaxRequestBodyRecoveryLimitBytes
+		}
+		if value > maxValue {
+			return infraerrors.BadRequest(
+				"REQUEST_BODY_ADMISSION_INVALID",
+				fmt.Sprintf("%s must not exceed %d bytes", limit.key, maxValue),
+			)
+		}
+		values = append(values, value)
+	}
+	if values[0] >= values[1] || values[1] >= values[2] {
+		return infraerrors.BadRequest(
+			"REQUEST_BODY_ADMISSION_INVALID",
+			"request body limits must satisfy normal < heavy < recovery",
+		)
+	}
+	return nil
+}
+
+func normalizeRequestBodyAdmissionExtra(platform string, extra map[string]any) (map[string]any, error) {
+	normalized := maps.Clone(extra)
+	if normalized == nil {
+		normalized = make(map[string]any)
+	}
+	delete(normalized, LegacyRequestBodyLimitExtraKey)
+	delete(normalized, LegacyCompactBodyLimitBypassExtraKey)
+	if platform != PlatformOpenAI {
+		delete(normalized, RequestBodyAdmissionEnabledExtraKey)
+		delete(normalized, RequestBodyNormalLimitExtraKey)
+		delete(normalized, RequestBodyHeavyLimitExtraKey)
+		delete(normalized, RequestBodyRecoveryLimitExtraKey)
+		return normalized, nil
+	}
+	if err := validateRequestBodyAdmissionExtra(platform, normalized); err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func normalizeRequestBodyAdmissionUpdateExtra(account *Account, input *UpdateAccountInput, extra map[string]any) (map[string]any, error) {
+	if account == nil {
+		return extra, nil
+	}
+	if account.Platform != PlatformOpenAI {
+		return normalizeRequestBodyAdmissionExtra(account.Platform, extra)
+	}
+	normalized := maps.Clone(extra)
+	if normalized == nil {
+		normalized = make(map[string]any)
+	}
+	for _, key := range []string{
+		RequestBodyAdmissionEnabledExtraKey,
+		RequestBodyNormalLimitExtraKey,
+		RequestBodyHeavyLimitExtraKey,
+		RequestBodyRecoveryLimitExtraKey,
+	} {
+		if _, provided := input.Extra[key]; provided {
+			continue
+		}
+		if current, exists := account.Extra[key]; exists {
+			normalized[key] = current
+		}
+	}
+	return normalizeRequestBodyAdmissionExtra(account.Platform, normalized)
 }
 
 // ValidateGrokMediaEligibilityExtra validates the optional media-routing
@@ -518,6 +617,10 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
+	accountExtra, err = normalizeRequestBodyAdmissionExtra(input.Platform, accountExtra)
+	if err != nil {
+		return nil, err
+	}
 	accountExtra, err = normalizeGrokMediaEligibilityExtra(input.Platform, accountExtra)
 	if err != nil {
 		return nil, err
@@ -606,6 +709,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	var normalizedExtra map[string]any
 	if input.Extra != nil {
 		normalizedExtra, err = normalizeOpenAILongContextBillingUpdateExtra(account, input)
+		if err != nil {
+			return nil, err
+		}
+		normalizedExtra, err = normalizeRequestBodyAdmissionUpdateExtra(account, input, normalizedExtra)
 		if err != nil {
 			return nil, err
 		}

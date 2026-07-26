@@ -93,6 +93,8 @@ func claudeCodeBodyMapFromParsedRequest(parsedReq *service.ParsedRequest) map[st
 const (
 	// maxConcurrencyWait 等待并发槽位的最大时间
 	maxConcurrencyWait = 30 * time.Second
+	// Large bodies may take longer to clear, but their per-user queue is bounded.
+	requestBodyLaneWait = 60 * time.Second
 	// defaultPingInterval 流式响应等待时发送 ping 的默认间隔
 	defaultPingInterval = 10 * time.Second
 	// initialBackoff 初始退避时间
@@ -237,11 +239,143 @@ func (h *ConcurrencyHelper) TryAcquireAccountSlot(ctx context.Context, accountID
 	return result.ReleaseFunc, true, nil
 }
 
+func (h *ConcurrencyHelper) TryAcquireRequestBodyLane(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+) (func(), bool, error) {
+	result, err := h.concurrencyService.AcquireRequestBodyLane(ctx, lane, scopeID, userID, maxPermits, weight)
+	if err != nil {
+		return nil, false, err
+	}
+	if !result.Acquired {
+		return nil, false, nil
+	}
+	return result.ReleaseFunc, true, nil
+}
+
+func (h *ConcurrencyHelper) tryAcquireRequestBodyLaneWithRequestID(
+	ctx context.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, weight int,
+	requestID string,
+) (func(), bool, error) {
+	result, err := h.concurrencyService.AcquireRequestBodyLaneWithRequestID(
+		ctx, lane, scopeID, userID, maxPermits, weight, requestID,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	if !result.Acquired {
+		return nil, false, nil
+	}
+	return result.ReleaseFunc, true, nil
+}
+
+func (h *ConcurrencyHelper) AcquireRequestBodyLaneWithWait(
+	c *gin.Context,
+	lane service.RequestBodyLane,
+	scopeID, userID int64,
+	maxPermits, maxWaiting, weight int,
+	isStream bool,
+	streamStarted *bool,
+) (func(), error) {
+	ctx := c.Request.Context()
+	ownerCtx := ctx
+	requestID := h.concurrencyService.NewRequestBodyLaneRequestID()
+	releaseFunc, acquired, err := h.tryAcquireRequestBodyLaneWithRequestID(
+		ctx, lane, scopeID, userID, maxPermits, weight, requestID,
+	)
+	if err != nil || acquired {
+		return releaseFunc, err
+	}
+	canWait, err := h.concurrencyService.IncrementRequestBodyLaneWaitCount(ctx, lane, scopeID, userID, maxWaiting, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if !canWait {
+		return nil, &WaitQueueFullError{SlotType: "request_body_" + string(lane)}
+	}
+	defer h.concurrencyService.DecrementRequestBodyLaneWaitCount(ctx, lane, scopeID, userID, requestID)
+
+	acquire := func(context.Context) (*service.AcquireResult, error) {
+		return h.concurrencyService.AcquireRequestBodyLaneWithRequestID(
+			ownerCtx, lane, scopeID, userID, maxPermits, weight, requestID,
+		)
+	}
+	return h.waitForAcquireWithPingTimeout(
+		c,
+		"request_body_"+string(lane),
+		requestBodyLaneWait,
+		isStream,
+		streamStarted,
+		false,
+		acquire,
+	)
+}
+
 // AcquireUserSlotWithWait acquires a user concurrency slot, waiting if necessary.
 // For streaming requests, sends ping events during the wait.
 // streamStarted is updated if streaming response has begun.
 func (h *ConcurrencyHelper) AcquireUserSlotWithWait(c *gin.Context, userID int64, maxConcurrency int, isStream bool, streamStarted *bool) (func(), error) {
 	return h.acquireUserSlotWithWaitTimeout(c, userID, maxConcurrency, maxConcurrencyWait, isStream, streamStarted)
+}
+
+func (h *ConcurrencyHelper) AcquireUserSlotWithWaitForRequestBodyAdmission(
+	c *gin.Context,
+	userID int64,
+	maxConcurrency int,
+	isStream bool,
+	streamStarted *bool,
+) (func(), func(), func(), error) {
+	ctx := c.Request.Context()
+	requestID := h.concurrencyService.NewRequestBodyLaneRequestID()
+	result, err := h.concurrencyService.AcquireUserSlotForRequestBodyAdmission(ctx, userID, maxConcurrency, requestID, false)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if result.Acquired {
+		return h.withAPIKeySlotFromGin(c, result.ReleaseFunc), result.ResolveNormalFunc, result.ReserveNonNormalFunc, nil
+	}
+
+	queueLimit := service.CalculateMaxWait(maxConcurrency) - maxConcurrency
+	if queueLimit < 1 {
+		queueLimit = 1
+	}
+	canWait, err := h.concurrencyService.IncrementWaitCountForRequestBodyAdmission(ctx, userID, queueLimit, requestID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !canWait {
+		return nil, nil, nil, &WaitQueueFullError{SlotType: "user"}
+	}
+	acquired := false
+	defer func() {
+		h.concurrencyService.DecrementWaitCountForRequestBodyAdmission(ctx, userID, requestID, acquired)
+	}()
+
+	var resolveNormal func()
+	var reserveNonNormal func()
+	acquire := func(acquireCtx context.Context) (*service.AcquireResult, error) {
+		acquireResult, acquireErr := h.concurrencyService.AcquireUserSlotForRequestBodyAdmission(
+			acquireCtx, userID, maxConcurrency, requestID, true,
+		)
+		if acquireErr == nil && acquireResult.Acquired {
+			resolveNormal = acquireResult.ResolveNormalFunc
+			reserveNonNormal = acquireResult.ReserveNonNormalFunc
+		}
+		return acquireResult, acquireErr
+	}
+	releaseFunc, err := h.waitForAcquireWithPingTimeout(
+		c, "user", maxConcurrencyWait, isStream, streamStarted, false, acquire,
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	acquired = true
+	return h.withAPIKeySlotFromGin(c, releaseFunc), resolveNormal, reserveNonNormal, nil
 }
 
 func (h *ConcurrencyHelper) acquireUserSlotWithWaitTimeout(c *gin.Context, userID int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
@@ -332,18 +466,29 @@ func (h *ConcurrencyHelper) waitForSlotWithPing(c *gin.Context, slotType string,
 
 // waitForSlotWithPingTimeout waits for a concurrency slot with a custom timeout.
 func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType string, id int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool, tryImmediate bool) (func(), error) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
-	defer cancel()
-
-	acquireSlot := func() (*service.AcquireResult, error) {
+	acquireSlot := func(ctx context.Context) (*service.AcquireResult, error) {
 		if slotType == "user" {
 			return h.concurrencyService.AcquireUserSlot(ctx, id, maxConcurrency)
 		}
 		return h.concurrencyService.AcquireAccountSlot(ctx, id, maxConcurrency)
 	}
+	return h.waitForAcquireWithPingTimeout(c, slotType, timeout, isStream, streamStarted, tryImmediate, acquireSlot)
+}
+
+func (h *ConcurrencyHelper) waitForAcquireWithPingTimeout(
+	c *gin.Context,
+	slotType string,
+	timeout time.Duration,
+	isStream bool,
+	streamStarted *bool,
+	tryImmediate bool,
+	acquireSlot func(context.Context) (*service.AcquireResult, error),
+) (func(), error) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+	defer cancel()
 
 	if tryImmediate {
-		result, err := acquireSlot()
+		result, err := acquireSlot(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -403,7 +548,7 @@ func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType 
 
 		case <-timer.C:
 			// Try to acquire slot
-			result, err := acquireSlot()
+			result, err := acquireSlot(ctx)
 			if err != nil {
 				return nil, err
 			}

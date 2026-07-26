@@ -12,6 +12,11 @@ import (
 // StepUpAuthMiddleware 敏感操作 step-up 2FA 门控中间件类型。
 type StepUpAuthMiddleware gin.HandlerFunc
 
+// AlwaysStepUpAuthMiddleware is a step-up gate that is not controlled by the
+// global feature switch. It protects endpoints whose payload is always
+// sensitive, such as complete prompt-audit event contents.
+type AlwaysStepUpAuthMiddleware gin.HandlerFunc
+
 // stepUpGrantChecker 抽象 TOTP step-up 授权检查能力（由 TotpService 实现）。
 type stepUpGrantChecker interface {
 	HasStepUpGrant(ctx context.Context, userID int64, sessionKey string) (bool, error)
@@ -51,6 +56,14 @@ func NewStepUpAuthMiddleware(
 	settingService *service.SettingService,
 ) StepUpAuthMiddleware {
 	return StepUpAuthMiddleware(stepUpAuth(totpService, userService, stepUpSettingsOrNil(settingService)))
+}
+
+// NewAlwaysStepUpAuthMiddleware creates an unconditional step-up gate.
+func NewAlwaysStepUpAuthMiddleware(
+	totpService *service.TotpService,
+	userService *service.UserService,
+) AlwaysStepUpAuthMiddleware {
+	return AlwaysStepUpAuthMiddleware(stepUpAuth(totpService, userService, nil))
 }
 
 // stepUpSettingsOrNil 将可能为 nil 的具体指针归一化为接口，

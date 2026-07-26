@@ -54,6 +54,9 @@ type AdminService interface {
 	DeleteCompositeRoute(ctx context.Context, groupID, routeID int64) error
 	PreviewCompositeRoute(ctx context.Context, groupID int64, input CompositeRoutePreviewRequest) (*CompositeRouteDecision, error)
 	GetGroupAPIKeys(ctx context.Context, groupID int64, page, pageSize int) ([]APIKey, int64, error)
+	// GetAPIKey7dAllocations returns the sum of active API Key 7-day limits by group.
+	// Group ID 0 represents API Keys without a group.
+	GetAPIKey7dAllocations(ctx context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]APIKey7dAllocation, error)
 	GetGroupRateMultipliers(ctx context.Context, groupID int64) ([]UserGroupRateEntry, error)
 	ClearGroupRateMultipliers(ctx context.Context, groupID int64) error
 	BatchSetGroupRateMultipliers(ctx context.Context, groupID int64, entries []GroupRateMultiplierInput) error
@@ -64,10 +67,6 @@ type AdminService interface {
 	// API Key management (admin)
 	AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error)
 	AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error)
-	// AdminSetAPIKeyWindowStart 仅调整速率限制窗口的起始时间，保留 usage 已用金额。
-	// 用于把 sub2api Key 的窗口对齐到 Codex 官方账号的真实刷新周期。
-	// 任一 *time.Time 为 nil 表示该窗口不动。
-	AdminSetAPIKeyWindowStart(ctx context.Context, keyID int64, w5h, w1d, w7d *time.Time) (*APIKey, error)
 	AdminBatchSyncAPIKey7dWindow(ctx context.Context, keyIDs []int64, groupID, accountID int64) ([]*APIKey, error)
 	AdminBatchResetAPIKey7dUsage(ctx context.Context, keyIDs []int64, groupID int64) ([]*APIKey, error)
 
@@ -649,6 +648,26 @@ type adminRechargeAffiliateAccruer interface {
 
 type userGroupRateBatchReader interface {
 	GetByUserIDs(ctx context.Context, userIDs []int64) (map[int64]map[int64]float64, error)
+}
+
+type apiKey7dAllocationReader interface {
+	SumActive7dRateLimitsByGroupIDs(ctx context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]APIKey7dAllocation, error)
+}
+
+type APIKey7dAllocation struct {
+	AllocatedUSD float64
+	Unlimited    bool
+}
+
+func (s *adminServiceImpl) GetAPIKey7dAllocations(ctx context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]APIKey7dAllocation, error) {
+	if s.apiKeyRepo == nil {
+		return map[int64]APIKey7dAllocation{}, nil
+	}
+	reader, ok := s.apiKeyRepo.(apiKey7dAllocationReader)
+	if !ok {
+		return nil, infraerrors.InternalServer("API_KEY_ALLOCATION_UNAVAILABLE", "api key allocation query is unavailable")
+	}
+	return reader.SumActive7dRateLimitsByGroupIDs(ctx, groupIDs, includeUngrouped)
 }
 
 // NewAdminService creates a new AdminService

@@ -145,6 +145,18 @@ type UserUsageTrendPoint struct {
 	ActualCost float64 `json:"actual_cost"` // 实际扣除
 }
 
+// UserRequestBodyTrendPoint represents request body size history grouped by user and time bucket.
+type UserRequestBodyTrendPoint struct {
+	Date                  string  `json:"date"`
+	UserID                int64   `json:"user_id"`
+	Email                 string  `json:"email"`
+	Username              string  `json:"username"`
+	Requests              int64   `json:"requests"`
+	TotalRequestBodyBytes int64   `json:"total_request_body_bytes"`
+	AvgRequestBodyBytes   float64 `json:"avg_request_body_bytes"`
+	MaxRequestBodyBytes   int64   `json:"max_request_body_bytes"`
+}
+
 // UserSpendingRankingItem represents a user spending ranking row.
 type UserSpendingRankingItem struct {
 	UserID     int64   `json:"user_id"`

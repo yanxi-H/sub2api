@@ -189,6 +189,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		googleError(c, http.StatusBadRequest, "Request body is empty")
 		return
 	}
+	requestBodyBytes := int64(len(body))
 
 	setOpsRequestContext(c, modelName, stream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(stream, false)))
@@ -545,6 +546,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				UpstreamEndpoint:      upstreamEndpoint,
 				UserAgent:             userAgent,
 				IPAddress:             clientIP,
+				RequestBodyBytes:      requestBodyBytes,
 				RequestPayloadHash:    requestPayloadHash,
 				LongContextThreshold:  200000, // Gemini 200K 阈值
 				LongContextMultiplier: 2.0,    // 超出部分双倍计费

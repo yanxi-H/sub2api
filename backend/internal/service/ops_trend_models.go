@@ -36,6 +36,22 @@ type OpsThroughputTrendResponse struct {
 	TopGroups  []*OpsThroughputGroupBreakdownItem    `json:"top_groups,omitempty"`
 }
 
+type OpsLatencyTrendPoint struct {
+	BucketStart time.Time      `json:"bucket_start"`
+	P50         *int           `json:"p50_ms"`
+	P90         *int           `json:"p90_ms"`
+	P95         *int           `json:"p95_ms"`
+	Avg         *int           `json:"avg_ms"`
+	Max         *int           `json:"max_ms"`
+	TTFT        OpsPercentiles `json:"ttft"`
+	SampleCount int64          `json:"sample_count"`
+}
+
+type OpsLatencyTrendResponse struct {
+	Bucket string                  `json:"bucket"`
+	Points []*OpsLatencyTrendPoint `json:"points"`
+}
+
 type OpsErrorTrendPoint struct {
 	BucketStart time.Time `json:"bucket_start"`
 
@@ -63,4 +79,25 @@ type OpsErrorDistributionItem struct {
 type OpsErrorDistributionResponse struct {
 	Total int64                       `json:"total"`
 	Items []*OpsErrorDistributionItem `json:"items"`
+}
+
+type OpsUserErrorTypeCount struct {
+	ErrorType string `json:"error_type"`
+	Count     int64  `json:"count"`
+}
+
+type OpsUserErrorDistributionItem struct {
+	UserID   *int64                   `json:"user_id"`
+	Username string                   `json:"username"`
+	Email    string                   `json:"email"`
+	Deleted  bool                     `json:"deleted"`
+	Total    int64                    `json:"total"`
+	Errors   []*OpsUserErrorTypeCount `json:"errors"`
+}
+
+type OpsUserErrorDistributionResponse struct {
+	Total      int64                           `json:"total"`
+	TotalUsers int                             `json:"total_users"`
+	UserLimit  int                             `json:"user_limit"`
+	Items      []*OpsUserErrorDistributionItem `json:"items"`
 }

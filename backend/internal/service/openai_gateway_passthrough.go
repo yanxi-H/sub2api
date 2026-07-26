@@ -233,6 +233,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var maxStreamGapMs *int
 	responseID := ""
 	imageCount := 0
 	var imageOutputSizes []string
@@ -243,6 +244,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		usage = result.usage
 		firstTokenMs = result.firstTokenMs
+		maxStreamGapMs = result.maxStreamGapMs
 		responseID = strings.TrimSpace(result.responseID)
 		imageCount = result.imageCount
 		imageOutputSizes = result.imageOutputSizes
@@ -281,6 +283,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		OpenAIWSMode:    false,
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		MaxStreamGapMs:  maxStreamGapMs,
 	}
 	if imageCount > 0 {
 		forwardResult.ImageCount = imageCount
@@ -714,6 +717,7 @@ func collectOpenAIPassthroughTimeoutHeaders(h http.Header) []string {
 type openaiStreamingResultPassthrough struct {
 	usage            *OpenAIUsage
 	firstTokenMs     *int
+	maxStreamGapMs   *int
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
@@ -754,9 +758,39 @@ func openAIStreamDataStartsClientOutput(data, eventType string) bool {
 	return !openAIStreamEventIsPreamble(eventType)
 }
 
+func observeOpenAIStreamSemanticOutput(now time.Time, lastObservedAt *time.Time, maxGapMs **int) {
+	if lastObservedAt == nil || maxGapMs == nil || now.IsZero() {
+		return
+	}
+	if !lastObservedAt.IsZero() {
+		gap := max(int(now.Sub(*lastObservedAt).Milliseconds()), 0)
+		if *maxGapMs == nil || gap > **maxGapMs {
+			*maxGapMs = &gap
+		}
+	}
+	*lastObservedAt = now
+}
+
+func observeOpenAIStreamTerminalGap(now time.Time, lastObservedAt *time.Time, maxGapMs **int) {
+	if lastObservedAt == nil || lastObservedAt.IsZero() {
+		return
+	}
+	observeOpenAIStreamSemanticOutput(now, lastObservedAt, maxGapMs)
+}
+
 func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 	if isOpenAIContextWindowError(message, payload) {
 		return http.StatusBadRequest
+	}
+	for _, path := range []string{
+		"response.error.status_code",
+		"response.error.status",
+		"error.status_code",
+		"error.status",
+	} {
+		if status := int(gjson.GetBytes(payload, path).Int()); status >= 400 && status <= 599 {
+			return status
+		}
 	}
 
 	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String()))
@@ -777,11 +811,32 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 		return http.StatusUnauthorized
 	case strings.Contains(combined, "permission") || strings.Contains(combined, "forbidden") || strings.Contains(combined, "access denied"):
 		return http.StatusForbidden
+	case strings.Contains(combined, "content_policy") || strings.Contains(combined, "safety") || strings.Contains(combined, "cyber_policy"):
+		return http.StatusForbidden
 	case code == "server_is_overloaded" || code == "slow_down":
 		return http.StatusServiceUnavailable
 	default:
 		return http.StatusBadGateway
 	}
+}
+
+func markOpenAIStreamFailedEvent(c *gin.Context, payload []byte, message string) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "Upstream response failed"
+	}
+	errType := strings.TrimSpace(gjson.GetBytes(payload, "response.error.type").String())
+	if errType == "" {
+		errType = strings.TrimSpace(gjson.GetBytes(payload, "error.type").String())
+	}
+	if errType == "" {
+		errType = "upstream_error"
+	}
+	code := strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String())
+	if code == "" {
+		code = strings.TrimSpace(gjson.GetBytes(payload, "error.code").String())
+	}
+	MarkOpsStreamFailure(c, errType, code, message, openAIStreamFailedEventSemanticStatus(payload, message))
 }
 
 func openAIStreamFailedEventPassthroughBody(payload []byte, failedMessage string) []byte {
@@ -988,6 +1043,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
+	var maxStreamGapMs *int
+	var lastUpstreamEventAt time.Time
 	responseID := ""
 	clientDisconnected := false
 	sawDone := false
@@ -1035,6 +1092,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
 			firstTokenMs:     firstTokenMs,
+			maxStreamGapMs:   maxStreamGapMs,
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
@@ -1113,6 +1171,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 							s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
 					}
 				}
+				markOpenAIStreamFailedEvent(c, dataBytes, failedMessage)
 				forceFlushFailedEvent = true
 				sawFailedEvent = true
 			}
@@ -1136,9 +1195,21 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				line = "data: " + string(sanitizedData)
 			}
 			lineStartsClientOutput = forceFlushFailedEvent || openAIStreamDataStartsClientOutput(trimmedData, eventType)
-			if firstTokenMs == nil && lineStartsClientOutput && trimmedData != "[DONE]" {
-				ms := int(time.Since(startTime).Milliseconds())
-				firstTokenMs = &ms
+			isTokenEvent := isOpenAIWSTokenEvent(eventType)
+			isTerminalEvent := openAIStreamEventIsTerminalWithType(trimmedData, eventType)
+			if isTokenEvent {
+				observedAt := time.Now()
+				observeOpenAIStreamSemanticOutput(observedAt, &lastUpstreamEventAt, &maxStreamGapMs)
+				if firstTokenMs == nil {
+					elapsedMs := observedAt.Sub(startTime).Milliseconds()
+					if elapsedMs < 0 {
+						elapsedMs = 0
+					}
+					ms := int(elapsedMs)
+					firstTokenMs = &ms
+				}
+			} else if isTerminalEvent {
+				observeOpenAIStreamTerminalGap(time.Now(), &lastUpstreamEventAt, &maxStreamGapMs)
 			}
 			s.parseSSEUsageBytes(dataBytes, usage)
 		}

@@ -1139,41 +1139,6 @@ func (s *adminServiceImpl) AdminResetAPIKeyRateLimitUsage(ctx context.Context, k
 	return apiKey, nil
 }
 
-// AdminSetAPIKeyWindowStart 仅调整速率限制窗口的起始时间，保留 usage 已用金额。
-// 用途：把 sub2api Key 的窗口起点对齐到 Codex 官方账号真实刷新周期，
-//   使 /v1/usage 返回的 reset_at 与官方账号一致。
-// 任一参数为 nil 表示对应窗口不动。
-func (s *adminServiceImpl) AdminSetAPIKeyWindowStart(ctx context.Context, keyID int64, w5h, w1d, w7d *time.Time) (*APIKey, error) {
-	// 至少要有一个窗口被指定
-	if w5h == nil && w1d == nil && w7d == nil {
-		return nil, infraerrors.BadRequest("NO_WINDOW", "at least one of window_5h/1d/7d_start must be provided")
-	}
-
-	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	if w5h != nil {
-		apiKey.Window5hStart = w5h
-	}
-	if w1d != nil {
-		apiKey.Window1dStart = w1d
-	}
-	if w7d != nil {
-		apiKey.Window7dStart = w7d
-	}
-	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
-		return nil, fmt.Errorf("set api key window start: %w", err)
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
-	}
-	if s.billingCacheService != nil {
-		_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
-	}
-	return apiKey, nil
-}
-
 const maxAdminAPIKeyBatchSize = 1000
 
 type adminAPIKey7dBatchRepository interface {

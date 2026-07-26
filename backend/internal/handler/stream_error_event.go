@@ -52,12 +52,15 @@ type responsesFailedEvent struct {
 // 返回 false 表示 writer 不支持 Flusher，无法以 SSE 形式回报错误；
 // 此时 caller 也无法回退到 JSON（HTTP 200 已固化），通常意味着连接已经损坏，
 // 应当让请求处理函数 return，由上层关闭连接。
-func writeResponsesFailedSSE(c *gin.Context, errType, message string) bool {
+func writeResponsesFailedSSE(c *gin.Context, errType, code, message string) bool {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		return false
 	}
 
+	if code = strings.TrimSpace(code); code == "" {
+		code = mapResponsesErrorCode(errType)
+	}
 	payload, err := json.Marshal(responsesFailedEvent{
 		Type: "response.failed",
 		Response: responsesFailedBody{
@@ -67,7 +70,7 @@ func writeResponsesFailedSSE(c *gin.Context, errType, message string) bool {
 			Status: "failed",
 			Output: []any{},
 			Error: responsesFailedError{
-				Code:    mapResponsesErrorCode(errType),
+				Code:    code,
 				Message: message,
 			},
 		},

@@ -95,6 +95,80 @@ func (h *OpsHandler) GetDashboardThroughputTrend(c *gin.Context) {
 	response.Success(c, data)
 }
 
+// GetDashboardLatencyTrend returns successful-request duration percentiles over time.
+// GET /api/v1/admin/ops/dashboard/latency-trend
+func (h *OpsHandler) GetDashboardLatencyTrend(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	filter := &service.OpsDashboardFilter{
+		StartTime: startTime,
+		EndTime:   endTime,
+		Platform:  strings.TrimSpace(c.Query("platform")),
+		QueryMode: parseOpsQueryMode(c),
+	}
+	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid group_id")
+			return
+		}
+		filter.GroupID = &id
+	}
+
+	data, err := h.opsService.GetLatencyTrend(c.Request.Context(), filter, pickThroughputBucketSeconds(endTime.Sub(startTime)))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// GetDashboardPerformanceDiagnostics returns deterministic slow-request causes
+// and the users, accounts, and models most affected by them.
+func (h *OpsHandler) GetDashboardPerformanceDiagnostics(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	filter := &service.OpsDashboardFilter{
+		StartTime: startTime,
+		EndTime:   endTime,
+		Platform:  strings.TrimSpace(c.Query("platform")),
+		QueryMode: parseOpsQueryMode(c),
+	}
+	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
+		id, parseErr := strconv.ParseInt(v, 10, 64)
+		if parseErr != nil || id <= 0 {
+			response.BadRequest(c, "Invalid group_id")
+			return
+		}
+		filter.GroupID = &id
+	}
+	data, err := h.opsService.GetPerformanceDiagnostics(c.Request.Context(), filter, pickThroughputBucketSeconds(endTime.Sub(startTime)))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
 // GetDashboardLatencyHistogram returns the latency distribution histogram (success requests).
 // GET /api/v1/admin/ops/dashboard/latency-histogram
 func (h *OpsHandler) GetDashboardLatencyHistogram(c *gin.Context) {
@@ -126,6 +200,14 @@ func (h *OpsHandler) GetDashboardLatencyHistogram(c *gin.Context) {
 			return
 		}
 		filter.GroupID = &id
+	}
+	if v := strings.TrimSpace(c.Query("user_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		filter.UserID = &id
 	}
 
 	data, err := h.opsService.GetLatencyHistogram(c.Request.Context(), filter)
@@ -212,6 +294,84 @@ func (h *OpsHandler) GetDashboardErrorDistribution(c *gin.Context) {
 	}
 
 	data, err := h.opsService.GetErrorDistribution(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// GetDashboardUserErrorDistribution returns SLA errors grouped by user and error type.
+// GET /api/v1/admin/ops/dashboard/user-error-distribution
+func (h *OpsHandler) GetDashboardUserErrorDistribution(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	filter := &service.OpsDashboardFilter{
+		StartTime: startTime,
+		EndTime:   endTime,
+		Platform:  strings.TrimSpace(c.Query("platform")),
+		QueryMode: parseOpsQueryMode(c),
+	}
+	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid group_id")
+			return
+		}
+		filter.GroupID = &id
+	}
+
+	data, err := h.opsService.GetUserErrorDistribution(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// GetDashboardInvestigation returns deterministic incident hypotheses derived
+// from aggregated error metadata and latency percentiles.
+// GET /api/v1/admin/ops/dashboard/investigation
+func (h *OpsHandler) GetDashboardInvestigation(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+
+	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	filter := &service.OpsDashboardFilter{
+		StartTime: startTime,
+		EndTime:   endTime,
+		Platform:  strings.TrimSpace(c.Query("platform")),
+		QueryMode: parseOpsQueryMode(c),
+	}
+	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid group_id")
+			return
+		}
+		filter.GroupID = &id
+	}
+
+	data, err := h.opsService.GetDashboardInvestigation(c.Request.Context(), filter)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

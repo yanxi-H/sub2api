@@ -54,6 +54,7 @@ type UsageLogRepository interface {
 	GetAllGroupUsageSummary(ctx context.Context, todayStart time.Time) ([]usagestats.GroupUsageSummary, error)
 	GetAPIKeyUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.APIKeyUsageTrendPoint, error)
 	GetUserUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserUsageTrendPoint, error)
+	GetUserRequestBodyTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserRequestBodyTrendPoint, error)
 	GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int) (*usagestats.UserSpendingRankingResponse, error)
 	GetBatchUserUsageStats(ctx context.Context, userIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchUserUsageStats, error)
 	GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error)
@@ -82,6 +83,10 @@ type UsageLogRepository interface {
 
 type accountWindowStatsBatchReader interface {
 	GetAccountWindowStatsBatch(ctx context.Context, accountIDs []int64, startTime time.Time) (map[int64]*usagestats.AccountStats, error)
+}
+
+type accountWindowStatsByStartBatchReader interface {
+	GetAccountWindowStatsByStarts(ctx context.Context, windowStarts map[int64]time.Time) (map[int64]*usagestats.AccountStats, error)
 }
 
 // apiUsageCache 缓存从 Anthropic API 获取的使用率数据（utilization, resets_at）
@@ -478,6 +483,32 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	// API Key账号不支持usage查询
 	return nil, fmt.Errorf("account type %s does not support usage query", account.Type)
+}
+
+// RefreshOpenAIResetCreditSnapshot explicitly queries the OpenAI quota
+// endpoint and returns the persisted reset-credit snapshot for dashboard use.
+// It is deliberately separate from GetUsage: normal OpenAI dashboard refreshes
+// use lightweight rate-limit probes and must not fetch reset credits.
+func (s *AccountUsageService) RefreshOpenAIResetCreditSnapshot(ctx context.Context, accountID int64) (*OpenAIResetCreditSnapshot, error) {
+	if s == nil || s.accountRepo == nil || s.openAIQuotaService == nil {
+		return nil, fmt.Errorf("openai reset-credit query service is unavailable")
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("get account failed: %w", err)
+	}
+	if !SupportsOpenAIResetCredits(account) {
+		return nil, fmt.Errorf("account does not support OpenAI reset credits")
+	}
+	usage, err := s.openAIQuotaService.QueryUsage(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot := newOpenAIResetCreditSnapshot(usage.RateLimitResetCredits, time.Unix(usage.FetchedAt, 0))
+	if snapshot == nil {
+		return nil, fmt.Errorf("OpenAI reset credits are unavailable")
+	}
+	return snapshot, nil
 }
 
 // GetPassiveUsage 从 Account.Extra 中的被动采样数据构建 UsageInfo，不调用外部 API。
@@ -1339,6 +1370,38 @@ func windowStatsFromAccountStats(stats *usagestats.AccountStats) *WindowStats {
 		StandardCost: stats.StandardCost,
 		UserCost:     stats.UserCost,
 	}
+}
+
+// GetAccountWindowStatsByStarts returns account stats for windows that may
+// start at different times. The repository implementation performs one query.
+func (s *AccountUsageService) GetAccountWindowStatsByStarts(ctx context.Context, windowStarts map[int64]time.Time) (map[int64]*WindowStats, error) {
+	result := make(map[int64]*WindowStats, len(windowStarts))
+	if len(windowStarts) == 0 {
+		return result, nil
+	}
+	if s == nil || s.usageLogRepo == nil {
+		return nil, fmt.Errorf("usage log repository is unavailable")
+	}
+
+	if reader, ok := s.usageLogRepo.(accountWindowStatsByStartBatchReader); ok {
+		statsByAccount, err := reader.GetAccountWindowStatsByStarts(ctx, windowStarts)
+		if err != nil {
+			return nil, err
+		}
+		for accountID := range windowStarts {
+			result[accountID] = windowStatsFromAccountStats(statsByAccount[accountID])
+		}
+		return result, nil
+	}
+
+	for accountID, startTime := range windowStarts {
+		stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, accountID, startTime)
+		if err != nil {
+			return nil, err
+		}
+		result[accountID] = windowStatsFromAccountStats(stats)
+	}
+	return result, nil
 }
 
 func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now time.Time) *UsageProgress {

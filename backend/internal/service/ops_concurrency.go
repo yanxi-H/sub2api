@@ -17,6 +17,14 @@ type opsAccountStatsRepository interface {
 	ListOpsAccountsForStats(ctx context.Context, platformFilter string, groupIDFilter *int64) ([]Account, error)
 }
 
+type opsUserTrendRepository interface {
+	ListOpsUsersByIDs(ctx context.Context, ids []int64) ([]User, error)
+}
+
+type opsRequestBodyLaneLatencyRepository interface {
+	GetRequestBodyLaneLatencySummaries(ctx context.Context, start, end time.Time) (RequestBodyLaneLatencySummaries, error)
+}
+
 func (s *OpsService) listAllAccountsForOps(ctx context.Context, platformFilter string, groupIDFilter *int64) ([]Account, error) {
 	if s == nil || s.accountRepo == nil {
 		return []Account{}, nil
@@ -405,4 +413,118 @@ func (s *OpsService) GetUserConcurrencyStats(ctx context.Context) (map[int64]*Us
 	}
 
 	return result, &collectedAt, nil
+}
+
+// GetUserConcurrencyTrend returns selected-range user concurrency peaks from
+// the short-lived Redis trend store.
+func (s *OpsService) GetUserConcurrencyTrend(ctx context.Context, start, end time.Time) (*UserConcurrencyTrendResponse, error) {
+	if err := s.RequireMonitoringEnabled(ctx); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if end.IsZero() || end.After(now) {
+		end = now
+	}
+	if start.IsZero() {
+		start = end.Add(-time.Hour)
+	}
+	if s == nil || s.concurrencyService == nil {
+		return &UserConcurrencyTrendResponse{StartTime: start, EndTime: end, Bucket: "minute", Points: []UserConcurrencyTrendPoint{}, Users: map[int64]UserConcurrencyTrendUser{}}, nil
+	}
+	trend, err := s.concurrencyService.GetUserConcurrencyTrend(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	currentLoads, err := s.concurrencyService.GetCurrentUserConcurrencyLoads(ctx)
+	if err != nil {
+		return nil, err
+	}
+	currentBodyLoads, err := s.concurrencyService.GetCurrentRequestBodyLaneLoads(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[int64]struct{})
+	for _, point := range trend.Points {
+		for userID := range point.Users {
+			seen[userID] = struct{}{}
+		}
+		for userID := range point.UserLanes {
+			seen[userID] = struct{}{}
+		}
+	}
+	current := ConcurrencySnapshot{}
+	currentStates := make(map[int64]userConcurrencyLiveState, max(len(currentLoads), len(currentBodyLoads)))
+	for userID, load := range currentLoads {
+		if load == nil {
+			continue
+		}
+		seen[userID] = struct{}{}
+		current.InUse += max(load.CurrentConcurrency, 0)
+		current.Waiting += max(load.WaitingCount, 0)
+		currentStates[userID] = userConcurrencyLiveState{
+			active:  max(load.CurrentConcurrency, 0),
+			waiting: max(load.WaitingCount, 0),
+		}
+	}
+	for userID, bodyLoad := range currentBodyLoads {
+		seen[userID] = struct{}{}
+		state := currentStates[userID]
+		state.requestBodyLoad = bodyLoad
+		currentStates[userID] = state
+	}
+	current.Demand = current.InUse + current.Waiting
+	currentLanes := ConcurrencyLaneSnapshots{}
+	for _, state := range currentStates {
+		addConcurrencyLaneSnapshots(&currentLanes, concurrencyLaneSnapshotsForState(state), 1)
+	}
+	metadata := make(map[int64]UserConcurrencyTrendUser, len(seen))
+	if len(seen) > 0 {
+		ids := make([]int64, 0, len(seen))
+		for userID := range seen {
+			ids = append(ids, userID)
+		}
+		var users []User
+		var listErr error
+		if repo, ok := s.userRepo.(opsUserTrendRepository); ok {
+			users, listErr = repo.ListOpsUsersByIDs(ctx, ids)
+		} else {
+			users, listErr = s.listAllActiveUsersForOps(ctx)
+		}
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, user := range users {
+			if _, ok := seen[user.ID]; !ok {
+				continue
+			}
+			metadata[user.ID] = UserConcurrencyTrendUser{
+				UserID:      user.ID,
+				UserEmail:   user.Email,
+				Username:    user.Username,
+				MaxCapacity: int64(user.Concurrency),
+			}
+		}
+	}
+	latencyLanes := RequestBodyLaneLatencySummaries{}
+	if repo, ok := s.opsRepo.(opsRequestBodyLaneLatencyRepository); ok {
+		latencyLanes, err = repo.GetRequestBodyLaneLatencySummaries(ctx, trend.StartTime, trend.EndTime)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &UserConcurrencyTrendResponse{
+		StartTime:        trend.StartTime,
+		EndTime:          trend.EndTime,
+		CoverageStart:    trend.CoverageStart,
+		CoverageEnd:      trend.CoverageEnd,
+		CoverageComplete: trend.CoverageComplete,
+		Bucket:           trend.Bucket,
+		Current:          current,
+		CurrentLanes:     currentLanes,
+		LatencyLanes:     latencyLanes,
+		Points:           trend.Points,
+		Users:            metadata,
+	}, nil
 }

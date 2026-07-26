@@ -912,6 +912,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			imageCounter.AddSSEData(upstreamMessage)
 
 			if eventType == "response.failed" {
+				markOpenAIStreamFailedEvent(c, upstreamMessage, extractOpenAISSEErrorMessage(upstreamMessage))
 				if hit, code, msg := detectOpenAICyberPolicy(upstreamMessage); hit {
 					MarkOpsCyberPolicy(c, CyberPolicyMark{
 						Code:           code,

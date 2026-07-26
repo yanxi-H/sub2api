@@ -357,6 +357,14 @@ func (s *DashboardService) GetUserUsageTrend(ctx context.Context, startTime, end
 	return trend, nil
 }
 
+func (s *DashboardService) GetUserRequestBodyTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserRequestBodyTrendPoint, error) {
+	trend, err := s.usageRepo.GetUserRequestBodyTrend(ctx, startTime, endTime, granularity, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get user request body trend: %w", err)
+	}
+	return trend, nil
+}
+
 func (s *DashboardService) GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int) (*usagestats.UserSpendingRankingResponse, error) {
 	ranking, err := s.usageRepo.GetUserSpendingRanking(ctx, startTime, endTime, limit)
 	if err != nil {

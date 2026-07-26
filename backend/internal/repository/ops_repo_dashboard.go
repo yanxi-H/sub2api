@@ -975,9 +975,11 @@ func isQueryTimeoutErr(err error) bool {
 func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, startIndex int) (join string, where string, args []any, nextIndex int) {
 	platform := ""
 	groupID := (*int64)(nil)
+	userID := (*int64)(nil)
 	if filter != nil {
 		platform = strings.TrimSpace(strings.ToLower(filter.Platform))
 		groupID = filter.GroupID
+		userID = filter.UserID
 	}
 
 	idx := startIndex
@@ -994,6 +996,11 @@ func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, s
 	if groupID != nil && *groupID > 0 {
 		args = append(args, *groupID)
 		clauses = append(clauses, fmt.Sprintf("ul.group_id = $%d", idx))
+		idx++
+	}
+	if userID != nil && *userID > 0 {
+		args = append(args, *userID)
+		clauses = append(clauses, fmt.Sprintf("ul.user_id = $%d", idx))
 		idx++
 	}
 	if platform != "" {

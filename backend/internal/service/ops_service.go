@@ -14,6 +14,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"golang.org/x/sync/singleflight"
 )
 
 var ErrOpsDisabled = infraerrors.NotFound("OPS_DISABLED", "Ops monitoring is disabled")
@@ -59,6 +60,8 @@ type OpsService struct {
 	geminiCompatService         *GeminiMessagesCompatService
 	antigravityGatewayService   *AntigravityGatewayService
 	systemLogSink               *OpsSystemLogSink
+	monitorCenter               *MonitorCenterService
+	performanceSink             *OpsRequestPerformanceSink
 	ingressRejectAggregator     *OpsIngressRejectAggregator
 	authCacheInvalidationWorker *AuthCacheInvalidationWorker
 	apiKeyService               *APIKeyService
@@ -76,6 +79,10 @@ type OpsService struct {
 	// only serializes startup and administrative updates.
 	runtimeSettings   atomic.Pointer[opsRuntimeSettingsSnapshot]
 	runtimeSettingsMu sync.Mutex
+
+	performanceDiagnosticsMu    sync.RWMutex
+	performanceDiagnosticsCache map[string]opsPerformanceCacheEntry
+	performanceDiagnosticsSF    singleflight.Group
 
 	runtimeRefreshMu             sync.Mutex
 	runtimeRefreshCancel         context.CancelFunc
@@ -131,12 +138,13 @@ func NewOpsService(
 		accountRepo: accountRepo,
 		userRepo:    userRepo,
 
-		concurrencyService:        concurrencyService,
-		gatewayService:            gatewayService,
-		openAIGatewayService:      openAIGatewayService,
-		geminiCompatService:       geminiCompatService,
-		antigravityGatewayService: antigravityGatewayService,
-		systemLogSink:             systemLogSink,
+		concurrencyService:          concurrencyService,
+		gatewayService:              gatewayService,
+		openAIGatewayService:        openAIGatewayService,
+		geminiCompatService:         geminiCompatService,
+		antigravityGatewayService:   antigravityGatewayService,
+		systemLogSink:               systemLogSink,
+		performanceDiagnosticsCache: make(map[string]opsPerformanceCacheEntry),
 	}
 	svc.initRuntimeSettings(context.Background())
 	svc.applyRuntimeLogConfigOnStartup(context.Background())
@@ -322,6 +330,9 @@ func (s *OpsService) logRuntimeSettingsRefreshFailure(err error) {
 func (s *OpsService) StopRuntimeSettingsRefresh() {
 	if s == nil {
 		return
+	}
+	if s.performanceSink != nil {
+		s.performanceSink.Stop()
 	}
 	s.runtimeRefreshMu.Lock()
 	cancel := s.runtimeRefreshCancel

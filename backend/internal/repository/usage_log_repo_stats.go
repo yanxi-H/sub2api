@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -380,6 +381,75 @@ func (r *usageLogRepository) GetAccountWindowStatsBatch(ctx context.Context, acc
 		return nil, err
 	}
 
+	for _, accountID := range accountIDs {
+		if _, ok := result[accountID]; !ok {
+			result[accountID] = &usagestats.AccountStats{}
+		}
+	}
+	return result, nil
+}
+
+// GetAccountWindowStatsByStarts aggregates account windows with different
+// start times in one query, avoiding one seven-day scan per dashboard card.
+func (r *usageLogRepository) GetAccountWindowStatsByStarts(ctx context.Context, windowStarts map[int64]time.Time) (map[int64]*usagestats.AccountStats, error) {
+	result := make(map[int64]*usagestats.AccountStats, len(windowStarts))
+	if len(windowStarts) == 0 {
+		return result, nil
+	}
+
+	accountIDs := make([]int64, 0, len(windowStarts))
+	for accountID := range windowStarts {
+		accountIDs = append(accountIDs, accountID)
+	}
+	sort.Slice(accountIDs, func(i, j int) bool { return accountIDs[i] < accountIDs[j] })
+
+	values := make([]string, 0, len(accountIDs))
+	args := make([]any, 0, len(accountIDs)*2)
+	for i, accountID := range accountIDs {
+		values = append(values, fmt.Sprintf("($%d::bigint, $%d::timestamptz)", i*2+1, i*2+2))
+		args = append(args, accountID, windowStarts[accountID])
+	}
+
+	query := fmt.Sprintf(`
+		WITH windows(account_id, start_time) AS (VALUES %s)
+		SELECT
+			w.account_id,
+			COUNT(ul.id) AS requests,
+			COALESCE(SUM(ul.input_tokens + ul.output_tokens + ul.cache_creation_tokens + ul.cache_read_tokens), 0) AS tokens,
+			COALESCE(SUM(COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)), 0) AS cost,
+			COALESCE(SUM(ul.total_cost), 0) AS standard_cost,
+			COALESCE(SUM(ul.actual_cost), 0) AS user_cost
+		FROM windows w
+		LEFT JOIN usage_logs ul
+		  ON ul.account_id = w.account_id
+		 AND ul.created_at >= w.start_time
+		GROUP BY w.account_id
+	`, strings.Join(values, ","))
+
+	rows, err := r.sql.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var accountID int64
+		stats := &usagestats.AccountStats{}
+		if err := rows.Scan(
+			&accountID,
+			&stats.Requests,
+			&stats.Tokens,
+			&stats.Cost,
+			&stats.StandardCost,
+			&stats.UserCost,
+		); err != nil {
+			return nil, err
+		}
+		result[accountID] = stats
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	for _, accountID := range accountIDs {
 		if _, ok := result[accountID]; !ok {
 			result[accountID] = &usagestats.AccountStats{}

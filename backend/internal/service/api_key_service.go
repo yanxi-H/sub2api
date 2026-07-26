@@ -77,9 +77,6 @@ type APIKeyRepository interface {
 	CountByUserID(ctx context.Context, userID int64) (int64, error)
 	ExistsByKey(ctx context.Context, key string) (bool, error)
 	ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]APIKey, *pagination.PaginationResult, error)
-	// SumRateLimit7dByGroupIDs 批量查询多个分组下所有未删除 Key 的 7d 限额总和。
-	// 返回 map[groupID]float64。用于账号额度分配概览。
-	SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error)
 	SearchAPIKeys(ctx context.Context, userID int64, keyword string, limit int) ([]APIKey, error)
 	ClearGroupIDByGroupID(ctx context.Context, groupID int64) (int64, error)
 	// UpdateGroupIDByUserAndGroup 将用户下绑定 oldGroupID 的所有 Key 迁移到 newGroupID
@@ -100,6 +97,10 @@ type APIKeyRepository interface {
 
 type apiKeyAllByUserIDLister interface {
 	ListAllByUserID(ctx context.Context, userID int64, filters APIKeyListFilters) ([]APIKey, error)
+}
+
+type APIKeyAccountRepository interface {
+	GetByID(ctx context.Context, id int64) (*Account, error)
 }
 
 // APIKeyRateLimitData holds rate limit usage and window state for an API key.
@@ -187,6 +188,7 @@ type APIKeyAuthCacheInvalidator interface {
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
 	Name        string   `json:"name"`
+	UserID      *int64   `json:"user_id"` // Optional target owner; nil uses the authenticated user.
 	GroupID     *int64   `json:"group_id"`
 	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
@@ -200,10 +202,6 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
-
-	// 管理员指定:Key 归属的目标用户。不填(由 handler fallback)则归属操作者本人。
-	// 仅 CreateAsAdmin 路径会使用它;普通 Create 路径忽略。
-	UserID *int64 `json:"user_id"`
 }
 
 // UpdateAPIKeyRequest 更新API Key请求
@@ -221,14 +219,11 @@ type UpdateAPIKeyRequest struct {
 	ResetQuota      *bool      `json:"reset_quota"` // Reset quota_used to 0
 
 	// Rate limit fields (nil = no change, 0 = unlimited)
-	RateLimit5h         *float64 `json:"rate_limit_5h"`
-	RateLimit1d         *float64 `json:"rate_limit_1d"`
-	RateLimit7d         *float64 `json:"rate_limit_7d"`
+	RateLimit5h           *float64 `json:"rate_limit_5h"`
+	RateLimit1d           *float64 `json:"rate_limit_1d"`
+	RateLimit7d           *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage   *bool    `json:"reset_rate_limit_usage"`    // Reset all usage counters to 0
 	Sync7dWindowAccountID *int64   `json:"sync_7d_window_account_id"` // Align 7d window to the selected upstream account
-
-	// 管理员修改归属用户(nil = 不修改)。仅 UpdateAsAdmin 路径生效;普通 Update 忽略。
-	UserID *int64 `json:"user_id"`
 }
 
 // APIKeyService API Key服务
@@ -239,6 +234,7 @@ type RateLimitCacheInvalidator interface {
 
 type APIKeyService struct {
 	apiKeyRepo                APIKeyRepository
+	accountRepo               APIKeyAccountRepository
 	userRepo                  UserRepository
 	groupRepo                 GroupRepository
 	userSubRepo               UserSubscriptionRepository
@@ -250,7 +246,6 @@ type APIKeyService struct {
 	authCacheL1               *ristretto.Cache
 	authNegativeCacheL1       *ristretto.Cache
 	authCfg                   apiKeyAuthCacheConfig
-	accountRepo               APIKeyAccountRepository
 	authGroup                 singleflight.Group
 	authLookupSlots           chan struct{}
 	authLookupTotal           atomic.Uint64
@@ -321,13 +316,6 @@ func (s *APIKeyService) SetRateLimitCacheInvalidator(inv RateLimitCacheInvalidat
 	s.rateLimitCacheInvalid = inv
 }
 
-// APIKeyAccountRepository is a minimal account lookup interface used to sync
-// 7d windows to an upstream account's known reset time.
-type APIKeyAccountRepository interface {
-	GetByID(ctx context.Context, id int64) (*Account, error)
-}
-
-// SetAccountRepository sets the optional account repository used for 7d window sync.
 func (s *APIKeyService) SetAccountRepository(accountRepo APIKeyAccountRepository) {
 	s.accountRepo = accountRepo
 }
@@ -353,9 +341,9 @@ func (s *APIKeyService) GenerateKey() (string, error) {
 	}
 
 	// 转换为十六进制字符串并添加前缀
-	prefix := s.cfg.Default.APIKeyPrefix
-	if prefix == "" {
-		prefix = "sk-"
+	prefix := "sk-"
+	if s.cfg != nil && s.cfg.Default.APIKeyPrefix != "" {
+		prefix = s.cfg.Default.APIKeyPrefix
 	}
 
 	key := prefix + hex.EncodeToString(bytes)
@@ -424,20 +412,15 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 	return user.CanBindGroup(group.ID, group.IsExclusive)
 }
 
-// Create 创建API Key（归属由传入的 userID 决定，普通用户路径 userID 即调用者本人）。
+// Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
-	return s.createAPIKey(ctx, userID, req, false)
-}
+	targetUserID := userID
+	if req.UserID != nil && *req.UserID > 0 {
+		targetUserID = *req.UserID
+	}
 
-// CreateAsAdmin 以管理员身份创建API Key：跳过「目标用户能否绑定分组」的校验，
-// 且跳过自定义 Key 的创建限流。归属 userID 由 handler 解析后传入（可能是目标用户而非管理员自己）。
-func (s *APIKeyService) CreateAsAdmin(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
-	return s.createAPIKey(ctx, userID, req, true)
-}
-
-func (s *APIKeyService) createAPIKey(ctx context.Context, userID int64, req CreateAPIKeyRequest, isAdmin bool) (*APIKey, error) {
 	// 验证用户存在
-	user, err := s.userRepo.GetByID(ctx, userID)
+	user, err := s.userRepo.GetByID(ctx, targetUserID)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
@@ -456,14 +439,15 @@ func (s *APIKeyService) createAPIKey(ctx context.Context, userID int64, req Crea
 		}
 	}
 
-	// 验证分组权限（如果指定了分组）。管理员跳过：可把任意分组指定给任意用户的 Key。
+	// 验证分组权限（如果指定了分组）
 	if req.GroupID != nil {
 		group, err := s.groupRepo.GetByID(ctx, *req.GroupID)
 		if err != nil {
 			return nil, fmt.Errorf("get group: %w", err)
 		}
 
-		if !isAdmin && !s.canUserBindGroup(ctx, user, group) {
+		// 检查用户是否可以绑定该分组
+		if !s.canUserBindGroup(ctx, user, group) {
 			return nil, ErrGroupNotAllowed
 		}
 	}
@@ -472,11 +456,9 @@ func (s *APIKeyService) createAPIKey(ctx context.Context, userID int64, req Crea
 
 	// 判断是否使用自定义Key
 	if req.CustomKey != nil && *req.CustomKey != "" {
-		// 检查限流（仅对自定义key进行限流）。管理员代建跳过限流。
-		if !isAdmin {
-			if err := s.checkAPIKeyRateLimit(ctx, userID); err != nil {
-				return nil, err
-			}
+		// 检查限流（仅对自定义key进行限流）
+		if err := s.checkAPIKeyRateLimit(ctx, targetUserID); err != nil {
+			return nil, err
 		}
 
 		// 验证自定义Key格式
@@ -491,7 +473,7 @@ func (s *APIKeyService) createAPIKey(ctx context.Context, userID int64, req Crea
 		}
 		if exists {
 			// Key已存在，增加错误计数
-			s.incrementAPIKeyErrorCount(ctx, userID)
+			s.incrementAPIKeyErrorCount(ctx, targetUserID)
 			return nil, ErrAPIKeyExists
 		}
 
@@ -507,7 +489,7 @@ func (s *APIKeyService) createAPIKey(ctx context.Context, userID int64, req Crea
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
+		UserID:      targetUserID,
 		Key:         key,
 		Name:        html.EscapeString(req.Name),
 		GroupID:     req.GroupID,
@@ -539,20 +521,18 @@ func (s *APIKeyService) createAPIKey(ctx context.Context, userID int64, req Crea
 
 // List 获取用户的API Key列表
 func (s *APIKeyService) List(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
-	// 管理员全局模式：不按调用者 userID 过滤，列出全系统所有用户的 Key
-	// （filters.UserID 非 nil 时仅列出该用户）。普通用户保持原有按自身 userID 过滤的逻辑。
 	if filters.AdminMode {
-		keys, pagination, err := s.apiKeyRepo.ListAll(ctx, params, filters)
+		keys, result, err := s.apiKeyRepo.ListAll(ctx, params, filters)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list api keys: %w", err)
 		}
 		s.fillCurrentConcurrency(ctx, keys)
-		return keys, pagination, nil
+		return keys, result, nil
 	}
+
 	if normalizedAPIKeySortBy(params.SortBy) == apiKeySortCurrentConcurrency {
 		return s.listByCurrentConcurrency(ctx, userID, params, filters)
 	}
-
 	keys, pagination, err := s.apiKeyRepo.ListByUserID(ctx, userID, params, filters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list api keys: %w", err)
@@ -751,6 +731,43 @@ func (s *APIKeyService) UpdateAsAdmin(ctx context.Context, id int64, userID int6
 	return s.updateAPIKey(ctx, id, userID, req, true)
 }
 
+// RegenerateAsAdmin replaces an API key's secret without changing its billing,
+// rate-limit, ownership, or access configuration. The old secret is invalidated
+// immediately through the authentication cache.
+func (s *APIKeyService) RegenerateAsAdmin(ctx context.Context, id int64) (*APIKey, error) {
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get api key: %w", err)
+	}
+
+	oldKey := apiKey.Key
+	for attempts := 0; attempts < 5; attempts++ {
+		newKey, err := s.GenerateKey()
+		if err != nil {
+			return nil, err
+		}
+
+		exists, err := s.apiKeyRepo.ExistsByKey(ctx, newKey)
+		if err != nil {
+			return nil, fmt.Errorf("check generated api key: %w", err)
+		}
+		if exists {
+			continue
+		}
+
+		apiKey.Key = newKey
+		if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
+			return nil, fmt.Errorf("regenerate api key: %w", err)
+		}
+
+		s.InvalidateAuthCacheByKey(ctx, oldKey)
+		s.compileAPIKeyIPRules(apiKey)
+		return apiKey, nil
+	}
+
+	return nil, fmt.Errorf("generate a unique api key: %w", ErrAPIKeyExists)
+}
+
 func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64, req UpdateAPIKeyRequest, isAdmin bool) (*APIKey, error) {
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, id)
 	if err != nil {
@@ -800,14 +817,6 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 		}
 
 		apiKey.GroupID = req.GroupID
-	}
-
-	// 管理员修改归属用户：校验目标用户存在后转移归属。普通用户路径忽略此字段。
-	if isAdmin && req.UserID != nil {
-		if _, err := s.userRepo.GetByID(ctx, *req.UserID); err != nil {
-			return nil, fmt.Errorf("get target user: %w", err)
-		}
-		apiKey.UserID = *req.UserID
 	}
 
 	if req.Status != nil {
@@ -874,8 +883,6 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 		apiKey.Window1dStart = nil
 		apiKey.Window7dStart = nil
 	}
-
-	// Sync 7d window to an upstream account's known reset time (admin only).
 	synced7dWindow := false
 	if req.Sync7dWindowAccountID != nil {
 		if !isAdmin {
@@ -904,12 +911,40 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
 	s.compileAPIKeyIPRules(apiKey)
 
-	// Invalidate Redis rate limit cache so reset/sync takes effect immediately
+	// Invalidate Redis rate limit cache so reset takes effect immediately
 	if (resetRateLimit || synced7dWindow) && s.rateLimitCacheInvalid != nil {
 		_ = s.rateLimitCacheInvalid.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
 	}
 
 	return apiKey, nil
+}
+
+func accountSevenDayResetAt(account *Account, now time.Time) (time.Time, bool) {
+	if account == nil || account.Extra == nil {
+		return time.Time{}, false
+	}
+
+	// Prefer product usage windows over generic account quota windows when both
+	// are present; API key 7d rate limits are meant to mirror upstream usage.
+	candidates := []time.Time{
+		parseExtraTime(account.Extra["codex_7d_reset_at"]),
+		parseUnixSecondsTime(account.Extra["passive_usage_7d_reset"]),
+		parseExtraTime(account.Extra["quota_weekly_reset_at"]),
+	}
+	for _, resetAt := range candidates {
+		if !resetAt.IsZero() && resetAt.After(now) {
+			return resetAt, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func parseUnixSecondsTime(value any) time.Time {
+	seconds := parseExtraFloat64(value)
+	if seconds <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(int64(seconds), 0)
 }
 
 // Delete 删除API Key
@@ -1166,31 +1201,4 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
-}
-
-// accountSevenDayResetAt returns the earliest known future 7-day reset time
-// for an account, preferring product usage windows over generic quota windows.
-func accountSevenDayResetAt(account *Account, now time.Time) (time.Time, bool) {
-	if account == nil || account.Extra == nil {
-		return time.Time{}, false
-	}
-	candidates := []time.Time{
-		parseExtraTime(account.Extra["codex_7d_reset_at"]),
-		parseUnixSecondsTime(account.Extra["passive_usage_7d_reset"]),
-		parseExtraTime(account.Extra["quota_weekly_reset_at"]),
-	}
-	for _, resetAt := range candidates {
-		if !resetAt.IsZero() && resetAt.After(now) {
-			return resetAt, true
-		}
-	}
-	return time.Time{}, false
-}
-
-func parseUnixSecondsTime(value any) time.Time {
-	seconds := parseExtraFloat64(value)
-	if seconds <= 0 {
-		return time.Time{}
-	}
-	return time.Unix(int64(seconds), 0)
 }

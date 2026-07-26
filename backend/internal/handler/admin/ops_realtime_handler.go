@@ -108,6 +108,61 @@ func (h *OpsHandler) GetUserConcurrencyStats(c *gin.Context) {
 	response.Success(c, payload)
 }
 
+// GetUserConcurrencyTrend returns selected-range user concurrency peaks.
+// GET /api/v1/admin/ops/user-concurrency-trend
+func (h *OpsHandler) GetUserConcurrencyTrend(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !h.opsService.IsRealtimeMonitoringEnabled(c.Request.Context()) {
+		response.Success(c, gin.H{
+			"enabled":           false,
+			"coverage_complete": false,
+			"bucket":            "minute",
+			"current":           service.ConcurrencySnapshot{},
+			"current_lanes":     service.ConcurrencyLaneSnapshots{},
+			"latency_lanes":     service.RequestBodyLaneLatencySummaries{},
+			"points":            []service.UserConcurrencyTrendPoint{},
+			"users":             map[int64]service.UserConcurrencyTrendUser{},
+		})
+		return
+	}
+	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	trend, err := h.opsService.GetUserConcurrencyTrend(c.Request.Context(), startTime, endTime)
+	if err != nil {
+		if isOpsRealtimeRequestCanceled(c, err) {
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"enabled":           true,
+		"start_time":        trend.StartTime,
+		"end_time":          trend.EndTime,
+		"coverage_start":    trend.CoverageStart,
+		"coverage_end":      trend.CoverageEnd,
+		"coverage_complete": trend.CoverageComplete,
+		"bucket":            trend.Bucket,
+		"current":           trend.Current,
+		"current_lanes":     trend.CurrentLanes,
+		"latency_lanes":     trend.LatencyLanes,
+		"points":            trend.Points,
+		"users":             trend.Users,
+		"timestamp":         time.Now().UTC(),
+	})
+}
+
 // GetAccountAvailability returns account availability statistics.
 // GET /api/v1/admin/ops/account-availability
 //

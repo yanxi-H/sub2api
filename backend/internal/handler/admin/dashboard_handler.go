@@ -470,6 +470,39 @@ func (h *DashboardHandler) GetUserUsageTrend(c *gin.Context) {
 	})
 }
 
+const userRequestBodyTrendGranularity = "5minute"
+
+// GetUserRequestBodyTrend handles getting user-level request body size trend data.
+// GET /api/v1/admin/dashboard/request-body-trend
+// Query params: start_date, end_date (YYYY-MM-DD), limit (default 12).
+// Request body size is always aggregated into five-minute buckets.
+func (h *DashboardHandler) GetUserRequestBodyTrend(c *gin.Context) {
+	startTime, endTime := parseTimeRange(c)
+	granularity := userRequestBodyTrendGranularity
+	limitStr := c.DefaultQuery("limit", "12")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 12
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	trend, hit, err := h.getUserRequestBodyTrendCached(c.Request.Context(), startTime, endTime, granularity, limit)
+	if err != nil {
+		response.Error(c, 500, "Failed to get request body trend")
+		return
+	}
+	c.Header("X-Snapshot-Cache", cacheStatusValue(hit))
+
+	response.Success(c, gin.H{
+		"trend":       trend,
+		"start_date":  startTime.Format("2006-01-02"),
+		"end_date":    endTime.Add(-24 * time.Hour).Format("2006-01-02"),
+		"granularity": granularity,
+	})
+}
+
 // BatchUsersUsageRequest represents the request body for batch user usage stats
 type BatchUsersUsageRequest struct {
 	UserIDs []int64 `json:"user_ids" binding:"required"`

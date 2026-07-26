@@ -119,8 +119,13 @@ type OpsStreamError struct {
 // 采用「首个标记生效」策略：同一请求若先后补发多帧（如上游透传错误后又追加通用兜底帧），
 // 保留最先记录的根因错误，而不是被后续的 "Upstream request failed" 覆盖。
 func MarkOpsStreamError(c *gin.Context, errType, message string, intendedStatus int) {
+	MarkOpsStreamErrorWithCode(c, errType, "", message, intendedStatus)
+}
+
+func MarkOpsStreamErrorWithCode(c *gin.Context, errType, code, message string, intendedStatus int) {
 	markOpsStreamError(c, OpsStreamError{
 		ErrType:        errType,
+		Code:           code,
 		Message:        message,
 		IntendedStatus: intendedStatus,
 	})

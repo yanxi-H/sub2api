@@ -161,6 +161,26 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, 
 	return out, nil
 }
 
+// ListOpsUsersByIDs loads only the lightweight user fields needed by realtime
+// operations dashboards. It intentionally avoids relationships and pagination.
+func (r *userRepository) ListOpsUsersByIDs(ctx context.Context, ids []int64) ([]service.User, error) {
+	if len(ids) == 0 {
+		return []service.User{}, nil
+	}
+	entities, err := r.client.User.Query().Where(dbuser.IDIn(ids...)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	users := make([]service.User, 0, len(entities))
+	for _, entity := range entities {
+		if entity == nil {
+			continue
+		}
+		users = append(users, *userEntityToService(entity))
+	}
+	return users, nil
+}
+
 func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*service.User, error) {
 	ctx = mixins.SkipSoftDelete(ctx)
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)

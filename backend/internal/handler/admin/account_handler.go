@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -63,18 +64,12 @@ type AccountHandler struct {
 	tokenCacheInvalidator   service.TokenCacheInvalidator
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
-	apiKeyRepo              service.APIKeyRepository
 	ollamaCloudUsage        *service.OllamaCloudUsageService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
 func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamBillingProbeService) {
 	h.upstreamBillingProbe = probe
-}
-
-// SetAPIKeyRepository 注入 API Key 仓储,用于账号额度分配概览查询。
-func (h *AccountHandler) SetAPIKeyRepository(repo service.APIKeyRepository) {
-	h.apiKeyRepo = repo
 }
 
 func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUsageService) {
@@ -204,25 +199,42 @@ type AccountWithConcurrency struct {
 }
 
 type AccountUsageWindowItem struct {
-	ID                  int64                  `json:"id"`
-	Name                string                 `json:"name"`
-	Platform            string                 `json:"platform"`
-	Type                string                 `json:"type"`
-	Status              string                 `json:"status"`
-	FiveHour            *service.UsageProgress `json:"five_hour"`
-	SevenDay            *service.UsageProgress `json:"seven_day"`
-	UpdatedAt           *time.Time             `json:"updated_at"`
-	SupportsLiveRefresh bool                   `json:"supports_live_refresh"`
-	RefreshError        string                 `json:"refresh_error,omitempty"`
-	CurrentConcurrency  int                    `json:"current_concurrency"`
-	// 账号额度分配概览
-	QuotaLimit       float64 `json:"quota_limit"`         // 账号总额度(quota_limit)
-	AllocatedLimit   float64 `json:"allocated_limit"`     // 已分配:该账号分组下所有 Key 的 7d 限额之和
-	AvailableLimit   float64 `json:"available_limit"`     // 剩余可分配 = 总额度 - 已分配(超了为负)
+	ID                         int64                              `json:"id"`
+	Name                       string                             `json:"name"`
+	Platform                   string                             `json:"platform"`
+	Type                       string                             `json:"type"`
+	Status                     string                             `json:"status"`
+	FiveHour                   *service.UsageProgress             `json:"five_hour"`
+	SevenDay                   *service.UsageProgress             `json:"seven_day"`
+	SevenDayCapacity           *SevenDayQuotaCapacity             `json:"seven_day_capacity,omitempty"`
+	UpdatedAt                  *time.Time                         `json:"updated_at"`
+	SupportsLiveRefresh        bool                               `json:"supports_live_refresh"`
+	SupportsOpenAIResetCredits bool                               `json:"supports_openai_reset_credits"`
+	OpenAIResetCredits         *service.OpenAIResetCreditSnapshot `json:"openai_reset_credits,omitempty"`
+	RefreshError               string                             `json:"refresh_error,omitempty"`
+}
+
+// SevenDayQuotaCapacity compares the estimated upstream capacity with local
+// account spend and the 7-day limits allocated to API Keys in this account's groups.
+type SevenDayQuotaCapacity struct {
+	EstimatedTotalUSD           float64  `json:"estimated_total_usd"`
+	ActualUsedUSD               float64  `json:"actual_used_usd"`
+	ActualRemainingUSD          float64  `json:"actual_remaining_usd"`
+	ActualRemainingPercent      float64  `json:"actual_remaining_percent"`
+	AllocatedUSD                *float64 `json:"allocated_usd"`
+	UnallocatedRemainingUSD     *float64 `json:"unallocated_remaining_usd"`
+	UnallocatedRemainingPercent *float64 `json:"unallocated_remaining_percent"`
+	AllocationUnlimited         bool     `json:"allocation_unlimited"`
 }
 
 type RefreshAccountUsageWindowsRequest struct {
 	AccountIDs []int64 `json:"account_ids" binding:"required"`
+}
+
+type OpenAIResetCreditRefreshResult struct {
+	ID                 int64                              `json:"id"`
+	OpenAIResetCredits *service.OpenAIResetCreditSnapshot `json:"openai_reset_credits,omitempty"`
+	RefreshError       string                             `json:"refresh_error,omitempty"`
 }
 
 func accountUsageWindowItem(account *service.Account, usage *service.UsageInfo) AccountUsageWindowItem {
@@ -234,6 +246,10 @@ func accountUsageWindowItem(account *service.Account, usage *service.UsageInfo) 
 		item.Type = account.Type
 		item.Status = account.Status
 		item.SupportsLiveRefresh = service.SupportsLiveAccountUsageRefresh(account)
+		item.SupportsOpenAIResetCredits = service.SupportsOpenAIResetCredits(account)
+		if item.SupportsOpenAIResetCredits {
+			item.OpenAIResetCredits = service.OpenAIResetCreditSnapshotFromExtra(account.Extra)
+		}
 	}
 	if usage != nil {
 		item.FiveHour = usage.FiveHour
@@ -241,6 +257,165 @@ func accountUsageWindowItem(account *service.Account, usage *service.UsageInfo) 
 		item.UpdatedAt = usage.UpdatedAt
 	}
 	return item
+}
+
+func buildSevenDayQuotaCapacity(progress *service.UsageProgress, allocation *service.APIKey7dAllocation) *SevenDayQuotaCapacity {
+	if progress == nil || progress.WindowStats == nil || progress.Utilization <= 0 || math.IsNaN(progress.Utilization) || math.IsInf(progress.Utilization, 0) {
+		return nil
+	}
+	actualUsedUSD := progress.WindowStats.UserCost
+	if actualUsedUSD <= 0 || math.IsNaN(actualUsedUSD) || math.IsInf(actualUsedUSD, 0) {
+		return nil
+	}
+	estimatedTotalUSD := actualUsedUSD * 100 / progress.Utilization
+	if estimatedTotalUSD <= 0 || math.IsNaN(estimatedTotalUSD) || math.IsInf(estimatedTotalUSD, 0) {
+		return nil
+	}
+	actualRemainingUSD := math.Max(estimatedTotalUSD-actualUsedUSD, 0)
+	capacity := &SevenDayQuotaCapacity{
+		EstimatedTotalUSD:      estimatedTotalUSD,
+		ActualUsedUSD:          actualUsedUSD,
+		ActualRemainingUSD:     actualRemainingUSD,
+		ActualRemainingPercent: actualRemainingUSD / estimatedTotalUSD * 100,
+	}
+	if allocation == nil {
+		return capacity
+	}
+
+	allocatedUSD := allocation.AllocatedUSD
+	if allocatedUSD < 0 || math.IsNaN(allocatedUSD) || math.IsInf(allocatedUSD, 0) {
+		allocatedUSD = 0
+	}
+	unallocatedRemainingUSD := math.Max(estimatedTotalUSD-allocatedUSD, 0)
+	unallocatedRemainingPercent := unallocatedRemainingUSD / estimatedTotalUSD * 100
+	if allocation.Unlimited {
+		unallocatedRemainingUSD = 0
+		unallocatedRemainingPercent = 0
+	}
+	capacity.AllocatedUSD = &allocatedUSD
+	capacity.UnallocatedRemainingUSD = &unallocatedRemainingUSD
+	capacity.UnallocatedRemainingPercent = &unallocatedRemainingPercent
+	capacity.AllocationUnlimited = allocation.Unlimited
+	return capacity
+}
+
+func allocationForAccount(allocations map[int64]service.APIKey7dAllocation, accountID int64) *service.APIKey7dAllocation {
+	if allocations == nil {
+		return nil
+	}
+	allocation := allocations[accountID]
+	return &allocation
+}
+
+func sevenDayWindowStart(progress *service.UsageProgress, now time.Time) time.Time {
+	if progress != nil && progress.ResetsAt != nil && now.Before(*progress.ResetsAt) {
+		return progress.ResetsAt.Add(-7 * 24 * time.Hour)
+	}
+	return now.Add(-7 * 24 * time.Hour)
+}
+
+func (h *AccountHandler) attachSevenDayWindowStats(ctx context.Context, account *service.Account, usage *service.UsageInfo, now time.Time) {
+	if h.accountUsageService == nil || account == nil || usage == nil || usage.SevenDay == nil || usage.SevenDay.WindowStats != nil {
+		return
+	}
+	start := sevenDayWindowStart(usage.SevenDay, now)
+	stats, err := h.accountUsageService.GetAccountWindowStats(ctx, account.ID, start)
+	if err != nil {
+		slog.Warn("dashboard_account_7d_cost_query_failed", "account_id", account.ID, "error", err)
+		return
+	}
+	usage.SevenDay.WindowStats = &service.WindowStats{
+		Requests:     stats.Requests,
+		Tokens:       stats.Tokens,
+		Cost:         stats.Cost,
+		StandardCost: stats.StandardCost,
+		UserCost:     stats.UserCost,
+	}
+}
+
+func (h *AccountHandler) attachSevenDayWindowStatsBatch(ctx context.Context, accounts []*service.Account, usages []*service.UsageInfo, now time.Time) {
+	if h.accountUsageService == nil {
+		return
+	}
+	windowStarts := make(map[int64]time.Time, len(accounts))
+	for i, account := range accounts {
+		if account == nil || i >= len(usages) || usages[i] == nil || usages[i].SevenDay == nil || usages[i].SevenDay.WindowStats != nil {
+			continue
+		}
+		windowStarts[account.ID] = sevenDayWindowStart(usages[i].SevenDay, now)
+	}
+	if len(windowStarts) == 0 {
+		return
+	}
+	statsByAccount, err := h.accountUsageService.GetAccountWindowStatsByStarts(ctx, windowStarts)
+	if err != nil {
+		slog.Warn("dashboard_account_7d_cost_batch_query_failed", "account_count", len(windowStarts), "error", err)
+		return
+	}
+	for i, account := range accounts {
+		if account == nil || i >= len(usages) || usages[i] == nil || usages[i].SevenDay == nil || usages[i].SevenDay.WindowStats != nil {
+			continue
+		}
+		if stats, ok := statsByAccount[account.ID]; ok {
+			usages[i].SevenDay.WindowStats = stats
+		}
+	}
+}
+
+func (h *AccountHandler) loadAccount7dAllocations(ctx context.Context, accounts []*service.Account) (map[int64]service.APIKey7dAllocation, error) {
+	groupSet := make(map[int64]struct{})
+	includeUngrouped := false
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		hasGroup := false
+		for _, groupID := range account.GroupIDs {
+			if groupID <= 0 {
+				continue
+			}
+			hasGroup = true
+			groupSet[groupID] = struct{}{}
+		}
+		if !hasGroup {
+			includeUngrouped = true
+		}
+	}
+	groupIDs := make([]int64, 0, len(groupSet))
+	for groupID := range groupSet {
+		groupIDs = append(groupIDs, groupID)
+	}
+	sort.Slice(groupIDs, func(i, j int) bool { return groupIDs[i] < groupIDs[j] })
+	byGroup, err := h.adminService.GetAPIKey7dAllocations(ctx, groupIDs, includeUngrouped)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[int64]service.APIKey7dAllocation, len(accounts))
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		seen := make(map[int64]struct{}, len(account.GroupIDs))
+		for _, groupID := range account.GroupIDs {
+			if groupID <= 0 {
+				continue
+			}
+			if _, ok := seen[groupID]; ok {
+				continue
+			}
+			seen[groupID] = struct{}{}
+			accountAllocation := result[account.ID]
+			groupAllocation := byGroup[groupID]
+			accountAllocation.AllocatedUSD += groupAllocation.AllocatedUSD
+			accountAllocation.Unlimited = accountAllocation.Unlimited || groupAllocation.Unlimited
+			result[account.ID] = accountAllocation
+		}
+		if len(seen) == 0 {
+			result[account.ID] = byGroup[0]
+		}
+	}
+	return result, nil
 }
 
 type AccountSchedulerScore struct {
@@ -757,55 +932,28 @@ func (h *AccountHandler) ListUsageWindows(c *gin.Context) {
 		return
 	}
 
+	accountPtrs := make([]*service.Account, len(accounts))
+	for i := range accounts {
+		accountPtrs[i] = &accounts[i]
+	}
+	allocations, err := h.loadAccount7dAllocations(c.Request.Context(), accountPtrs)
+	if err != nil {
+		slog.Warn("dashboard_account_7d_allocation_query_failed", "error", err)
+		allocations = nil
+	}
+
 	now := time.Now()
-
-	// 批量查询所有账号涉及的分组下 Key 的 7d 限额总和(用于额度分配概览)
-	groupAllocMap := map[int64]float64{}
-	if h.apiKeyRepo != nil {
-		groupIDSet := map[int64]struct{}{}
-		for i := range accounts {
-			for _, gid := range accounts[i].GroupIDs {
-				groupIDSet[gid] = struct{}{}
-			}
-		}
-		if len(groupIDSet) > 0 {
-			groupIDs := make([]int64, 0, len(groupIDSet))
-			for gid := range groupIDSet {
-				groupIDs = append(groupIDs, gid)
-			}
-			if m, err := h.apiKeyRepo.SumRateLimit7dByGroupIDs(c.Request.Context(), groupIDs); err == nil {
-				groupAllocMap = m
-			}
-		}
+	usages := make([]*service.UsageInfo, len(accounts))
+	for i := range accounts {
+		usages[i] = service.BuildStoredAccountUsage(&accounts[i], now)
 	}
-
-	// 批量查询账号当前并发数
-	concurrencyMap := map[int64]int{}
-	if h.concurrencyService != nil && len(accounts) > 0 {
-		accountIDs := make([]int64, 0, len(accounts))
-		for i := range accounts {
-			accountIDs = append(accountIDs, accounts[i].ID)
-		}
-		if m, err := h.concurrencyService.GetAccountConcurrencyBatch(c.Request.Context(), accountIDs); err == nil {
-			concurrencyMap = m
-		}
-	}
+	h.attachSevenDayWindowStatsBatch(c.Request.Context(), accountPtrs, usages, now)
 
 	items := make([]AccountUsageWindowItem, len(accounts))
 	for i := range accounts {
 		account := &accounts[i]
-		item := accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, now))
-		// 当前并发数
-		item.CurrentConcurrency = concurrencyMap[account.ID]
-		// 计算额度分配概览
-		quotaLimit := account.GetQuotaLimit()
-		allocated := 0.0
-		for _, gid := range account.GroupIDs {
-			allocated += groupAllocMap[gid]
-		}
-		item.QuotaLimit = quotaLimit
-		item.AllocatedLimit = allocated
-		item.AvailableLimit = quotaLimit - allocated
+		item := accountUsageWindowItem(account, usages[i])
+		item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
 		items[i] = item
 	}
 	response.Paginated(c, items, total, page, pageSize)
@@ -843,6 +991,11 @@ func (h *AccountHandler) RefreshUsageWindows(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	allocations, err := h.loadAccount7dAllocations(c.Request.Context(), accounts)
+	if err != nil {
+		slog.Warn("dashboard_account_7d_allocation_query_failed", "error", err)
+		allocations = nil
+	}
 
 	results := make([]AccountUsageWindowItem, len(accounts))
 	g, gctx := errgroup.WithContext(c.Request.Context())
@@ -851,26 +1004,104 @@ func (h *AccountHandler) RefreshUsageWindows(c *gin.Context) {
 		i := i
 		account := accounts[i]
 		g.Go(func() error {
-			item := accountUsageWindowItem(account, service.BuildStoredAccountUsage(account, time.Now()))
+			now := time.Now()
+			usage := service.BuildStoredAccountUsage(account, now)
+			item := accountUsageWindowItem(account, usage)
 			if !item.SupportsLiveRefresh {
 				item.RefreshError = "LIVE_REFRESH_UNSUPPORTED"
+				h.attachSevenDayWindowStats(gctx, account, usage, now)
+				item.SevenDay = usage.SevenDay
+				item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
 				results[i] = item
 				return nil
 			}
 			if h.accountUsageService == nil {
 				item.RefreshError = "USAGE_SERVICE_UNAVAILABLE"
+				item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
 				results[i] = item
 				return nil
 			}
 
-			usage, refreshErr := h.accountUsageService.GetUsage(gctx, account.ID, true)
-			if refreshErr != nil {
+			refreshedUsage, refreshErr := h.accountUsageService.GetUsage(gctx, account.ID, true)
+			if refreshErr != nil || refreshedUsage == nil {
 				slog.Warn("dashboard_account_usage_live_refresh_failed", "account_id", account.ID, "error", refreshErr)
 				item.RefreshError = "UPSTREAM_QUERY_FAILED"
 			} else {
+				usage = refreshedUsage
 				item = accountUsageWindowItem(account, usage)
 			}
+			h.attachSevenDayWindowStats(gctx, account, usage, now)
+			item.SevenDay = usage.SevenDay
+			item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
 			results[i] = item
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	response.Success(c, results)
+}
+
+// RefreshOpenAIResetCredits explicitly refreshes the cached reset-credit
+// snapshot for selected OpenAI OAuth parent accounts. It is kept separate from
+// the normal usage-window refresh because reset-credit queries make an
+// additional upstream request and must never run on dashboard page load.
+// POST /api/v1/admin/accounts/usage-windows/openai-reset-credits/refresh
+func (h *AccountHandler) RefreshOpenAIResetCredits(c *gin.Context) {
+	var req RefreshAccountUsageWindowsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: account_ids is required")
+		return
+	}
+	if len(req.AccountIDs) == 0 || len(req.AccountIDs) > 20 {
+		response.BadRequest(c, "account_ids must contain between 1 and 20 items")
+		return
+	}
+
+	seen := make(map[int64]struct{}, len(req.AccountIDs))
+	ids := make([]int64, 0, len(req.AccountIDs))
+	for _, id := range req.AccountIDs {
+		if id <= 0 {
+			response.BadRequest(c, "account_ids must contain positive IDs")
+			return
+		}
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+
+	accounts, err := h.adminService.GetAccountsByIDs(c.Request.Context(), ids)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	results := make([]OpenAIResetCreditRefreshResult, len(accounts))
+	g, gctx := errgroup.WithContext(c.Request.Context())
+	g.SetLimit(2)
+	for i := range accounts {
+		i := i
+		account := accounts[i]
+		g.Go(func() error {
+			result := OpenAIResetCreditRefreshResult{ID: account.ID}
+			if !service.SupportsOpenAIResetCredits(account) {
+				result.RefreshError = "OPENAI_RESET_CREDITS_UNSUPPORTED"
+				results[i] = result
+				return nil
+			}
+			if h.accountUsageService == nil {
+				result.RefreshError = "USAGE_SERVICE_UNAVAILABLE"
+				results[i] = result
+				return nil
+			}
+			snapshot, refreshErr := h.accountUsageService.RefreshOpenAIResetCreditSnapshot(gctx, account.ID)
+			if refreshErr != nil || snapshot == nil {
+				slog.Warn("dashboard_openai_reset_credits_refresh_failed", "account_id", account.ID, "error", refreshErr)
+				result.RefreshError = "OPENAI_RESET_CREDITS_UNAVAILABLE"
+			} else {
+				result.OpenAIResetCredits = snapshot
+			}
+			results[i] = result
 			return nil
 		})
 	}

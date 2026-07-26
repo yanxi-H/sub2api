@@ -254,6 +254,7 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 	now := time.Now()
 	builder := client.APIKey.Update().
 		Where(apikey.IDEQ(key.ID), apikey.DeletedAtIsNil()).
+		SetKey(key.Key).
 		SetName(key.Name).
 		SetStatus(key.Status).
 		SetQuota(key.Quota).
@@ -489,7 +490,6 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 	for i := range keys {
 		outKeys = append(outKeys, *apiKeyEntityToService(keys[i]))
 	}
-
 	if err := r.attachLastUsedIPs(ctx, outKeys); err != nil {
 		return nil, nil, err
 	}
@@ -695,6 +695,46 @@ func (r *apiKeyRepository) CountByUserID(ctx context.Context, userID int64) (int
 	return int64(count), err
 }
 
+// SumActive7dRateLimitsByGroupIDs aggregates configured 7-day limits without
+// loading API Key rows. A result key of 0 represents ungrouped API Keys.
+func (r *apiKeyRepository) SumActive7dRateLimitsByGroupIDs(ctx context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]service.APIKey7dAllocation, error) {
+	result := make(map[int64]service.APIKey7dAllocation, len(groupIDs)+1)
+	if len(groupIDs) == 0 && !includeUngrouped {
+		return result, nil
+	}
+
+	query := `
+		SELECT
+			COALESCE(group_id, 0) AS group_id,
+			COALESCE(SUM(rate_limit_7d) FILTER (WHERE rate_limit_7d > 0), 0) AS allocated,
+			COALESCE(BOOL_OR(rate_limit_7d <= 0), false) AS unlimited
+		FROM api_keys
+		WHERE deleted_at IS NULL
+		  AND status = $1
+		  AND (group_id = ANY($2) OR ($3 AND group_id IS NULL))
+		GROUP BY COALESCE(group_id, 0)
+	`
+	rows, err := r.sql.QueryContext(ctx, query, service.StatusAPIKeyActive, pq.Array(groupIDs), includeUngrouped)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var groupID int64
+		var allocated float64
+		var unlimited bool
+		if err := rows.Scan(&groupID, &allocated, &unlimited); err != nil {
+			return nil, err
+		}
+		result[groupID] = service.APIKey7dAllocation{AllocatedUSD: allocated, Unlimited: unlimited}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (r *apiKeyRepository) ExistsByKey(ctx context.Context, key string) (bool, error) {
 	count, err := r.activeQuery().Where(apikey.KeyEQ(key)).Count(ctx)
 	return count > 0, err
@@ -729,32 +769,6 @@ func (r *apiKeyRepository) ListByGroupID(ctx context.Context, groupID int64, par
 	return outKeys, paginationResultFromTotal(int64(total), params), nil
 }
 
-// SumRateLimit7dByGroupIDs 批量查询多个分组下所有未删除 Key 的 7d 限额总和。
-func (r *apiKeyRepository) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
-	result := make(map[int64]float64, len(groupIDs))
-	if len(groupIDs) == 0 || r.sql == nil {
-		return result, nil
-	}
-	// 用 raw SQL 一次查出所有分组的 7d 限额总和
-	query := `SELECT group_id, COALESCE(SUM(rate_limit_7d), 0) FROM api_keys
-		WHERE deleted_at IS NULL AND group_id = ANY($1::bigint[])
-		GROUP BY group_id`
-	rows, err := r.sql.QueryContext(ctx, query, pq.Array(groupIDs))
-	if err != nil {
-		return nil, fmt.Errorf("sum rate limit 7d by group ids: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var gid int64
-		var sum float64
-		if err := rows.Scan(&gid, &sum); err != nil {
-			return nil, fmt.Errorf("scan rate limit sum: %w", err)
-		}
-		result[gid] = sum
-	}
-	return result, rows.Err()
-}
-
 func apiKeyListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {
 	sortBy := strings.ToLower(strings.TrimSpace(params.SortBy))
 	sortOrder := params.NormalizedSortOrder(pagination.SortOrderDesc)
@@ -769,6 +783,10 @@ func apiKeyListOrder(params pagination.PaginationParams) []func(*entsql.Selector
 		field = apikey.FieldExpiresAt
 	case "last_used_at":
 		field = apikey.FieldLastUsedAt
+	case "usage_5h":
+		field = apikey.FieldUsage5h
+	case "usage_7d":
+		field = apikey.FieldUsage7d
 	case "created_at":
 		field = apikey.FieldCreatedAt
 	case "id":
@@ -926,8 +944,8 @@ func (r *apiKeyRepository) IncrementRateLimitUsage(ctx context.Context, id int64
 			usage_1d = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN $1 ELSE usage_1d + $1 END,
 			usage_7d = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN $1 ELSE usage_7d + $1 END,
 			window_5h_start = CASE WHEN window_5h_start IS NULL OR window_5h_start + INTERVAL '5 hours' <= NOW() THEN NOW() ELSE window_5h_start END,
-			window_1d_start = CASE WHEN window_1d_start IS NULL OR window_1d_start + INTERVAL '24 hours' <= NOW() THEN NOW() ELSE window_1d_start END,
-			window_7d_start = CASE WHEN window_7d_start IS NULL OR window_7d_start + INTERVAL '7 days' <= NOW() THEN NOW() ELSE window_7d_start END,
+			window_1d_start = CASE WHEN window_1d_start IS NULL OR window_1d_start + INTERVAL '24 hours' <= NOW() THEN date_trunc('day', NOW()) ELSE window_1d_start END,
+			window_7d_start = CASE WHEN window_7d_start IS NULL OR window_7d_start + INTERVAL '7 days' <= NOW() THEN date_trunc('day', NOW()) ELSE window_7d_start END,
 			updated_at = NOW()
 		WHERE id = $2 AND deleted_at IS NULL`,
 		cost, id)
@@ -941,9 +959,9 @@ func (r *apiKeyRepository) ResetRateLimitWindows(ctx context.Context, id int64) 
 			usage_5h = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= NOW() THEN 0 ELSE usage_5h END,
 			window_5h_start = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= NOW() THEN NOW() ELSE window_5h_start END,
 			usage_1d = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN 0 ELSE usage_1d END,
-			window_1d_start = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN NOW() ELSE window_1d_start END,
+			window_1d_start = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= NOW() THEN date_trunc('day', NOW()) ELSE window_1d_start END,
 			usage_7d = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN 0 ELSE usage_7d END,
-			window_7d_start = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN NOW() ELSE window_7d_start END,
+			window_7d_start = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= NOW() THEN date_trunc('day', NOW()) ELSE window_7d_start END,
 			updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL`,
 		id)

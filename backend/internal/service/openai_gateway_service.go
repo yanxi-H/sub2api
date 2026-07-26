@@ -250,6 +250,7 @@ type OpenAIForwardResult struct {
 	ResponseHeaders       http.Header
 	Duration              time.Duration
 	FirstTokenMs          *int
+	MaxStreamGapMs        *int
 	ClientDisconnect      bool
 	ImageCount            int
 	ImageSize             string

@@ -26,6 +26,66 @@ type UserSpendingRankingResponse = usagestats.UserSpendingRankingResponse
 // APIKeyUsageTrendPoint represents API key usage trend data point
 type APIKeyUsageTrendPoint = usagestats.APIKeyUsageTrendPoint
 
+// GetUserRequestBodyTrend returns per-user request body metrics for the dashboard.
+func (r *usageLogRepository) GetUserRequestBodyTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) (results []usagestats.UserRequestBodyTrendPoint, err error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	dateExpression := fmt.Sprintf("TO_CHAR(u.created_at, '%s')", safeDateFormat(granularity))
+	if granularity == "5minute" {
+		dateExpression = `TO_CHAR(
+			date_trunc('hour', u.created_at)
+			+ INTERVAL '5 minutes' * FLOOR(EXTRACT(MINUTE FROM u.created_at) / 5)::double precision,
+			'YYYY-MM-DD HH24:MI'
+		)`
+	}
+	query := fmt.Sprintf(`
+		WITH top_users AS (
+			SELECT user_id
+			FROM usage_logs
+			WHERE created_at >= $1
+			  AND created_at < $2
+			  AND request_body_bytes > 0
+			GROUP BY user_id
+			ORDER BY SUM(request_body_bytes) DESC
+			LIMIT $3
+		)
+		SELECT %s, u.user_id, COALESCE(users.email, ''), COALESCE(users.username, ''), COUNT(*),
+			COALESCE(SUM(u.request_body_bytes), 0), COALESCE(AVG(u.request_body_bytes), 0), COALESCE(MAX(u.request_body_bytes), 0)
+		FROM usage_logs u
+		LEFT JOIN users ON users.id = u.user_id
+		WHERE u.user_id IN (SELECT user_id FROM top_users)
+		  AND u.created_at >= $4
+		  AND u.created_at < $5
+		  AND u.request_body_bytes > 0
+		GROUP BY 1, 2, 3, 4
+		ORDER BY 1 ASC, 6 DESC`, dateExpression)
+	rows, err := r.sql.QueryContext(ctx, query, startTime, endTime, limit, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+			results = nil
+		}
+	}()
+
+	results = make([]usagestats.UserRequestBodyTrendPoint, 0)
+	for rows.Next() {
+		var point usagestats.UserRequestBodyTrendPoint
+		if err = rows.Scan(&point.Date, &point.UserID, &point.Email, &point.Username, &point.Requests, &point.TotalRequestBodyBytes, &point.AvgRequestBodyBytes, &point.MaxRequestBodyBytes); err != nil {
+			return nil, err
+		}
+		results = append(results, point)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
 // GetAPIKeyUsageTrend returns usage trend data grouped by API key and date
 func (r *usageLogRepository) GetAPIKeyUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) (results []APIKeyUsageTrendPoint, err error) {
 	dateFormat := safeDateFormat(granularity)

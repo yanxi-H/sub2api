@@ -16,6 +16,7 @@ func RegisterAdminRoutes(
 	adminAuth middleware.AdminAuthMiddleware,
 	auditLog middleware.AuditLogMiddleware,
 	stepUpAuth middleware.StepUpAuthMiddleware,
+	alwaysStepUpAuth middleware.AlwaysStepUpAuthMiddleware,
 	settingService *service.SettingService,
 ) {
 	admin := v1.Group("/admin")
@@ -75,6 +76,9 @@ func RegisterAdminRoutes(
 		// 运维监控（Ops）
 		registerOpsRoutes(admin, h)
 
+		// 独立运维中心
+		registerMonitorCenterRoutes(admin, h)
+
 		// 系统管理
 		registerSystemRoutes(admin, h)
 
@@ -109,7 +113,7 @@ func RegisterAdminRoutes(
 		registerContentModerationRoutes(admin, h)
 
 		// 独立提示词输入审计
-		registerPromptAuditRoutes(admin, h)
+		registerPromptAuditRoutes(admin, h, alwaysStepUpAuth)
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
@@ -119,7 +123,7 @@ func RegisterAdminRoutes(
 	}
 }
 
-func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers, alwaysStepUpAuth middleware.AlwaysStepUpAuthMiddleware) {
 	promptAudit := admin.Group("/prompt-audit")
 	{
 		promptAudit.GET("/config", h.Admin.PromptAudit.GetConfig)
@@ -127,7 +131,9 @@ func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		promptAudit.POST("/endpoints/probe", h.Admin.PromptAudit.ProbeEndpoint)
 		promptAudit.GET("/runtime", h.Admin.PromptAudit.GetRuntime)
 		promptAudit.GET("/events", h.Admin.PromptAudit.ListEvents)
-		promptAudit.GET("/events/:id", h.Admin.PromptAudit.GetEvent)
+		// Event details contain the complete unredacted prompt and require a
+		// recently verified human administrator session.
+		promptAudit.GET("/events/:id", gin.HandlerFunc(alwaysStepUpAuth), h.Admin.PromptAudit.GetEvent)
 		promptAudit.DELETE("/events/:id", h.Admin.PromptAudit.DeleteEvent)
 		promptAudit.POST("/events/batch-delete", h.Admin.PromptAudit.BatchDelete)
 		promptAudit.POST("/events/delete-preview", h.Admin.PromptAudit.DeletePreview)
@@ -182,6 +188,7 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		// Realtime ops signals
 		ops.GET("/concurrency", h.Admin.Ops.GetConcurrencyStats)
 		ops.GET("/user-concurrency", h.Admin.Ops.GetUserConcurrencyStats)
+		ops.GET("/user-concurrency-trend", h.Admin.Ops.GetUserConcurrencyTrend)
 		ops.GET("/account-availability", h.Admin.Ops.GetAccountAvailability)
 		ops.GET("/realtime-traffic", h.Admin.Ops.GetRealtimeTrafficSummary)
 
@@ -259,10 +266,23 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/dashboard/snapshot-v2", h.Admin.Ops.GetDashboardSnapshotV2)
 		ops.GET("/dashboard/overview", h.Admin.Ops.GetDashboardOverview)
 		ops.GET("/dashboard/throughput-trend", h.Admin.Ops.GetDashboardThroughputTrend)
+		ops.GET("/dashboard/latency-trend", h.Admin.Ops.GetDashboardLatencyTrend)
+		ops.GET("/dashboard/performance-diagnostics", h.Admin.Ops.GetDashboardPerformanceDiagnostics)
 		ops.GET("/dashboard/latency-histogram", h.Admin.Ops.GetDashboardLatencyHistogram)
 		ops.GET("/dashboard/error-trend", h.Admin.Ops.GetDashboardErrorTrend)
 		ops.GET("/dashboard/error-distribution", h.Admin.Ops.GetDashboardErrorDistribution)
+		ops.GET("/dashboard/user-error-distribution", h.Admin.Ops.GetDashboardUserErrorDistribution)
+		ops.GET("/dashboard/investigation", h.Admin.Ops.GetDashboardInvestigation)
 		ops.GET("/dashboard/openai-token-stats", h.Admin.Ops.GetDashboardOpenAITokenStats)
+	}
+}
+
+func registerMonitorCenterRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	monitorCenter := admin.Group("/monitor-center")
+	{
+		monitorCenter.GET("/openai/status", h.Admin.Ops.GetMonitorCenterOpenAIStatus)
+		monitorCenter.GET("/openai/history", h.Admin.Ops.GetMonitorCenterOpenAIHistory)
+		monitorCenter.GET("/probe", h.Admin.Ops.GetMonitorCenterProbe)
 	}
 }
 
@@ -277,6 +297,7 @@ func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		dashboard.GET("/groups", h.Admin.Dashboard.GetGroupStats)
 		dashboard.GET("/api-keys-trend", h.Admin.Dashboard.GetAPIKeyUsageTrend)
 		dashboard.GET("/users-trend", h.Admin.Dashboard.GetUserUsageTrend)
+		dashboard.GET("/request-body-trend", h.Admin.Dashboard.GetUserRequestBodyTrend)
 		dashboard.GET("/users-ranking", h.Admin.Dashboard.GetUserSpendingRanking)
 		dashboard.POST("/users-usage", h.Admin.Dashboard.GetBatchUsersUsage)
 		dashboard.POST("/api-keys-usage", h.Admin.Dashboard.GetBatchAPIKeysUsage)
@@ -346,11 +367,12 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
+		accounts.GET("/usage-windows", h.Admin.Account.ListUsageWindows)
+		accounts.POST("/usage-windows/refresh", h.Admin.Account.RefreshUsageWindows)
+		accounts.POST("/usage-windows/openai-reset-credits/refresh", h.Admin.Account.RefreshOpenAIResetCredits)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)
-		accounts.GET("/usage-windows", h.Admin.Account.ListUsageWindows)
-		accounts.POST("/usage-windows/refresh", h.Admin.Account.RefreshUsageWindows)
 		accounts.GET("/ollama-cloud-usage/settings", h.Admin.Account.GetOllamaCloudUsageSettings)
 		accounts.PUT("/ollama-cloud-usage/settings", h.Admin.Account.UpdateOllamaCloudUsageSettings)
 		accounts.GET("/:id", h.Admin.Account.GetByID)

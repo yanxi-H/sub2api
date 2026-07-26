@@ -80,6 +80,29 @@ func applyOpsErrorSortParams(c *gin.Context, filter *service.OpsErrorLogFilter) 
 	filter.SetSort(c.Query("sort_by"), c.Query("sort_order"))
 }
 
+func applyOpsErrorTypesParam(c *gin.Context, filter *service.OpsErrorLogFilter) bool {
+	raw := strings.TrimSpace(c.Query("error_types"))
+	if raw == "" {
+		return true
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) > 20 {
+		response.BadRequest(c, "Too many error_types")
+		return false
+	}
+	types := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(strings.ToLower(part))
+		if value == "" || len(value) > 64 {
+			response.BadRequest(c, "Invalid error_types")
+			return false
+		}
+		types = append(types, value)
+	}
+	filter.ErrorTypesAny = types
+	return true
+}
+
 // GET /api/v1/admin/ops/errors
 func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
 	if h.opsService == nil {
@@ -132,6 +155,9 @@ func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
 		phases, types := service.CategoryToFilter(cat)
 		filter.ErrorPhasesAny = phases
 		filter.ErrorTypesAny = types
+	}
+	if !applyOpsErrorTypesParam(c, filter) {
+		return
 	}
 
 	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
@@ -262,6 +288,9 @@ func (h *OpsHandler) ListRequestErrors(c *gin.Context) {
 		filter.ErrorPhasesAny = phases
 		filter.ErrorTypesAny = types
 	}
+	if !applyOpsErrorTypesParam(c, filter) {
+		return
+	}
 
 	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
 		filter.Platform = platform
@@ -281,6 +310,14 @@ func (h *OpsHandler) ListRequestErrors(c *gin.Context) {
 			return
 		}
 		filter.AccountID = &id
+	}
+	if v := strings.TrimSpace(c.Query("user_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		filter.UserID = &id
 	}
 
 	if v := strings.TrimSpace(c.Query("resolved")); v != "" {
@@ -476,6 +513,9 @@ func (h *OpsHandler) ListUpstreamErrors(c *gin.Context) {
 	filter.Owner = "provider"
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
+	if !applyOpsErrorTypesParam(c, filter) {
+		return
+	}
 
 	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
 		filter.Platform = platform
@@ -495,6 +535,14 @@ func (h *OpsHandler) ListUpstreamErrors(c *gin.Context) {
 			return
 		}
 		filter.AccountID = &id
+	}
+	if v := strings.TrimSpace(c.Query("user_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		filter.UserID = &id
 	}
 
 	if v := strings.TrimSpace(c.Query("resolved")); v != "" {
@@ -766,6 +814,8 @@ func parseOpsDuration(v string) (time.Duration, bool) {
 		return 6 * time.Hour, true
 	case "24h":
 		return 24 * time.Hour, true
+	case "3d":
+		return 3 * 24 * time.Hour, true
 	case "7d":
 		return 7 * 24 * time.Hour, true
 	case "30d":

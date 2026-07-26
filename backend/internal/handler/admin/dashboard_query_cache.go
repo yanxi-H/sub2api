@@ -14,6 +14,7 @@ var (
 	dashboardModelStatsCache   = newSnapshotCache(30 * time.Second)
 	dashboardGroupStatsCache   = newSnapshotCache(30 * time.Second)
 	dashboardUsersTrendCache   = newSnapshotCache(30 * time.Second)
+	dashboardRequestBodyCache  = newSnapshotCache(30 * time.Second)
 	dashboardAPIKeysTrendCache = newSnapshotCache(30 * time.Second)
 )
 
@@ -199,5 +200,22 @@ func (h *DashboardHandler) getUserUsageTrendCached(ctx context.Context, startTim
 		return nil, hit, err
 	}
 	trend, err := snapshotPayloadAs[[]usagestats.UserUsageTrendPoint](entry.Payload)
+	return trend, hit, err
+}
+
+func (h *DashboardHandler) getUserRequestBodyTrendCached(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserRequestBodyTrendPoint, bool, error) {
+	key := mustMarshalDashboardCacheKey(dashboardEntityTrendCacheKey{
+		StartTime:   startTime.UTC().Format(time.RFC3339),
+		EndTime:     endTime.UTC().Format(time.RFC3339),
+		Granularity: granularity,
+		Limit:       limit,
+	})
+	entry, hit, err := dashboardRequestBodyCache.GetOrLoad(key, func() (any, error) {
+		return h.dashboardService.GetUserRequestBodyTrend(ctx, startTime, endTime, granularity, limit)
+	})
+	if err != nil {
+		return nil, hit, err
+	}
+	trend, err := snapshotPayloadAs[[]usagestats.UserRequestBodyTrendPoint](entry.Payload)
 	return trend, hit, err
 }

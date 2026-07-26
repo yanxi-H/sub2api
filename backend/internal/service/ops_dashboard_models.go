@@ -8,6 +8,7 @@ type OpsDashboardFilter struct {
 
 	Platform string
 	GroupID  *int64
+	UserID   *int64
 
 	// QueryMode controls whether dashboard queries should use raw logs or pre-aggregated tables.
 	// Expected values: auto/raw/preagg (see OpsQueryMode).
@@ -69,9 +70,63 @@ type OpsDashboardOverview struct {
 	TTFT     OpsPercentiles `json:"ttft"`
 }
 
+// OpsInvestigationErrorGroup is a privacy-safe aggregation used by the Ops
+// investigation panel. It intentionally excludes request bodies and messages.
+type OpsInvestigationErrorGroup struct {
+	Phase      string `json:"phase"`
+	Owner      string `json:"owner"`
+	Type       string `json:"type"`
+	StatusCode int    `json:"status_code"`
+	Platform   string `json:"platform"`
+	GroupID    *int64 `json:"group_id,omitempty"`
+	Count      int64  `json:"count"`
+	Total      int64  `json:"-"`
+}
+
+// OpsInvestigationFinding is a deterministic, evidence-backed observation.
+// Rule is a stable machine-readable identifier; presentation is localized by
+// the frontend so API responses do not encode a language preference.
+type OpsInvestigationFinding struct {
+	Rule          string `json:"rule"`
+	Kind          string `json:"kind"` // error | latency
+	Severity      string `json:"severity"`
+	Phase         string `json:"phase,omitempty"`
+	Owner         string `json:"owner,omitempty"`
+	StatusCode    int    `json:"status_code,omitempty"`
+	Platform      string `json:"platform,omitempty"`
+	GroupID       *int64 `json:"group_id,omitempty"`
+	CurrentCount  int64  `json:"current_count,omitempty"`
+	BaselineCount int64  `json:"baseline_count,omitempty"`
+	DeltaCount    int64  `json:"delta_count,omitempty"`
+	ChangePercent int64  `json:"change_percent,omitempty"`
+	SharePercent  int64  `json:"share_percent,omitempty"`
+	CurrentValue  *int   `json:"current_value_ms,omitempty"`
+	BaselineValue *int   `json:"baseline_value_ms,omitempty"`
+}
+
+type OpsInvestigationResponse struct {
+	StartTime     time.Time                  `json:"start_time"`
+	EndTime       time.Time                  `json:"end_time"`
+	BaselineStart time.Time                  `json:"baseline_start"`
+	BaselineEnd   time.Time                  `json:"baseline_end"`
+	TotalErrors   int64                      `json:"total_errors"`
+	Findings      []*OpsInvestigationFinding `json:"findings"`
+}
+
 type OpsLatencyHistogramBucket struct {
 	Range string `json:"range"`
+	MinMs int    `json:"min_ms"`
+	MaxMs *int   `json:"max_ms"`
 	Count int64  `json:"count"`
+}
+
+type OpsLatencyUserSummary struct {
+	UserID        int64  `json:"user_id"`
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	Deleted       bool   `json:"deleted"`
+	RequestCount  int64  `json:"request_count"`
+	AvgDurationMs int    `json:"avg_duration_ms"`
 }
 
 // OpsLatencyHistogramResponse is a coarse latency distribution histogram (success requests only).
@@ -81,7 +136,11 @@ type OpsLatencyHistogramResponse struct {
 	EndTime   time.Time `json:"end_time"`
 	Platform  string    `json:"platform"`
 	GroupID   *int64    `json:"group_id"`
+	UserID    *int64    `json:"user_id"`
 
-	TotalRequests int64                        `json:"total_requests"`
-	Buckets       []*OpsLatencyHistogramBucket `json:"buckets"`
+	TotalRequests  int64                        `json:"total_requests"`
+	AvgDurationMs  *int                         `json:"avg_duration_ms"`
+	TopAvgUsers    []*OpsLatencyUserSummary     `json:"top_avg_users"`
+	AvailableUsers []*OpsLatencyUserSummary     `json:"available_users"`
+	Buckets        []*OpsLatencyHistogramBucket `json:"buckets"`
 }

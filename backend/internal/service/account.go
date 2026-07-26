@@ -2623,6 +2623,134 @@ func (a *Account) GetBaseRPM() int {
 	return 0
 }
 
+const (
+	RequestBodyAdmissionEnabledExtraKey = "request_body_admission_enabled"
+	RequestBodyNormalLimitExtraKey      = "request_body_normal_limit_bytes"
+	RequestBodyHeavyLimitExtraKey       = "request_body_heavy_limit_bytes"
+	RequestBodyRecoveryLimitExtraKey    = "request_body_recovery_limit_bytes"
+
+	LegacyRequestBodyLimitExtraKey        = "request_body_limit_bytes"
+	LegacyCompactBodyLimitBypassExtraKey  = "allow_compact_request_body_limit_bypass"
+	DefaultRequestBodyNormalLimitBytes    = int64(3 * 1024 * 1024)
+	DefaultRequestBodyHeavyLimitBytes     = int64(20 * 1024 * 1024)
+	DefaultRequestBodyRecoveryLimitBytes  = int64(32 * 1024 * 1024)
+	MaxRequestBodyRecoveryLimitBytes      = int64(32 * 1024 * 1024)
+	MaxRequestBodyAdmissionLimitBytes     = int64(64 * 1024 * 1024)
+	RequestBodyRecoveryGlobalConcurrency  = 2
+	RequestBodyRecoveryAccountConcurrency = 1
+)
+
+type RequestBodyLane string
+
+const (
+	RequestBodyLaneDisabled RequestBodyLane = "disabled"
+	RequestBodyLaneNormal   RequestBodyLane = "normal"
+	RequestBodyLaneHeavy    RequestBodyLane = "heavy"
+	RequestBodyLaneRecovery RequestBodyLane = "recovery"
+	RequestBodyLaneRejected RequestBodyLane = "rejected"
+)
+
+type RequestBodyAdmissionPolicy struct {
+	Enabled            bool
+	NormalLimitBytes   int64
+	HeavyLimitBytes    int64
+	RecoveryLimitBytes int64
+}
+
+// GetRequestBodyAdmissionPolicy returns the OpenAI account's tiered body policy.
+// Invalid persisted thresholds fall back to the safe defaults; admin writes are
+// validated separately so this fallback only protects legacy or manual data.
+func (a *Account) GetRequestBodyAdmissionPolicy() RequestBodyAdmissionPolicy {
+	policy := RequestBodyAdmissionPolicy{
+		NormalLimitBytes:   DefaultRequestBodyNormalLimitBytes,
+		HeavyLimitBytes:    DefaultRequestBodyHeavyLimitBytes,
+		RecoveryLimitBytes: DefaultRequestBodyRecoveryLimitBytes,
+	}
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return policy
+	}
+	policy.Enabled, _ = a.Extra[RequestBodyAdmissionEnabledExtraKey].(bool)
+	if limit := positiveExtraInt64(a.Extra[RequestBodyNormalLimitExtraKey]); limit > 0 {
+		policy.NormalLimitBytes = limit
+	}
+	if limit := positiveExtraInt64(a.Extra[RequestBodyHeavyLimitExtraKey]); limit > policy.NormalLimitBytes {
+		policy.HeavyLimitBytes = limit
+	}
+	if limit := positiveExtraInt64(a.Extra[RequestBodyRecoveryLimitExtraKey]); limit > policy.HeavyLimitBytes {
+		policy.RecoveryLimitBytes = limit
+	}
+	if policy.HeavyLimitBytes <= policy.NormalLimitBytes ||
+		policy.RecoveryLimitBytes <= policy.HeavyLimitBytes ||
+		policy.RecoveryLimitBytes > MaxRequestBodyRecoveryLimitBytes {
+		policy.NormalLimitBytes = DefaultRequestBodyNormalLimitBytes
+		policy.HeavyLimitBytes = DefaultRequestBodyHeavyLimitBytes
+		policy.RecoveryLimitBytes = DefaultRequestBodyRecoveryLimitBytes
+	}
+	return policy
+}
+
+func positiveExtraInt64(v any) int64 {
+	value := int64(parseExtraFloat64(v))
+	if value > 0 {
+		return value
+	}
+	return 0
+}
+
+// Classify reserves the recovery lane for explicit compact requests. Ordinary
+// requests above the heavy threshold must compact first instead of consuming
+// the bounded global recovery lane.
+func (p RequestBodyAdmissionPolicy) Classify(bodyBytes int64, compactRequest bool) RequestBodyLane {
+	if !p.Enabled {
+		return RequestBodyLaneDisabled
+	}
+	if bodyBytes <= 0 {
+		return RequestBodyLaneNormal
+	}
+	if compactRequest {
+		if bodyBytes > p.RecoveryLimitBytes {
+			return RequestBodyLaneRejected
+		}
+		return RequestBodyLaneRecovery
+	}
+	if bodyBytes <= p.NormalLimitBytes {
+		return RequestBodyLaneNormal
+	}
+	if bodyBytes <= p.HeavyLimitBytes {
+		return RequestBodyLaneHeavy
+	}
+	return RequestBodyLaneRejected
+}
+
+func RequestBodyHeavyConcurrencyLimit(_ int) int {
+	// Heavy requests are deliberately serialized per account. Large payloads
+	// compete for the same upstream connection and provider capacity even when
+	// the account's nominal request concurrency is higher.
+	return 1
+}
+
+func RequestBodyLargeAccountConcurrencyLimit(accountConcurrency int) int {
+	if accountConcurrency <= 0 {
+		return 0
+	}
+	if accountConcurrency == 1 {
+		return 1
+	}
+	// Large requests use the same physical account pool as ordinary traffic.
+	// Keeping one account slot outside their ceiling guarantees ordinary work can
+	// still enter while heavy/recovery work is active.
+	return accountConcurrency - 1
+}
+
+// RequestBodyLaneWaitLimit bounds materialized request bodies waiting in one
+// account's heavy lane or in the global recovery lane.
+func RequestBodyLaneWaitLimit(maxPermits int) int {
+	if maxPermits < 1 {
+		return 1
+	}
+	return maxPermits
+}
+
 // GetRPMStrategy 获取 RPM 策略
 // "tiered" = 三区模型（默认）, "sticky_exempt" = 粘性豁免
 func (a *Account) GetRPMStrategy() string {

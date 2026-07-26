@@ -31,6 +31,7 @@ func NewAPIKeyHandler(apiKeyService *service.APIKeyService) *APIKeyHandler {
 // CreateAPIKeyRequest represents the create API key request payload
 type CreateAPIKeyRequest struct {
 	Name          string   `json:"name" binding:"required"`
+	UserID        *int64   `json:"user_id"`         // 管理员为指定用户创建
 	GroupID       *int64   `json:"group_id"`        // nullable
 	CustomKey     *string  `json:"custom_key"`      // 可选的自定义key
 	IPWhitelist   []string `json:"ip_whitelist"`    // IP 白名单
@@ -42,9 +43,6 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h *float64 `json:"rate_limit_5h"`
 	RateLimit1d *float64 `json:"rate_limit_1d"`
 	RateLimit7d *float64 `json:"rate_limit_7d"`
-
-	// 管理员指定：Key 归属的目标用户。仅管理员可使用；普通用户传入会被忽略。
-	UserID *int64 `json:"user_id"`
 }
 
 // UpdateAPIKeyRequest represents the update API key request payload
@@ -59,14 +57,11 @@ type UpdateAPIKeyRequest struct {
 	ResetQuota  *bool     `json:"reset_quota"`  // 重置已用配额
 
 	// Rate limit fields (nil = no change, 0 = unlimited)
-	RateLimit5h         *float64 `json:"rate_limit_5h"`
-	RateLimit1d         *float64 `json:"rate_limit_1d"`
-	RateLimit7d         *float64 `json:"rate_limit_7d"`
-	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
-	Sync7dWindowAccountID *int64 `json:"sync_7d_window_account_id"` // 同步上游账号7天窗口(管理员)
-
-	// 管理员修改：Key 的归属用户。仅管理员可使用；普通用户传入会被忽略。
-	UserID *int64 `json:"user_id"`
+	RateLimit5h           *float64 `json:"rate_limit_5h"`
+	RateLimit1d           *float64 `json:"rate_limit_1d"`
+	RateLimit7d           *float64 `json:"rate_limit_7d"`
+	ResetRateLimitUsage   *bool    `json:"reset_rate_limit_usage"`    // 重置限速用量
+	Sync7dWindowAccountID *int64   `json:"sync_7d_window_account_id"` // 同步指定账号的 7 天刷新窗口
 }
 
 // List handles listing user's API keys with pagination
@@ -191,6 +186,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 
 	svcReq := service.CreateAPIKeyRequest{
 		Name:          req.Name,
+		UserID:        req.UserID,
 		GroupID:       req.GroupID,
 		CustomKey:     req.CustomKey,
 		IPWhitelist:   req.IPWhitelist,
@@ -210,21 +206,8 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		svcReq.RateLimit7d = *req.RateLimit7d
 	}
 
-	// 解析目标归属用户：管理员指定了 user_id 则归属该用户，否则归属操作者本人。
-	isAdmin := isAdminRole(c)
-	targetUserID := subject.UserID
-	if isAdmin && req.UserID != nil {
-		targetUserID = *req.UserID
-	}
-
 	executeUserIdempotentJSON(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
-		var key *service.APIKey
-		var err error
-		if isAdmin {
-			key, err = h.apiKeyService.CreateAsAdmin(ctx, targetUserID, svcReq)
-		} else {
-			key, err = h.apiKeyService.Create(ctx, targetUserID, svcReq)
-		}
+		key, err := h.apiKeyService.Create(ctx, subject.UserID, svcReq)
 		if err != nil {
 			return nil, err
 		}
@@ -257,13 +240,13 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 	}
 
 	svcReq := service.UpdateAPIKeyRequest{
-		IPWhitelist:         req.IPWhitelist,
-		IPBlacklist:         req.IPBlacklist,
-		Quota:               req.Quota,
-		ResetQuota:          req.ResetQuota,
-		RateLimit5h:         req.RateLimit5h,
-		RateLimit1d:         req.RateLimit1d,
-		RateLimit7d:         req.RateLimit7d,
+		IPWhitelist:           req.IPWhitelist,
+		IPBlacklist:           req.IPBlacklist,
+		Quota:                 req.Quota,
+		ResetQuota:            req.ResetQuota,
+		RateLimit5h:           req.RateLimit5h,
+		RateLimit1d:           req.RateLimit1d,
+		RateLimit7d:           req.RateLimit7d,
 		ResetRateLimitUsage:   req.ResetRateLimitUsage,
 		Sync7dWindowAccountID: req.Sync7dWindowAccountID,
 	}
@@ -290,11 +273,6 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		}
 	}
 
-	// 管理员修改归属用户：透传给 service，仅 UpdateAsAdmin 路径会使用。
-	if isAdminRole(c) && req.UserID != nil {
-		svcReq.UserID = req.UserID
-	}
-
 	if isAdminRole(c) {
 		key, err := h.apiKeyService.UpdateAsAdmin(c.Request.Context(), keyID, subject.UserID, svcReq)
 		if err != nil {
@@ -306,6 +284,32 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 	}
 
 	key, err := h.apiKeyService.Update(c.Request.Context(), keyID, subject.UserID, svcReq)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, dto.APIKeyFromService(key))
+}
+
+// Regenerate replaces an API key's secret while retaining its configuration and usage state.
+// POST /api/v1/keys/:id/regenerate
+func (h *APIKeyHandler) Regenerate(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if !requireAdminAPIKeyManagement(c) {
+		return
+	}
+
+	keyID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid key ID")
+		return
+	}
+
+	key, err := h.apiKeyService.RegenerateAsAdmin(c.Request.Context(), keyID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
