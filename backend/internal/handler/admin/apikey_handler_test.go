@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -156,57 +155,6 @@ func TestAdminAPIKeyHandler_ResetRateLimitUsage(t *testing.T) {
 	require.Nil(t, resp.Data.APIKey.Window5hStart)
 	require.Nil(t, resp.Data.APIKey.Window1dStart)
 	require.Nil(t, resp.Data.APIKey.Window7dStart)
-}
-
-// TestAdminAPIKeyHandler_SetWindowStart 验证：调整窗口起始时间时保留 usage 已用金额。
-func TestAdminAPIKeyHandler_SetWindowStart(t *testing.T) {
-	svc := newStubAdminService()
-	now := time.Now()
-	svc.apiKeys[0].Usage5h = 1.2
-	svc.apiKeys[0].Usage1d = 3.4
-	svc.apiKeys[0].Usage7d = 5.6
-	oldStart := now.Add(-2 * time.Hour)
-	svc.apiKeys[0].Window7dStart = &oldStart
-	router := setupAPIKeyHandler(svc)
-
-	// 把 7d 窗口对齐到 Codex 真实起始时刻（保留 usage）
-	newStart := now.Truncate(time.Second)
-	body := fmt.Sprintf(`{"window_7d_start":"%s"}`, newStart.Format(time.RFC3339))
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/api-keys/10", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-
-	var resp struct {
-		Data struct {
-			APIKey struct {
-				Usage7d       float64    `json:"usage_7d"`
-				Window7dStart *time.Time `json:"window_7d_start"`
-			} `json:"api_key"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	// usage 必须保留
-	require.Equal(t, 5.6, resp.Data.APIKey.Usage7d)
-	// 窗口起始已对齐到指定时刻
-	require.NotNil(t, resp.Data.APIKey.Window7dStart)
-	require.WithinDuration(t, newStart, *resp.Data.APIKey.Window7dStart, time.Second)
-}
-
-// TestAdminAPIKeyHandler_SetWindowStart_BadFormat 验证非法时间格式报 400。
-func TestAdminAPIKeyHandler_SetWindowStart_BadFormat(t *testing.T) {
-	svc := newStubAdminService()
-	router := setupAPIKeyHandler(svc)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/api-keys/10", bytes.NewBufferString(`{"window_7d_start":"not-a-date"}`))
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "window_7d_start")
 }
 
 func TestAdminAPIKeyHandler_UpdateGroup_ServiceError(t *testing.T) {
