@@ -121,6 +121,14 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.Int64("request_body_bytes").
+			Default(0).
+			Comment("入站请求体大小（字节）"),
+		field.String("request_body_lane").
+			MaxLen(16).
+			Optional().
+			Nillable().
+			Comment("请求体准入通道快照：normal/heavy/recovery"),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().
