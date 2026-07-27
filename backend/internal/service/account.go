@@ -2679,13 +2679,7 @@ func (a *Account) GetRequestBodyAdmissionPolicy() RequestBodyAdmissionPolicy {
 	if limit := positiveExtraInt64(a.Extra[RequestBodyRecoveryLimitExtraKey]); limit > policy.HeavyLimitBytes {
 		policy.RecoveryLimitBytes = limit
 	}
-	if policy.HeavyLimitBytes <= policy.NormalLimitBytes ||
-		policy.RecoveryLimitBytes <= policy.HeavyLimitBytes ||
-		policy.RecoveryLimitBytes > MaxRequestBodyRecoveryLimitBytes {
-		policy.NormalLimitBytes = DefaultRequestBodyNormalLimitBytes
-		policy.HeavyLimitBytes = DefaultRequestBodyHeavyLimitBytes
-		policy.RecoveryLimitBytes = DefaultRequestBodyRecoveryLimitBytes
-	}
+	// 管理员自行控制阈值,不做强制回退。
 	return policy
 }
 

@@ -399,50 +399,7 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 }
 
 func validateRequestBodyAdmissionExtra(platform string, extra map[string]any) error {
-	if platform != PlatformOpenAI || extra == nil {
-		return nil
-	}
-	if raw, ok := extra[RequestBodyAdmissionEnabledExtraKey]; ok {
-		if _, valid := raw.(bool); !valid {
-			return infraerrors.BadRequest("REQUEST_BODY_ADMISSION_INVALID", "request_body_admission_enabled must be a boolean")
-		}
-	}
-
-	limits := []struct {
-		key          string
-		defaultValue int64
-	}{
-		{RequestBodyNormalLimitExtraKey, DefaultRequestBodyNormalLimitBytes},
-		{RequestBodyHeavyLimitExtraKey, DefaultRequestBodyHeavyLimitBytes},
-		{RequestBodyRecoveryLimitExtraKey, DefaultRequestBodyRecoveryLimitBytes},
-	}
-	values := make([]int64, 0, len(limits))
-	for _, limit := range limits {
-		value := limit.defaultValue
-		if raw, ok := extra[limit.key]; ok {
-			value = positiveExtraInt64(raw)
-			if value <= 0 {
-				return infraerrors.BadRequest("REQUEST_BODY_ADMISSION_INVALID", limit.key+" must be a positive number")
-			}
-		}
-		maxValue := MaxRequestBodyAdmissionLimitBytes
-		if limit.key == RequestBodyRecoveryLimitExtraKey {
-			maxValue = MaxRequestBodyRecoveryLimitBytes
-		}
-		if value > maxValue {
-			return infraerrors.BadRequest(
-				"REQUEST_BODY_ADMISSION_INVALID",
-				fmt.Sprintf("%s must not exceed %d bytes", limit.key, maxValue),
-			)
-		}
-		values = append(values, value)
-	}
-	if values[0] >= values[1] || values[1] >= values[2] {
-		return infraerrors.BadRequest(
-			"REQUEST_BODY_ADMISSION_INVALID",
-			"request body limits must satisfy normal < heavy < recovery",
-		)
-	}
+	// 管理员自行控制三通道阈值,不做强制校验。
 	return nil
 }
 
