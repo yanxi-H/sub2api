@@ -152,7 +152,10 @@ apiClient.interceptors.response.use(
           // ignore event failures
         }
 
-        if (window.location.pathname.startsWith('/admin/ops')) {
+        if (
+          window.location.pathname.startsWith('/admin/ops')
+          || window.location.pathname.startsWith('/admin/monitor-center')
+        ) {
           window.location.href = '/admin/settings'
         }
 

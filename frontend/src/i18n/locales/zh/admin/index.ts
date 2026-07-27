@@ -3,6 +3,7 @@ import channels from './channels'
 import accounts from './accounts'
 import resources from './resources'
 import ops from './ops'
+import monitorCenter from './monitorCenter'
 import settings from './settings'
 import audit from './audit'
 import promptAudit from './promptAudit'
@@ -13,6 +14,7 @@ export default {
   ...accounts,
   ...resources,
   ...ops,
+  ...monitorCenter,
   ...settings,
   ...audit,
   ...promptAudit,

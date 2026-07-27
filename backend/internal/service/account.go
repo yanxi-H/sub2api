@@ -2634,7 +2634,7 @@ const (
 	DefaultRequestBodyNormalLimitBytes    = int64(3 * 1024 * 1024)
 	DefaultRequestBodyHeavyLimitBytes     = int64(20 * 1024 * 1024)
 	DefaultRequestBodyRecoveryLimitBytes  = int64(32 * 1024 * 1024)
-	MaxRequestBodyRecoveryLimitBytes      = int64(32 * 1024 * 1024)
+	MaxRequestBodyRecoveryLimitBytes      = int64(64 * 1024 * 1024)
 	MaxRequestBodyAdmissionLimitBytes     = int64(64 * 1024 * 1024)
 	RequestBodyRecoveryGlobalConcurrency  = 2
 	RequestBodyRecoveryAccountConcurrency = 1

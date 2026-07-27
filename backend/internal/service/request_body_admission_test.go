@@ -73,51 +73,49 @@ func TestNormalizeRequestBodyAdmissionExtraRemovesPolicyFromOtherPlatforms(t *te
 	require.Equal(t, map[string]any{"another_setting": true}, extra)
 }
 
-func TestNormalizeRequestBodyAdmissionExtraRejectsUnorderedLimits(t *testing.T) {
-	_, err := normalizeRequestBodyAdmissionExtra(PlatformOpenAI, map[string]any{
+func TestNormalizeRequestBodyAdmissionExtraAcceptsUnorderedLimits(t *testing.T) {
+	// 管理员自行控制阈值,后端不再强制校验顺序,仅做清理。
+	extra, err := normalizeRequestBodyAdmissionExtra(PlatformOpenAI, map[string]any{
 		RequestBodyAdmissionEnabledExtraKey: true,
 		RequestBodyNormalLimitExtraKey:      int64(20),
 		RequestBodyHeavyLimitExtraKey:       int64(10),
 		RequestBodyRecoveryLimitExtraKey:    int64(30),
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, int64(20), extra[RequestBodyNormalLimitExtraKey])
+	require.Equal(t, int64(10), extra[RequestBodyHeavyLimitExtraKey])
+	require.Equal(t, int64(30), extra[RequestBodyRecoveryLimitExtraKey])
 }
 
-func TestNormalizeRequestBodyAdmissionExtraRejectsLimitAboveRuntimeMaximum(t *testing.T) {
-	_, err := normalizeRequestBodyAdmissionExtra(PlatformOpenAI, map[string]any{
-		RequestBodyAdmissionEnabledExtraKey: true,
-		RequestBodyNormalLimitExtraKey:      int64(10),
-		RequestBodyHeavyLimitExtraKey:       int64(20),
-		RequestBodyRecoveryLimitExtraKey:    MaxRequestBodyAdmissionLimitBytes + 1,
-	})
-	require.Error(t, err)
-}
-
-func TestNormalizeRequestBodyAdmissionExtraRejectsRecoveryLimitAboveSafeMaximum(t *testing.T) {
-	_, err := normalizeRequestBodyAdmissionExtra(PlatformOpenAI, map[string]any{
+func TestNormalizeRequestBodyAdmissionExtraAcceptsLimitAboveRecoveryMaximum(t *testing.T) {
+	// 管理员自行控制阈值,后端不再强制上限校验。
+	extra, err := normalizeRequestBodyAdmissionExtra(PlatformOpenAI, map[string]any{
 		RequestBodyAdmissionEnabledExtraKey: true,
 		RequestBodyNormalLimitExtraKey:      int64(10),
 		RequestBodyHeavyLimitExtraKey:       int64(20),
 		RequestBodyRecoveryLimitExtraKey:    MaxRequestBodyRecoveryLimitBytes + 1,
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, MaxRequestBodyRecoveryLimitBytes+1, extra[RequestBodyRecoveryLimitExtraKey])
 }
 
-func TestRequestBodyAdmissionPolicyFallsBackWhenPersistedLimitExceedsRuntimeMaximum(t *testing.T) {
+func TestRequestBodyAdmissionPolicyKeepsAdminConfiguredLimits(t *testing.T) {
+	// 管理员自行控制阈值,GetRequestBodyAdmissionPolicy 不再做强制回退,
+	// 即使持久化阈值超出运行时最大值,也保留管理员配置。
 	account := &Account{
 		Platform: PlatformOpenAI,
 		Extra: map[string]any{
 			RequestBodyAdmissionEnabledExtraKey: true,
 			RequestBodyNormalLimitExtraKey:      int64(10),
 			RequestBodyHeavyLimitExtraKey:       int64(20),
-			RequestBodyRecoveryLimitExtraKey:    MaxRequestBodyAdmissionLimitBytes + 1,
+			RequestBodyRecoveryLimitExtraKey:    int64(50 * 1024 * 1024),
 		},
 	}
 
 	policy := account.GetRequestBodyAdmissionPolicy()
-	require.Equal(t, DefaultRequestBodyNormalLimitBytes, policy.NormalLimitBytes)
-	require.Equal(t, DefaultRequestBodyHeavyLimitBytes, policy.HeavyLimitBytes)
-	require.Equal(t, DefaultRequestBodyRecoveryLimitBytes, policy.RecoveryLimitBytes)
+	require.Equal(t, int64(10), policy.NormalLimitBytes)
+	require.Equal(t, int64(20), policy.HeavyLimitBytes)
+	require.Equal(t, int64(50*1024*1024), policy.RecoveryLimitBytes)
 }
 
 func TestNormalizeRequestBodyAdmissionUpdatePreservesUnrelatedPolicyFields(t *testing.T) {

@@ -74,6 +74,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			true,
 			sqlmock.AnyArg(), // duration_ms
 			sqlmock.AnyArg(), // first_token_ms
+			sqlmock.AnyArg(), // request_body_bytes
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
@@ -96,6 +97,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // request_body_lane
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -162,10 +164,11 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // duration_ms
+			sqlmock.AnyArg(), // first_token_ms
+			sqlmock.AnyArg(), // request_body_bytes
+			sqlmock.AnyArg(), // user_agent
+			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(), // image_input_size
@@ -186,6 +189,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // request_body_lane
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -273,11 +277,11 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[36])
-	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[37])
-	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[38])
-	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[39])
-	breakdownJSON, ok := prepared.args[40].(string)
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[37])
+	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[38])
+	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[39])
+	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[40])
+	breakdownJSON, ok := prepared.args[41].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -804,11 +808,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			2,
+			sql.NullInt64{},  // duration_ms
+			sql.NullInt64{},  // first_token_ms
+			int64(0),         // request_body_bytes
+			sql.NullString{}, // user_agent
+			sql.NullString{}, // ip_address
+			2,                // image_count
 			sql.NullString{Valid: true, String: "4K"},
 			sql.NullString{Valid: true, String: "1024x1024"},
 			sql.NullString{Valid: true, String: "3840x2160"},
@@ -828,7 +833,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullFloat64{},
-			sql.NullString{},
+			sql.NullString{}, // request_body_lane
+			sql.NullString{}, // session_id
 			now,
 		}})
 		require.NoError(t, err)
@@ -879,12 +885,13 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeWSV2),
 			false, // legacy stream
 			false, // legacy openai ws
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			0,
-			sql.NullString{},
+			sql.NullInt64{},  // duration_ms
+			sql.NullInt64{},  // first_token_ms
+			int64(0),         // request_body_bytes
+			sql.NullString{}, // user_agent
+			sql.NullString{}, // ip_address
+			0,                // image_count
+			sql.NullString{}, // image_size
 			sql.NullString{}, // image_input_size
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
@@ -903,6 +910,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // session_id
 			now,
 		}})
@@ -937,12 +945,13 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeUnknown),
 			true,
 			false,
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			0,
-			sql.NullString{},
+			sql.NullInt64{},  // duration_ms
+			sql.NullInt64{},  // first_token_ms
+			int64(0),         // request_body_bytes
+			sql.NullString{}, // user_agent
+			sql.NullString{}, // ip_address
+			0,                // image_count
+			sql.NullString{}, // image_size
 			sql.NullString{}, // image_input_size
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
@@ -961,6 +970,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // session_id
 			now,
 		}})
@@ -995,12 +1005,13 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			0,
-			sql.NullString{},
+			sql.NullInt64{},  // duration_ms
+			sql.NullInt64{},  // first_token_ms
+			int64(0),         // request_body_bytes
+			sql.NullString{}, // user_agent
+			sql.NullString{}, // ip_address
+			0,                // image_count
+			sql.NullString{}, // image_size
 			sql.NullString{}, // image_input_size
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
@@ -1019,6 +1030,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // session_id
 			now,
 		}})

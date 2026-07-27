@@ -404,6 +404,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/monitor-center',
+    name: 'AdminMonitorCenter',
+    component: () => import('@/views/admin/MonitorCenterView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Monitor Center',
+      titleKey: 'admin.monitorCenter.title',
+      descriptionKey: 'admin.monitorCenter.description'
+    }
+  },
+  {
     path: '/admin/ops',
     name: 'AdminOps',
     component: () => import('@/views/admin/ops/OpsDashboard.vue'),

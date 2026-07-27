@@ -1,0 +1,63 @@
+export default {
+  monitorCenter: {
+    title: 'Monitor Center',
+    description: 'Focused visibility into OpenAI, the Sub2API gateway, real probes, latency, concurrency, and slow requests',
+    timeRange: 'Global time range', autoRefresh: 'Auto refresh every 60 seconds', lastUpdated: 'Last updated {time}',
+    loadPartial: '{count} monitoring data groups failed to refresh.', keepPrevious: 'The last successful data remains visible.',
+    ranges: { '1h': '1 hour', '6h': '6 hours', '24h': '24 hours', custom: 'Custom' },
+    custom: {
+      start: 'Start', end: 'End', apply: 'Apply', required: 'Enter both a start and end time.', invalid: 'The time range is invalid.',
+      order: 'The start time must be earlier than the end time.', tooLong: 'A single query can cover at most 30 days.',
+    },
+    status: {
+      operational: 'Operational', degraded_performance: 'Degraded', partial_outage: 'Partial outage', major_outage: 'Major outage', under_maintenance: 'Maintenance', unknown: 'Unknown',
+    },
+    common: { healthy: 'Healthy', abnormal: 'Abnormal', unknown: 'Unknown' },
+    health: { good: 'Healthy', warn: 'Attention', bad: 'At risk' },
+    cockpit: {
+      health: 'Health', overallHealth: 'Overall health', healthHint: 'Calculated from gateway SLA, errors, latency, and system resources',
+      realtime: 'Live throughput', currentQps: 'Current QPS', currentTps: 'Current TPS', peakTps: 'Peak TPS', averageTps: 'Average TPS',
+      requests: 'Requests', tokensDetail: '{value} tokens', errorsDetail: '{value} SLA errors', requestError: 'Request errors', businessLimitsDetail: '{value} policy limits',
+      e2eP99: 'Request duration P99', ttftP99: 'TTFT P99', upstreamError: 'Upstream errors', upstreamExclusions: 'Excludes 429 / 529',
+    },
+    resources: {
+      cpu: 'CPU', cpuHint: 'Warning at 80%', memory: 'Memory', database: 'Database', redis: 'Redis', goroutines: 'Goroutines', jobs: 'Background jobs',
+      databaseDetail: '{active} active · {idle} idle', redisDetail: '{total} total · {idle} idle', goroutineDetail: 'Queue {queue}', jobsDetail: '{count} monitored',
+    },
+    upstream: {
+      title: 'OpenAI official services', incidentCount: '{count} unresolved incidents', lastSync: 'Last sync {time}',
+      stale: 'The latest sync failed. Showing the last successful data from {time}.', unavailable: 'No successful OpenAI status data is available yet.',
+      notReported: 'Not reported', oneHourHistory: 'Last hour status', rangeHistory: 'Last {range} status', coverage: 'Coverage {actual}/{expected} min ({percent}%)',
+      missingSample: 'No sample', unresolvedIncident: 'Unresolved incident', incidentMarker: '{count} unresolved incident(s)', noIncidents: 'No unresolved incidents',
+      noIncidentsHint: 'OpenAI currently reports no unresolved incidents', incidentMeta: '{status} · {impact} impact · updated {time}',
+      officialDetails: 'Official details', openOfficial: 'Open OpenAI Status',
+    },
+    gateway: {
+      title: 'Sub2API gateway', subtitle: 'SLA, errors, and local policy', requests: 'Requests', errors: 'Errors', errorRate: 'Request errors', upstreamError: 'Upstream errors', businessLimits: 'Policy limits',
+      good: 'Stable', warn: 'Degraded', bad: 'Abnormal', unknown: 'Unknown',
+    },
+    probe: {
+      title: 'Real request probe', direct: 'Direct OpenAI endpoint', customEndpoint: 'Designated Sub2API path monitor', notConfigured: 'Assign a non-direct OpenAI channel monitor to the monitor-center group',
+      lastLatency: 'Latest probe latency', failures: '{count} consecutive failures', model: 'Probe model', lastSuccess: 'Last success', latency: 'Probe latency', noSamples: 'No real probe samples in this range',
+    },
+    latency: { title: 'Service request latency', subtitle: 'P95, P90, P50, Avg, and Max; missing samples remain gaps', mode: 'Latency metric', noData: 'No latency samples in this range' },
+    concurrency: {
+      title: 'Three-lane user concurrency', subtitle: 'Normal, heavy, and recovery lanes are independent; user selection only affects this module',
+      normal: 'Normal lane', heavy: 'Heavy lane', recovery: 'Recovery lane', selectUser: 'Select user curve', noUsers: 'No users available',
+      partialCoverage: 'Concurrency snapshots are retained for 24 hours. The chart shows only the coverage available from the backend.',
+      current: '{active} active · {waiting} queued', demand: 'Concurrency demand', responseTime: 'Response time', systemActive: 'System active', systemQueue: 'System queue',
+      tooltip: 'demand {demand}, active {active}, queued {waiting}', laneEmpty: 'No concurrency activity in this lane for the selected range',
+    },
+    slow: {
+      title: 'Slow request root causes', primaryCause: '{cause} accounts for {share} of slow requests', noSlowRequests: 'No slow requests in this range',
+      ranking: 'Cause ranking', impact: 'Impact scope', impactHint: 'All users, accounts, or models; scroll and sort by any column', slowRate: 'Slow request rate', queueP95: 'Queue P95', requests: 'Requests', mainCause: 'Primary cause',
+      sortBy: 'Sort by {column}',
+      dimensions: { user: 'User', account: 'Account', model: 'Model' }, ingestionWarning: 'Performance telemetry lost data: {dropped} dropped and {failed} failed writes.',
+    },
+    history: {
+      title: 'Last three days', subtitle: 'OpenAI status, gateway request health, and real probes are stored and shown separately', gateway: 'Gateway', probe: 'Real probe',
+      samples: 'Samples', successRate: 'Fetch success', averageLatency: 'Average latency', anomalies: 'Anomalies', officialSample: 'OpenAI status probe',
+      threeDaysAgo: '3 days ago', now: 'Now', good: 'Stable overall', warn: 'Some degradation', bad: 'Outages present', unknown: 'No data',
+    },
+  },
+}

@@ -105,6 +105,70 @@ export interface OpsThroughputTrendResponse {
   top_groups?: OpsThroughputGroupBreakdownItem[]
 }
 
+export interface OpsLatencyTrendPoint extends OpsPercentiles {
+  bucket_start: string
+  sample_count: number
+  ttft: OpsPercentiles
+}
+
+export interface OpsLatencyTrendResponse {
+  bucket: string
+  points: OpsLatencyTrendPoint[]
+}
+
+export interface OpsPerformanceSummary {
+  sample_count: number
+  slow_count: number
+  slow_rate: number
+  end_to_end: OpsPercentiles
+  ttft: OpsPercentiles
+}
+
+export interface OpsSlowCauseSummary {
+  cause: string
+  count: number
+  share: number
+  e2e_p95_ms?: number | null
+  queue_p95_ms?: number | null
+  ttft_p95_ms?: number | null
+}
+
+export interface OpsSlowCauseTrendPoint {
+  bucket_start: string
+  causes: Record<string, number>
+}
+
+export interface OpsPerformanceImpact {
+  dimension: 'user' | 'account' | 'model' | string
+  id: string
+  name: string
+  request_count: number
+  slow_rate: number
+  e2e_p95_ms?: number | null
+  ttft_p95_ms?: number | null
+  queue_p95_ms?: number | null
+  main_cause: string
+}
+
+export interface OpsPerformanceIngestionHealth {
+  queue_depth: number
+  queue_capacity: number
+  dropped_count: number
+  write_failed_count: number
+  written_count: number
+}
+
+export interface OpsPerformanceDiagnosticsResponse {
+  start_time: string
+  end_time: string
+  bucket: string
+  summary: OpsPerformanceSummary
+  causes: OpsSlowCauseSummary[]
+  trend: OpsSlowCauseTrendPoint[]
+  impacts: OpsPerformanceImpact[]
+  ingestion_health: OpsPerformanceIngestionHealth
+}
+
 export type OpsRequestKind = 'success' | 'error'
 export type OpsRequestDetailsKind = OpsRequestKind | 'all'
 export type OpsRequestDetailsSort = 'created_at_desc' | 'duration_desc'
@@ -163,7 +227,18 @@ export type OpsRequestDetailsResponse = PaginatedResponse<OpsRequestDetail>
 
 export interface OpsLatencyHistogramBucket {
   range: string
+  min_ms: number
+  max_ms?: number | null
   count: number
+}
+
+export interface OpsLatencyUserSummary {
+  user_id: number
+  username: string
+  email: string
+  deleted: boolean
+  request_count: number
+  avg_duration_ms: number
 }
 
 export interface OpsLatencyHistogramResponse {
@@ -171,8 +246,12 @@ export interface OpsLatencyHistogramResponse {
   end_time: string
   platform: string
   group_id?: number | null
+  user_id?: number | null
 
   total_requests: number
+  avg_duration_ms?: number | null
+  top_avg_users: OpsLatencyUserSummary[]
+  available_users: OpsLatencyUserSummary[]
   buckets: OpsLatencyHistogramBucket[]
 }
 
@@ -201,6 +280,56 @@ export interface OpsErrorDistributionItem {
 export interface OpsErrorDistributionResponse {
   total: number
   items: OpsErrorDistributionItem[]
+}
+
+export interface OpsUserErrorTypeCount {
+  error_type: string
+  count: number
+}
+
+export interface OpsUserErrorDistributionItem {
+  user_id?: number | null
+  username: string
+  email: string
+  deleted: boolean
+  total: number
+  errors: OpsUserErrorTypeCount[]
+}
+
+export interface OpsUserErrorDistributionResponse {
+  total: number
+  total_users: number
+  user_limit: number
+  items: OpsUserErrorDistributionItem[]
+}
+
+export type OpsInvestigationSeverity = 'critical' | 'warning' | 'info'
+
+export interface OpsInvestigationFinding {
+  rule: string
+  kind: 'error' | 'latency'
+  severity: OpsInvestigationSeverity
+  phase?: string
+  owner?: string
+  status_code?: number
+  platform?: string
+  group_id?: number | null
+  current_count?: number
+  baseline_count?: number
+  delta_count?: number
+  change_percent?: number
+  share_percent?: number
+  current_value_ms?: number
+  baseline_value_ms?: number
+}
+
+export interface OpsInvestigationResponse {
+  start_time: string
+  end_time: string
+  baseline_start: string
+  baseline_end: string
+  total_errors: number
+  findings: OpsInvestigationFinding[]
 }
 
 export interface OpsDashboardSnapshotV2Response {
@@ -338,6 +467,67 @@ export interface OpsUserConcurrencyStatsResponse {
   timestamp?: string
 }
 
+export interface ConcurrencyPeak {
+  peak_in_use: number
+  peak_waiting: number
+  peak_demand: number
+}
+
+export interface ConcurrencyLanePeaks {
+  normal: ConcurrencyPeak
+  heavy: ConcurrencyPeak
+  recovery: ConcurrencyPeak
+}
+
+export interface ConcurrencySnapshot {
+  in_use: number
+  waiting: number
+  demand: number
+}
+
+export interface ConcurrencyLaneSnapshots {
+  normal: ConcurrencySnapshot
+  heavy: ConcurrencySnapshot
+  recovery: ConcurrencySnapshot
+}
+
+export interface RequestBodyLaneLatencySummaries {
+  normal: OpsPercentiles
+  heavy: OpsPercentiles
+  recovery: OpsPercentiles
+}
+
+export interface UserConcurrencyTrendPoint {
+  bucket_start: string
+  system: ConcurrencyPeak
+  users: Record<string, ConcurrencyPeak>
+  system_lanes?: ConcurrencyLanePeaks
+  user_lanes?: Record<string, ConcurrencyLanePeaks>
+}
+
+export interface UserConcurrencyTrendUser {
+  user_id: number
+  user_email: string
+  username: string
+  max_capacity: number
+}
+
+export interface OpsUserConcurrencyTrendResponse {
+  enabled: boolean
+  start_time?: string
+  end_time?: string
+  coverage_start?: string | null
+  coverage_end?: string | null
+  coverage_complete: boolean
+  bucket: 'minute' | '5m'
+  current: ConcurrencySnapshot
+  current_lanes?: ConcurrencyLaneSnapshots
+  latency_lanes?: RequestBodyLaneLatencySummaries
+  points: UserConcurrencyTrendPoint[]
+  users: Record<string, UserConcurrencyTrendUser>
+  timestamp?: string
+}
+
 export async function getConcurrencyStats(platform?: string, groupId?: number | null): Promise<OpsConcurrencyStatsResponse> {
   const params: Record<string, any> = {}
   if (platform) {
@@ -353,6 +543,18 @@ export async function getConcurrencyStats(platform?: string, groupId?: number | 
 
 export async function getUserConcurrencyStats(): Promise<OpsUserConcurrencyStatsResponse> {
   const { data } = await apiClient.get<OpsUserConcurrencyStatsResponse>('/admin/ops/user-concurrency')
+  return data
+}
+
+export async function getUserConcurrencyTrend(params: {
+  time_range?: '5m' | '30m' | '1h' | '6h' | '24h'
+  start_time?: string
+  end_time?: string
+} = {}, options: OpsRequestOptions = {}): Promise<OpsUserConcurrencyTrendResponse> {
+  const { data } = await apiClient.get<OpsUserConcurrencyTrendResponse>('/admin/ops/user-concurrency-trend', {
+    params,
+    signal: options.signal
+  })
   return data
 }
 
@@ -1014,7 +1216,7 @@ export async function getThroughputTrend(
   return data
 }
 
-export async function getLatencyHistogram(
+export async function getLatencyTrend(
   params: {
   time_range?: '5m' | '30m' | '1h' | '6h' | '24h'
   start_time?: string
@@ -1024,8 +1226,63 @@ export async function getLatencyHistogram(
   mode?: OpsQueryMode
   },
   options: OpsRequestOptions = {}
+): Promise<OpsLatencyTrendResponse> {
+  const { data } = await apiClient.get<OpsLatencyTrendResponse>('/admin/ops/dashboard/latency-trend', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
+
+export async function getPerformanceDiagnostics(
+  params: {
+    time_range?: '5m' | '30m' | '1h' | '6h' | '24h'
+    start_time?: string
+    end_time?: string
+    platform?: string
+    group_id?: number | null
+    mode?: OpsQueryMode
+  },
+  options: OpsRequestOptions = {}
+): Promise<OpsPerformanceDiagnosticsResponse> {
+  const { data } = await apiClient.get<OpsPerformanceDiagnosticsResponse>('/admin/ops/dashboard/performance-diagnostics', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
+
+export async function getLatencyHistogram(
+  params: {
+  time_range?: '5m' | '30m' | '1h' | '6h' | '24h'
+  start_time?: string
+  end_time?: string
+  platform?: string
+  group_id?: number | null
+  user_id?: number | null
+  mode?: OpsQueryMode
+  },
+  options: OpsRequestOptions = {}
 ): Promise<OpsLatencyHistogramResponse> {
   const { data } = await apiClient.get<OpsLatencyHistogramResponse>('/admin/ops/dashboard/latency-histogram', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
+
+export async function getUserErrorDistribution(
+  params: {
+  time_range?: '5m' | '30m' | '1h' | '6h' | '24h'
+  start_time?: string
+  end_time?: string
+  platform?: string
+  group_id?: number | null
+  mode?: OpsQueryMode
+  },
+  options: OpsRequestOptions = {}
+): Promise<OpsUserErrorDistributionResponse> {
+  const { data } = await apiClient.get<OpsUserErrorDistributionResponse>('/admin/ops/dashboard/user-error-distribution', {
     params,
     signal: options.signal
   })
@@ -1062,6 +1319,24 @@ export async function getErrorDistribution(
   options: OpsRequestOptions = {}
 ): Promise<OpsErrorDistributionResponse> {
   const { data } = await apiClient.get<OpsErrorDistributionResponse>('/admin/ops/dashboard/error-distribution', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
+
+export async function getInvestigation(
+  params: {
+    time_range?: '5m' | '30m' | '1h' | '6h' | '24h'
+    start_time?: string
+    end_time?: string
+    platform?: string
+    group_id?: number | null
+    mode?: OpsQueryMode
+  },
+  options: OpsRequestOptions = {}
+): Promise<OpsInvestigationResponse> {
+  const { data } = await apiClient.get<OpsInvestigationResponse>('/admin/ops/dashboard/investigation', {
     params,
     signal: options.signal
   })
@@ -1106,6 +1381,7 @@ export type OpsErrorListQueryParams = {
   q?: string
   status_codes?: string
   status_codes_other?: string
+  error_types?: string
 
   // 服务端排序,列白名单见后端 opsErrorLogsOrderBy(created_at/model/status_code)
   sort_by?: string
@@ -1309,12 +1585,17 @@ export const opsAPI = {
   getDashboardSnapshotV2,
   getDashboardOverview,
   getThroughputTrend,
+  getLatencyTrend,
+  getPerformanceDiagnostics,
   getLatencyHistogram,
   getErrorTrend,
   getErrorDistribution,
+  getUserErrorDistribution,
+  getInvestigation,
   getOpenAITokenStats,
   getConcurrencyStats,
   getUserConcurrencyStats,
+  getUserConcurrencyTrend,
   getAccountAvailabilityStats,
   getRealtimeTrafficSummary,
   subscribeQPS,
