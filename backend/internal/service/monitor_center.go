@@ -189,6 +189,11 @@ func (s *MonitorCenterService) Stop() {
 
 func (s *MonitorCenterService) loop() {
 	defer close(s.doneCh)
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("monitor center: background loop panic recovered", "panic", r)
+		}
+	}()
 	s.loadRedisCache(context.Background())
 	if s.currentContentHash() == "" && s.repo != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), monitorCenterHTTPTimeout)
@@ -210,9 +215,16 @@ func (s *MonitorCenterService) loop() {
 	for {
 		select {
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), 2*monitorCenterHTTPTimeout+monitorCenterRetryDelay)
-			_ = s.RefreshOpenAIStatus(ctx)
-			cancel()
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("monitor center: refresh tick panic recovered", "panic", r)
+					}
+				}()
+				ctx, cancel := context.WithTimeout(context.Background(), 2*monitorCenterHTTPTimeout+monitorCenterRetryDelay)
+				_ = s.RefreshOpenAIStatus(ctx)
+				cancel()
+			}()
 		case <-s.stopCh:
 			return
 		}
