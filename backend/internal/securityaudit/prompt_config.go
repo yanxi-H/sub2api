@@ -25,6 +25,8 @@ const (
 	MinInputLimit        = 128
 	MaxInputLimit        = 100000
 	DefaultPayloadTTL    = 30 * time.Minute
+	DefaultRetentionDays = 30
+	MaxRetentionDays     = 3650
 )
 
 type SecretEncryptor interface {
@@ -70,6 +72,7 @@ type storageConfig struct {
 	Strategy        string            `json:"strategy"`
 	WorkerCount     int               `json:"worker_count"`
 	QueueCapacity   int               `json:"queue_capacity"`
+	RetentionDays   int               `json:"retention_days"`
 	Scanners        []string          `json:"scanners"`
 	AllGroups       bool              `json:"all_groups"`
 	GroupIDs        []int64           `json:"group_ids"`
@@ -100,6 +103,7 @@ type ActiveConfig struct {
 	Strategy           string
 	WorkerCount        int
 	QueueCapacity      int
+	RetentionDays      int
 	Scanners           []string
 	AllGroups          bool
 	GroupIDs           []int64
@@ -131,6 +135,7 @@ type PublicConfig struct {
 	Strategy        string           `json:"strategy"`
 	WorkerCount     int              `json:"worker_count"`
 	QueueCapacity   int              `json:"queue_capacity"`
+	RetentionDays   int              `json:"retention_days"`
 	Scanners        []string         `json:"scanners"`
 	AllGroups       bool             `json:"all_groups"`
 	GroupIDs        []int64          `json:"group_ids"`
@@ -162,6 +167,7 @@ type UpdateConfigRequest struct {
 	Strategy              string           `json:"strategy"`
 	WorkerCount           int              `json:"worker_count"`
 	QueueCapacity         int              `json:"queue_capacity"`
+	RetentionDays         int              `json:"retention_days"`
 	Scanners              []string         `json:"scanners"`
 	AllGroups             bool             `json:"all_groups"`
 	GroupIDs              []int64          `json:"group_ids"`
@@ -176,6 +182,7 @@ func DefaultStorageConfig() storageConfig {
 		Strategy:        "priority",
 		WorkerCount:     DefaultWorkerCount,
 		QueueCapacity:   DefaultQueueCapacity,
+		RetentionDays:   DefaultRetentionDays,
 		Scanners:        append([]string(nil), AllScannerIDs...),
 		AllGroups:       true,
 		GroupIDs:        []int64{},
@@ -214,6 +221,9 @@ func normalizeStorageConfig(cfg *storageConfig) {
 	}
 	if cfg.QueueCapacity == 0 {
 		cfg.QueueCapacity = DefaultQueueCapacity
+	}
+	if cfg.RetentionDays == 0 {
+		cfg.RetentionDays = DefaultRetentionDays
 	}
 	if len(cfg.Scanners) == 0 {
 		cfg.Scanners = append([]string(nil), AllScannerIDs...)
@@ -256,6 +266,9 @@ func validateStorageConfig(cfg storageConfig) error {
 	}
 	if cfg.QueueCapacity < 1 || cfg.QueueCapacity > MaxQueueCapacity {
 		return infraerrors.BadRequest("prompt_audit_invalid_queue_capacity", "队列容量超出允许范围")
+	}
+	if cfg.RetentionDays < 1 || cfg.RetentionDays > MaxRetentionDays {
+		return infraerrors.BadRequest("prompt_audit_invalid_retention_days", "审计原文保留天数超出允许范围")
 	}
 	if !cfg.AllGroups && len(cfg.GroupIDs) == 0 {
 		return infraerrors.BadRequest("prompt_audit_groups_required", "指定分组模式至少需要选择一个分组")
@@ -304,6 +317,10 @@ func validateUpdateConfigRequest(req UpdateConfigRequest) error {
 	}
 	if req.QueueCapacity < 1 || req.QueueCapacity > MaxQueueCapacity {
 		return infraerrors.BadRequest("prompt_audit_invalid_queue_capacity", "队列容量超出允许范围")
+	}
+	// Zero is accepted for older API clients and normalized to the safe default.
+	if req.RetentionDays < 0 || req.RetentionDays > MaxRetentionDays {
+		return infraerrors.BadRequest("prompt_audit_invalid_retention_days", "审计原文保留天数超出允许范围")
 	}
 	if len(req.Scanners) == 0 {
 		return infraerrors.BadRequest("prompt_audit_scanners_required", "至少需要启用一个风险分类")
@@ -385,7 +402,7 @@ func PublicFromStorage(cfg storageConfig, riskControlEnabled bool) PublicConfig 
 	return PublicConfig{
 		Enabled: cfg.Enabled, BlockingEnabled: cfg.BlockingEnabled, StorePassEvents: cfg.StorePassEvents,
 		EffectiveMode: active.EffectiveMode(), Strategy: cfg.Strategy, WorkerCount: cfg.WorkerCount,
-		QueueCapacity: cfg.QueueCapacity, Scanners: scanners, AllGroups: cfg.AllGroups,
+		QueueCapacity: cfg.QueueCapacity, RetentionDays: cfg.RetentionDays, Scanners: scanners, AllGroups: cfg.AllGroups,
 		GroupIDs: groupIDs, Endpoints: endpoints, ConfigVersion: cfg.ConfigVersion,
 		UpdatedAt: cfg.UpdatedAt, UpdatedBy: cfg.UpdatedBy, ChangeSummary: cfg.ChangeSummary,
 	}
@@ -395,7 +412,7 @@ func ActiveFromStorage(cfg storageConfig, riskControlEnabled bool, encryptor Sec
 	active := ActiveConfig{
 		RiskControlEnabled: riskControlEnabled, Enabled: cfg.Enabled, BlockingEnabled: cfg.BlockingEnabled,
 		StorePassEvents: cfg.StorePassEvents, Strategy: cfg.Strategy, WorkerCount: cfg.WorkerCount,
-		QueueCapacity: cfg.QueueCapacity, Scanners: append([]string(nil), cfg.Scanners...), AllGroups: cfg.AllGroups,
+		QueueCapacity: cfg.QueueCapacity, RetentionDays: cfg.RetentionDays, Scanners: append([]string(nil), cfg.Scanners...), AllGroups: cfg.AllGroups,
 		GroupIDs: append([]int64(nil), cfg.GroupIDs...), ConfigVersion: cfg.ConfigVersion,
 		UpdatedAt: cfg.UpdatedAt, UpdatedBy: cfg.UpdatedBy, ChangeSummary: cfg.ChangeSummary,
 		Endpoints: make([]ActiveEndpoint, 0, len(cfg.Endpoints)),
@@ -425,12 +442,13 @@ func changeSummary(cfg storageConfig) string {
 		Enabled         bool   `json:"enabled"`
 		BlockingEnabled bool   `json:"blocking_enabled"`
 		StorePassEvents bool   `json:"store_pass_events"`
+		RetentionDays   int    `json:"retention_days"`
 		EndpointCount   int    `json:"endpoint_count"`
 		ScannerCount    int    `json:"scanner_count"`
 		AllGroups       bool   `json:"all_groups"`
 		GroupCount      int    `json:"group_count"`
 		GroupHash       string `json:"group_hash"`
-	}{cfg.Enabled, cfg.BlockingEnabled, cfg.StorePassEvents, len(cfg.Endpoints), len(cfg.Scanners), cfg.AllGroups, len(cfg.GroupIDs), ""}
+	}{cfg.Enabled, cfg.BlockingEnabled, cfg.StorePassEvents, cfg.RetentionDays, len(cfg.Endpoints), len(cfg.Scanners), cfg.AllGroups, len(cfg.GroupIDs), ""}
 	rawGroups, _ := json.Marshal(cfg.GroupIDs)
 	digest := sha256.Sum256(rawGroups)
 	summary.GroupHash = hex.EncodeToString(digest[:])

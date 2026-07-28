@@ -1,0 +1,57 @@
+name: Export Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Docker image to export'
+        required: true
+        type: string
+        default: 'ghcr.io/wonderyuan/sub2api:a4d34e716109a1006fae1ec04a4535a9ad9815cb'
+      artifact_name:
+        description: 'Artifact name'
+        required: true
+        type: string
+        default: 'sub2api-image-a4d34e7'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GitHub Container Registry
+        if: startsWith(inputs.image, 'ghcr.io/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image
+        run: docker pull "${{ inputs.image }}"
+
+      - name: Export image tar
+        run: |
+          mkdir -p image-export
+          docker save -o image-export/sub2api-image.tar "${{ inputs.image }}"
+          ls -lh image-export/sub2api-image.tar
+
+      - name: Write image metadata
+        run: |
+          {
+            echo "image=${{ inputs.image }}"
+            echo "created_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            docker image inspect "${{ inputs.image }}" --format 'image_id={{.Id}}'
+          } > image-export/image-metadata.txt
+          cat image-export/image-metadata.txt
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: image-export/
+          if-no-files-found: error
+          retention-days: 3

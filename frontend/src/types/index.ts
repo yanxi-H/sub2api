@@ -689,6 +689,7 @@ export interface ApiKey {
 
 export interface CreateApiKeyRequest {
   name: string
+  user_id?: number
   group_id?: number | null
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
@@ -698,7 +699,6 @@ export interface CreateApiKeyRequest {
   rate_limit_5h?: number
   rate_limit_1d?: number
   rate_limit_7d?: number
-  user_id?: number // 管理员指定：Key 归属的目标用户（不填则归属操作者本人）
 }
 
 export interface UpdateApiKeyRequest {
@@ -714,7 +714,7 @@ export interface UpdateApiKeyRequest {
   rate_limit_1d?: number
   rate_limit_7d?: number
   reset_rate_limit_usage?: boolean
-  user_id?: number // 管理员修改：Key 的归属用户
+  sync_7d_window_account_id?: number
 }
 
 export interface CreateGroupRequest {
@@ -1831,6 +1831,17 @@ export interface UserUsageTrendPoint {
   tokens: number
   cost: number // 标准计费
   actual_cost: number // 实际扣除
+}
+
+export interface UserRequestBodyTrendPoint {
+  date: string
+  user_id: number
+  email: string
+  username: string
+  requests: number
+  total_request_body_bytes: number
+  avg_request_body_bytes: number
+  max_request_body_bytes: number
 }
 
 export interface UserSpendingRankingItem {

@@ -73,12 +73,7 @@
               </button>
             </div>
           </div>
-          <button
-            v-if="isAdmin"
-            @click="showCreateModal = true"
-            class="btn btn-primary"
-            data-tour="keys-create-btn"
-          >
+          <button v-if="isAdmin" @click="openCreateModal" class="btn btn-primary" data-tour="keys-create-btn">
             <Icon name="plus" size="md" class="mr-2" />
             {{ t('keys.createKey') }}
           </button>
@@ -199,9 +194,7 @@
                   :rate-multiplier="row.group.rate_multiplier"
                   :user-rate-multiplier="userGroupRates[row.group.id]"
                 />
-                <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
-                  t('keys.noGroup')
-                }}</span>
+                <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{ t('keys.noGroup') }}</span>
               </div>
             </div>
           </template>
@@ -403,6 +396,13 @@
 
           <template v-if="isAdmin" #cell-actions="{ row }">
             <div class="flex items-center gap-1">
+              <button
+                @click="confirmRegenerate(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-900/20 dark:hover:text-orange-400"
+              >
+                <Icon name="refresh" size="sm" />
+                <span class="text-xs">{{ t('keys.regenerateKey') }}</span>
+              </button>
               <!-- Use Key Button -->
               <button
                 @click="openUseKeyModal(row)"
@@ -458,7 +458,7 @@
               :title="t('keys.noKeysYet')"
               :description="isAdmin ? t('keys.createFirstKey') : t('keys.readOnlyEmptyDescription')"
               :action-text="isAdmin ? t('keys.createKey') : undefined"
-              @action="showCreateModal = true"
+              @action="openCreateModal"
             />
           </template>
         </DataTable>
@@ -485,6 +485,17 @@
       @close="closeModals"
     >
       <form id="key-form" @submit.prevent="handleSubmit" class="space-y-5">
+        <div v-if="!showEditModal">
+          <label class="input-label">{{ t('keys.userLabel') }}</label>
+          <Select
+            v-model="formData.user_id"
+            :options="userOptions"
+            :placeholder="t('keys.selectUser')"
+            :searchable="true"
+            :search-placeholder="t('keys.searchUser')"
+          />
+        </div>
+
         <div>
           <label class="input-label">{{ t('keys.nameLabel') }}</label>
           <input
@@ -495,19 +506,6 @@
             :placeholder="t('keys.namePlaceholder')"
             data-tour="key-form-name"
           />
-        </div>
-
-        <div>
-          <label class="input-label">{{ t('keys.ownerLabel') }}</label>
-          <Select
-            :model-value="formData.user_id"
-            :options="userOptions"
-            :placeholder="t('keys.selectOwner')"
-            :searchable="true"
-            :search-placeholder="t('keys.searchUser')"
-            @update:model-value="(v: string | number | boolean | null) => (formData.user_id = v === null ? null : Number(v))"
-          />
-          <p class="input-hint">{{ t('keys.ownerHint') }}</p>
         </div>
 
         <div>
@@ -868,6 +866,34 @@
               </div>
             </div>
 
+            <!-- 7-Day Window Alignment (edit mode only) -->
+            <div v-if="showEditModal && isAdmin" class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-700/50">
+              <label class="input-label">{{ t('keys.sync7dWindowAccount') }}</label>
+              <select
+                v-model="formData.sync_7d_window_account_id"
+                class="input"
+                :disabled="upstreamAccountsLoading"
+              >
+                <option value="">{{ t('keys.sync7dWindowAccountNone') }}</option>
+                <option
+                  v-for="account in sync7dAccountOptions"
+                  :key="account.id"
+                  :value="String(account.id)"
+                >
+                  {{ account.label }}
+                </option>
+              </select>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('keys.sync7dWindowAccountHint') }}
+              </p>
+              <p v-if="selectedSync7dAccountResetAt" class="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                {{ t('keys.sync7dWindowAccountSelected', { time: formatDateTime(selectedSync7dAccountResetAt) }) }}
+              </p>
+              <p v-else-if="!upstreamAccountsLoading && sync7dAccountOptions.length === 0" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {{ t('keys.sync7dWindowAccountEmpty') }}
+              </p>
+            </div>
+
             <!-- Reset Rate Limit button (edit mode only) -->
             <div v-if="showEditModal && selectedKey && (selectedKey.rate_limit_5h > 0 || selectedKey.rate_limit_1d > 0 || selectedKey.rate_limit_7d > 0)">
               <button
@@ -877,31 +903,6 @@
               >
                 {{ t('keys.resetRateLimitUsage') }}
               </button>
-            </div>
-
-            <!-- 窗口起始时间对齐（编辑模式 + 已配置 7d 限额时显示） -->
-            <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_7d > 0" class="rounded-lg border border-gray-200 dark:border-dark-600 p-3 space-y-2">
-              <div class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('keys.windowAlignTitle') }}</div>
-              <div class="text-xs text-gray-500 dark:text-dark-400">{{ t('keys.windowAlignHint') }}</div>
-              <div class="flex flex-wrap items-end gap-2">
-                <div class="flex-1 min-w-[180px]">
-                  <label class="input-label text-xs">{{ t('keys.window7dStart') }}</label>
-                  <input
-                    v-model="windowAlign.window_7d_start"
-                    type="datetime-local"
-                    class="input text-sm"
-                    :disabled="windowAlign.submitting"
-                  />
-                </div>
-                <button
-                  type="button"
-                  @click="applyWindowAlign"
-                  :disabled="windowAlign.submitting || !windowAlign.window_7d_start"
-                  class="btn btn-primary text-sm"
-                >
-                  {{ windowAlign.submitting ? t('common.saving') : t('keys.applyWindowAlign') }}
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1034,6 +1035,18 @@
       :danger="true"
       @confirm="handleDelete"
       @cancel="showDeleteDialog = false"
+    />
+
+    <ConfirmDialog
+      v-if="isAdmin"
+      :show="showRegenerateDialog"
+      :title="t('keys.regenerateKeyConfirmTitle')"
+      :message="t('keys.regenerateKeyConfirmMessage', { name: selectedKey?.name })"
+      :confirm-text="t('keys.regenerateKey')"
+      :cancel-text="t('common.cancel')"
+      :danger="true"
+      @confirm="handleRegenerate"
+      @cancel="showRegenerateDialog = false"
     />
 
     <!-- Reset Quota Confirmation Dialog -->
@@ -1201,7 +1214,6 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI, adminAPI } from '@/api'
-import { apiKeysAPI as apiKeysAdminAPI } from '@/api/admin'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
@@ -1216,7 +1228,7 @@ import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+import type { Account, AdminUser, ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1252,16 +1264,10 @@ const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
-// 管理员在该页面查看/管理全系统所有用户的 API Key
 const isAdmin = computed(() => authStore.isAdmin)
 
 const allColumns = computed<Column[]>(() => {
-  const cols: Column[] = []
-  // 管理员视图：在最前展示「所属用户」列，便于区分每条 Key 属于哪个用户
-  if (isAdmin.value) {
-    cols.push({ key: 'owner', label: t('keys.ownerColumn'), sortable: false })
-  }
-  cols.push(
+  const cols: Column[] = [
     { key: 'name', label: t('common.name'), sortable: true },
     { key: 'id', label: t('keys.id'), sortable: true },
     { key: 'key', label: t('keys.apiKey'), sortable: false },
@@ -1274,8 +1280,9 @@ const allColumns = computed<Column[]>(() => {
     { key: 'last_used_at', label: t('keys.lastUsedAt'), sortable: true },
     { key: 'last_used_ip', label: t('keys.lastUsedIP'), sortable: false },
     { key: 'created_at', label: t('keys.created'), sortable: true }
-  )
+  ]
   if (isAdmin.value) {
+    cols.unshift({ key: 'owner', label: t('keys.ownerColumn'), sortable: false })
     cols.push({ key: 'actions', label: t('common.actions'), sortable: false })
   }
   return cols
@@ -1361,7 +1368,11 @@ const columns = computed<Column[]>(() =>
 
 const apiKeys = ref<ApiKey[]>([])
 const groups = ref<Group[]>([])
+const users = ref<AdminUser[]>([])
+const upstreamAccounts = ref<Account[]>([])
 const loading = ref(false)
+const usersLoading = ref(false)
+const upstreamAccountsLoading = ref(false)
 const submitting = ref(false)
 const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
@@ -1387,6 +1398,7 @@ const filterGroupId = ref<string | number>('')
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteDialog = ref(false)
+const showRegenerateDialog = ref(false)
 const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
 const showUseKeyModal = ref(false)
@@ -1402,6 +1414,7 @@ const columnDropdownRef = ref<HTMLElement | null>(null)
 const dropdownPosition = ref<{ top?: number; bottom?: number; left: number } | null>(null)
 const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
 let abortController: AbortController | null = null
+let upstreamAccountsLoadPromise: Promise<void> | null = null
 
 // Get the currently selected key for group change
 const selectedKeyForGroup = computed(() => {
@@ -1419,7 +1432,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 
 const formData = ref({
   name: '',
-  user_id: null as number | null, // 管理员指定归属用户(null = 归属管理员自己)
+  user_id: null as number | null,
   group_id: null as number | null,
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
@@ -1435,16 +1448,10 @@ const formData = ref({
   rate_limit_5h: null as number | null,
   rate_limit_1d: null as number | null,
   rate_limit_7d: null as number | null,
+  sync_7d_window_account_id: '',
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: ''
-})
-
-// 速率限制窗口起始时间对齐（编辑模式下，管理员可手动对齐到 Codex 官方刷新周期）
-// 空字符串 = 不修改；填 RFC3339 时刻 = 把对应窗口起点设为该时刻（保留 usage）
-const windowAlign = ref({
-  window_7d_start: '' as string,
-  submitting: false as boolean
 })
 
 // 自定义Key验证
@@ -1467,6 +1474,17 @@ const statusOptions = computed(() => [
   { value: 'active', label: t('common.active') },
   { value: 'inactive', label: t('common.inactive') }
 ])
+
+const userOptions = computed(() =>
+  users.value.map((user) => {
+    const displayName = user.username?.trim() || user.email
+    return {
+      value: user.id,
+      label: `${displayName} <${user.email}> (ID: ${user.id})`,
+      description: user.status
+    }
+  })
+)
 
 const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
   if (key.status === 'quota_exhausted' || key.status === 'expired') {
@@ -1522,21 +1540,6 @@ const groupOptions = computed(() =>
   }))
 )
 
-// 归属用户下拉选项（管理员分配 Key 时使用）。仅管理员加载一次全量用户列表。
-const userOptions = ref<{ value: number; label: string }[]>([])
-const loadUserOptions = async () => {
-  if (!isAdmin.value || userOptions.value.length > 0) return
-  try {
-    const res = await adminAPI.users.list(1, 200, {})
-    userOptions.value = res.items.map((u) => ({
-      value: u.id,
-      label: `${u.username} (${u.email})`
-    }))
-  } catch (e) {
-    console.error('Failed to load user options:', e)
-  }
-}
-
 // Group dropdown search
 const groupSearchQuery = ref('')
 const filteredGroupOptions = computed(() => {
@@ -1546,6 +1549,56 @@ const filteredGroupOptions = computed(() => {
     return opt.label.toLowerCase().includes(query) ||
       (opt.description && opt.description.toLowerCase().includes(query))
   })
+})
+
+const parseResetAtValue = (value: unknown): string | null => {
+  if (typeof value === 'string' && value.trim()) {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  if (typeof value === 'number' && value > 0) {
+    return new Date(value * 1000).toISOString()
+  }
+  return null
+}
+
+const getAccount7dResetAt = (account: Account): string | null => {
+  const extra = account.extra || {}
+  const candidates = [
+    parseResetAtValue(extra.codex_7d_reset_at),
+    parseResetAtValue(extra.passive_usage_7d_reset),
+    parseResetAtValue(extra.quota_weekly_reset_at)
+  ]
+  const nowMs = Date.now()
+  return candidates.find((value) => value !== null && new Date(value).getTime() > nowMs) || null
+}
+
+const getAccount7dResetSource = (account: Account, resetAt: string | null) => {
+  const extra = account.extra || {}
+  if (resetAt === parseResetAtValue(extra.codex_7d_reset_at)) return t('keys.sync7dWindowSourceCodex')
+  if (resetAt === parseResetAtValue(extra.passive_usage_7d_reset)) return t('keys.sync7dWindowSourcePassive')
+  if (resetAt === parseResetAtValue(extra.quota_weekly_reset_at)) return t('keys.sync7dWindowSourceWeeklyQuota')
+  return t('common.unknown')
+}
+
+const sync7dAccountOptions = computed(() =>
+  upstreamAccounts.value
+    .map((account) => {
+      const resetAt = getAccount7dResetAt(account)
+      const source = getAccount7dResetSource(account, resetAt)
+      return {
+        id: account.id,
+        label: `#${account.id} ${account.name} · ${account.platform}/${account.type} · ${source} · ${formatDateTime(resetAt || '')}`,
+        resetAt
+      }
+    })
+    .filter((account) => account.resetAt !== null)
+)
+
+const selectedSync7dAccountResetAt = computed(() => {
+  const id = Number(formData.value.sync_7d_window_account_id)
+  if (!id) return null
+  return sync7dAccountOptions.value.find((account) => account.id === id)?.resetAt || null
 })
 
 const copyToClipboard = async (text: string, keyId: number) => {
@@ -1628,6 +1681,69 @@ const loadGroups = async () => {
   }
 }
 
+const loadUsers = async () => {
+  if (!isAdmin.value || usersLoading.value) return
+  usersLoading.value = true
+  try {
+    const pageSize = 1000
+    let page = 1
+    let pages = 1
+    const items: AdminUser[] = []
+    do {
+      const response = await adminAPI.users.list(page, pageSize, { sort_by: 'email', sort_order: 'asc' })
+      items.push(...response.items)
+      pages = response.pages || 1
+      page += 1
+    } while (page <= pages)
+    users.value = items
+  } catch (error) {
+    console.error('Failed to load users:', error)
+    appStore.showError(t('keys.failedToLoadUsers'))
+  } finally {
+    usersLoading.value = false
+  }
+}
+
+const loadUpstreamAccounts = async () => {
+  if (!isAdmin.value || upstreamAccounts.value.length > 0) return
+  if (upstreamAccountsLoadPromise) return upstreamAccountsLoadPromise
+  upstreamAccountsLoading.value = true
+  upstreamAccountsLoadPromise = (async () => {
+    try {
+      const pageSize = 1000
+      let page = 1
+      let pages = 1
+      const items: Account[] = []
+      do {
+        const response = await adminAPI.accounts.list(page, pageSize, {
+          sort_by: 'name',
+          sort_order: 'asc',
+          lite: '1'
+        })
+        items.push(...response.items)
+        pages = response.pages || 1
+        page += 1
+      } while (page <= pages)
+      upstreamAccounts.value = items
+    } catch (error) {
+      console.error('Failed to load accounts:', error)
+      appStore.showError(t('keys.failedToLoadAccounts'))
+    } finally {
+      upstreamAccountsLoading.value = false
+      upstreamAccountsLoadPromise = null
+    }
+  })()
+  return upstreamAccountsLoadPromise
+}
+
+const openCreateModal = async () => {
+  if (!isAdmin.value) return
+  showCreateModal.value = true
+  if (users.value.length === 0) {
+    await loadUsers()
+  }
+}
+
 const loadUserGroupRates = async () => {
   try {
     userGroupRates.value = await userGroupsAPI.getUserGroupRates()
@@ -1679,7 +1795,7 @@ const editKey = (key: ApiKey) => {
   const hasExpiration = !!key.expires_at
   formData.value = {
     name: key.name,
-    user_id: key.user_id ?? null,
+    user_id: key.user_id,
     group_id: key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
@@ -1693,11 +1809,13 @@ const editKey = (key: ApiKey) => {
     rate_limit_5h: key.rate_limit_5h || null,
     rate_limit_1d: key.rate_limit_1d || null,
     rate_limit_7d: key.rate_limit_7d || null,
+    sync_7d_window_account_id: '',
     enable_expiration: hasExpiration,
     expiration_preset: 'custom',
     expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
   }
   showEditModal.value = true
+  loadUpstreamAccounts()
 }
 
 const toggleKeyStatus = async (key: ApiKey) => {
@@ -1782,8 +1900,18 @@ const confirmDelete = (key: ApiKey) => {
   showDeleteDialog.value = true
 }
 
+const confirmRegenerate = (key: ApiKey) => {
+  if (!isAdmin.value) return
+  selectedKey.value = key
+  showRegenerateDialog.value = true
+}
+
 const handleSubmit = async () => {
   if (!isAdmin.value) return
+  if (!showEditModal.value && !formData.value.user_id) {
+    appStore.showError(t('keys.userRequired'))
+    return
+  }
   // Validate group_id is required
   if (formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
@@ -1851,12 +1979,12 @@ const handleSubmit = async () => {
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
       }
+      const sync7dAccountId = Number(formData.value.sync_7d_window_account_id)
+      if (sync7dAccountId > 0) {
+        updates.sync_7d_window_account_id = sync7dAccountId
+      }
       if (shouldSubmitEditStatus(selectedKey.value, formData.value.status)) {
         updates.status = formData.value.status
-      }
-      // 管理员修改归属用户：仅当变更时才提交
-      if (formData.value.user_id !== null && formData.value.user_id !== selectedKey.value.user_id) {
-        updates.user_id = formData.value.user_id
       }
       await keysAPI.update(selectedKey.value.id, updates)
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
@@ -1864,14 +1992,14 @@ const handleSubmit = async () => {
       const customKey = formData.value.use_custom_key ? formData.value.custom_key : undefined
       await keysAPI.create(
         formData.value.name,
+        formData.value.user_id,
         formData.value.group_id,
         customKey,
         ipWhitelist,
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData,
-        formData.value.user_id ?? undefined
+        rateLimitData
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1911,6 +2039,22 @@ const handleDelete = async () => {
   }
 }
 
+const handleRegenerate = async () => {
+  if (!isAdmin.value || !selectedKey.value) return
+
+  try {
+    const regeneratedKey = await keysAPI.regenerate(selectedKey.value.id)
+    apiKeys.value = apiKeys.value.map((key) => key.id === regeneratedKey.id ? regeneratedKey : key)
+    selectedKey.value = regeneratedKey
+    showRegenerateDialog.value = false
+    showUseKeyModal.value = true
+    appStore.showSuccess(t('keys.keyRegeneratedSuccess'))
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || t('keys.failedToRegenerateKey')
+    appStore.showError(errorMsg)
+  }
+}
+
 const closeModals = () => {
   showCreateModal.value = false
   showEditModal.value = false
@@ -1931,6 +2075,7 @@ const closeModals = () => {
     rate_limit_5h: null,
     rate_limit_1d: null,
     rate_limit_7d: null,
+    sync_7d_window_account_id: '',
     enable_expiration: false,
     expiration_preset: '30',
     expiration_date: ''
@@ -2000,38 +2145,6 @@ const resetRateLimitUsage = async () => {
   } catch (error: any) {
     const errorMsg = error.response?.data?.detail || t('keys.failedToResetRateLimit')
     appStore.showError(errorMsg)
-  }
-}
-
-// 仅调整速率限制窗口的起始时间（保留 usage 已用金额），用于对齐 Codex 官方账号刷新周期。
-const applyWindowAlign = async () => {
-  if (!isAdmin.value) return
-  if (!selectedKey.value) return
-  if (!windowAlign.value.window_7d_start) return
-
-  // datetime-local 是本地时区，转成 RFC3339（带时区偏移）
-  const local = new Date(windowAlign.value.window_7d_start)
-  if (isNaN(local.getTime())) {
-    appStore.showError(t('keys.windowAlignInvalidTime'))
-    return
-  }
-  windowAlign.value.submitting = true
-  try {
-    await apiKeysAdminAPI.setApiKeyWindowStart(selectedKey.value.id, {
-      window_7d_start: local.toISOString()
-    })
-    appStore.showSuccess(t('keys.windowAlignSuccess'))
-    windowAlign.value.window_7d_start = ''
-    await loadApiKeys()
-    const refreshedKey = apiKeys.value.find(k => k.id === selectedKey.value!.id)
-    if (refreshedKey) {
-      selectedKey.value = refreshedKey
-    }
-  } catch (error: any) {
-    const errorMsg = error.response?.data?.detail || t('keys.windowAlignFailed')
-    appStore.showError(errorMsg)
-  } finally {
-    windowAlign.value.submitting = false
   }
 }
 
@@ -2125,7 +2238,6 @@ onMounted(() => {
   loadGroups()
   loadUserGroupRates()
   loadPublicSettings()
-  loadUserOptions()
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)
 })

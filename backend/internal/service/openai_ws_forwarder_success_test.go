@@ -550,6 +550,11 @@ func TestOpenAIGatewayService_Forward_WSv2_ResponseFailedIsNotSchedulingSuccess(
 	require.Equal(t, "response.failed", result.UpstreamTerminalEvent)
 	require.False(t, result.SucceededForScheduling())
 	require.True(t, svc.isOpenAIAccountModelRuntimeBlocked(account, "gpt-5.5"))
+	streamErr, marked := GetOpsStreamError(c)
+	require.True(t, marked)
+	require.True(t, streamErr.CountTowardsSLA)
+	require.Equal(t, http.StatusBadGateway, streamErr.IntendedStatus)
+	require.Equal(t, "server_error", streamErr.Code)
 }
 
 func TestOpenAIWSPayloadString_OnlyAcceptsStringValues(t *testing.T) {

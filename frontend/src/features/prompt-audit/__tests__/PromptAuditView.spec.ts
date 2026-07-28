@@ -20,7 +20,7 @@ vi.mock('vue-i18n', async () => {
 
 const baseConfig = (): PromptAuditConfig => ({
   enabled: true, blocking_enabled: false, store_pass_events: false, effective_mode: 'async_audit', strategy: 'priority',
-  worker_count: 4, queue_capacity: 100, scanners: SCANNER_CATALOG.map((item) => item.id), all_groups: true, group_ids: [],
+  worker_count: 4, queue_capacity: 100, retention_days: 30, scanners: SCANNER_CATALOG.map((item) => item.id), all_groups: true, group_ids: [],
   endpoints: [{ id: 'guard-1', name: 'Guard One', protocol: 'openai_compatible', base_url: 'http://127.0.0.1:8000', model: 'guard-model', timeout_ms: 3000, input_limit: 4000, enabled: true, has_token: true, token_status: 'configured' }],
   config_version: 7, updated_at: '2026-07-16T00:00:00Z', updated_by: 1, change_summary: '{}',
 })
@@ -42,7 +42,7 @@ const PolicyStub = defineComponent({ props: ['draft', 'groups'], emits: ['update
 const EventsStub = defineComponent({
   props: ['events', 'filters', 'selectedIds', 'loading', 'error', 'total', 'page', 'pageSize'],
   emits: ['filters-change', 'search', 'selection', 'page', 'page-size', 'view', 'delete', 'batch-delete', 'preview-delete'],
-  template: '<div data-test="events"><button data-test="preview" @click="$emit(\'preview-delete\')">preview</button><button data-test="change-filter" @click="$emit(\'filters-change\', { ...filters, keyword: \'changed\' })">change</button><button data-test="delete-one" @click="$emit(\'delete\', 5)">delete</button><button data-test="select-batch" @click="$emit(\'selection\', [5, 6])">select</button><button data-test="delete-batch" @click="$emit(\'batch-delete\')">batch</button></div>',
+  template: '<div data-test="events"><button data-test="view-one" @click="$emit(\'view\', 5)">view</button><button data-test="preview" @click="$emit(\'preview-delete\')">preview</button><button data-test="change-filter" @click="$emit(\'filters-change\', { ...filters, keyword: \'changed\' })">change</button><button data-test="delete-one" @click="$emit(\'delete\', 5)">delete</button><button data-test="select-batch" @click="$emit(\'selection\', [5, 6])">select</button><button data-test="delete-batch" @click="$emit(\'batch-delete\')">batch</button></div>',
 })
 const DetailStub = defineComponent({ props: ['show', 'event', 'loading'], emits: ['close'], template: '<div data-test="detail" />' })
 const ConfirmStub = defineComponent({ props: ['show', 'title', 'message'], emits: ['confirm', 'cancel'], template: '<div v-if="show" data-test="confirm"><button data-test="confirm-action" @click="$emit(\'confirm\')">confirm</button></div>' })
@@ -54,7 +54,7 @@ const FilterDeleteStub = defineComponent({
 
 function mountView() {
   return mount(PromptAuditView, {
-    global: { stubs: { AppLayout: AppLayoutStub, RuntimeOverview: RuntimeStub, EndpointPool: EndpointStub, PolicyPanel: PolicyStub, EventWorkspace: EventsStub, EventDetailDialog: DetailStub, FilterDeleteDialog: FilterDeleteStub, ConfirmDialog: ConfirmStub } },
+    global: { stubs: { AppLayout: AppLayoutStub, RuntimeOverview: RuntimeStub, EndpointPool: EndpointStub, PolicyPanel: PolicyStub, EventWorkspace: EventsStub, EventDetailDialog: DetailStub, FilterDeleteDialog: FilterDeleteStub, ConfirmDialog: ConfirmStub, TotpStepUpDialog: true } },
   })
 }
 
@@ -65,6 +65,7 @@ describe('PromptAuditView', () => {
     mocks.getRuntime.mockResolvedValue(runtime())
     mocks.listGroups.mockResolvedValue([])
     mocks.listEvents.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
+    mocks.getEvent.mockResolvedValue({ id: 5 })
     mocks.updateConfig.mockImplementation(async () => ({ ...baseConfig(), config_version: 8 }))
     mocks.probeEndpoint.mockResolvedValue({ ok: true, status: 'healthy', message: 'ok', latency_ms: 2, http_status: 200, retryable: false, checked_at: '2026-07-16T00:00:00Z', token_applied: true })
     mocks.previewDelete.mockResolvedValue({ matched_count: 2, filter_summary: {}, snapshot_max_id: 10, filter_hash: 'a'.repeat(64), confirmation_token: 'opaque-confirmation', expires_at: '2026-07-16T00:05:00Z' })
@@ -211,6 +212,31 @@ describe('PromptAuditView', () => {
       confirmation_token: 'opaque-confirmation',
     }))
     expect(wrapper.find('[data-test="filter-delete-dialog"]').exists()).toBe(false)
+  })
+
+  it('loads an event detail only after the protected detail action is requested', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(mocks.getEvent).not.toHaveBeenCalled()
+    await wrapper.get('[data-test="view-one"]').trigger('click')
+    await flushPromises()
+    expect(mocks.getEvent).toHaveBeenCalledWith(5, expect.anything())
+  })
+
+  it('coalesces rapid detail clicks while a protected request is pending', async () => {
+    let resolveDetail!: (value: { id: number }) => void
+    mocks.getEvent.mockImplementation(() => new Promise((resolve) => { resolveDetail = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const viewButton = wrapper.get('[data-test="view-one"]')
+    await viewButton.trigger('click')
+    await viewButton.trigger('click')
+    expect(mocks.getEvent).toHaveBeenCalledTimes(1)
+
+    resolveDetail({ id: 5 })
+    await flushPromises()
+    expect(wrapper.getComponent(DetailStub).props('loading')).toBe(false)
   })
 
   it('mints the confirmation token on the fly for one-click filter deletion without a manual preview', async () => {

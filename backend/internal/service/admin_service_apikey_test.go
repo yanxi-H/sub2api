@@ -127,6 +127,73 @@ type apiKeyRepoStubForGroupUpdate struct {
 	updated   *APIKey // captures what was passed to Update
 }
 
+type apiKeyBatchRepoStub struct {
+	apiKeyRepoStubForGroupUpdate
+	keys            map[int64]*APIKey
+	updatedAll      map[int64]*APIKey
+	getByIDsCalls   int
+	batchResetCalls int
+	batchSyncCalls  int
+}
+
+func (s *apiKeyBatchRepoStub) GetByID(_ context.Context, id int64) (*APIKey, error) {
+	key, ok := s.keys[id]
+	if !ok {
+		return nil, ErrAPIKeyNotFound
+	}
+	clone := *key
+	return &clone, nil
+}
+
+func (s *apiKeyBatchRepoStub) Update(_ context.Context, key *APIKey) error {
+	if s.updatedAll == nil {
+		s.updatedAll = make(map[int64]*APIKey)
+	}
+	clone := *key
+	s.updatedAll[key.ID] = &clone
+	return nil
+}
+
+func (s *apiKeyBatchRepoStub) GetByIDs(_ context.Context, ids []int64) ([]*APIKey, error) {
+	s.getByIDsCalls++
+	rows := make([]*APIKey, 0, len(ids))
+	for _, id := range ids {
+		if key, ok := s.keys[id]; ok {
+			clone := *key
+			rows = append(rows, &clone)
+		}
+	}
+	return rows, nil
+}
+
+func (s *apiKeyBatchRepoStub) BatchSet7dWindowStart(_ context.Context, ids []int64, groupID *int64, windowStart time.Time) (int, error) {
+	s.batchSyncCalls++
+	return s.applyBatch(ids, groupID, func(key *APIKey) { key.Window7dStart = &windowStart }), nil
+}
+
+func (s *apiKeyBatchRepoStub) BatchReset7dUsage(_ context.Context, ids []int64, groupID *int64) (int, error) {
+	s.batchResetCalls++
+	return s.applyBatch(ids, groupID, func(key *APIKey) { key.Usage7d = 0 }), nil
+}
+
+func (s *apiKeyBatchRepoStub) applyBatch(ids []int64, groupID *int64, update func(*APIKey)) int {
+	if s.updatedAll == nil {
+		s.updatedAll = make(map[int64]*APIKey)
+	}
+	updated := 0
+	for _, id := range ids {
+		key, ok := s.keys[id]
+		if !ok || (groupID == nil && key.GroupID != nil) || (groupID != nil && (key.GroupID == nil || *key.GroupID != *groupID)) {
+			continue
+		}
+		clone := *key
+		update(&clone)
+		s.updatedAll[id] = &clone
+		updated++
+	}
+	return updated
+}
+
 func (s *apiKeyRepoStubForGroupUpdate) GetByID(_ context.Context, _ int64) (*APIKey, error) {
 	if s.getErr != nil {
 		return nil, s.getErr
@@ -293,6 +360,87 @@ func (s *userSubRepoStubForGroupUpdate) GetActiveByUserIDAndGroupID(_ context.Co
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+func TestAdminService_AdminBatchResetAPIKey7dUsage_PreservesOtherFields(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	groupID := int64(3)
+	key := &APIKey{
+		ID: 11, UserID: 7, Key: "sk-batch", Name: "Batch", Status: StatusActive,
+		GroupID: &groupID,
+		Quota:   50, QuotaUsed: 12, RateLimit5h: 10, RateLimit1d: 20, RateLimit7d: 30,
+		Usage5h: 4, Usage1d: 5, Usage7d: 6,
+		Window5hStart: &now, Window1dStart: &now, Window7dStart: &now,
+	}
+	repo := &apiKeyBatchRepoStub{keys: map[int64]*APIKey{11: key}}
+	cache := &authCacheInvalidatorStub{}
+	svc := &adminServiceImpl{apiKeyRepo: repo, authCacheInvalidator: cache}
+
+	updated, err := svc.AdminBatchResetAPIKey7dUsage(context.Background(), []int64{11, 11}, groupID)
+
+	require.NoError(t, err)
+	require.Len(t, updated, 1, "duplicate IDs should be updated once")
+	got := repo.updatedAll[11]
+	require.Zero(t, got.Usage7d)
+	require.Equal(t, &now, got.Window7dStart)
+	require.Equal(t, 4.0, got.Usage5h)
+	require.Equal(t, 5.0, got.Usage1d)
+	require.Equal(t, &now, got.Window5hStart)
+	require.Equal(t, &now, got.Window1dStart)
+	require.Equal(t, 50.0, got.Quota)
+	require.Equal(t, 12.0, got.QuotaUsed)
+	require.Equal(t, 30.0, got.RateLimit7d)
+	require.Equal(t, StatusActive, got.Status)
+	require.Equal(t, []string{"sk-batch"}, cache.keys)
+	require.Equal(t, 1, repo.getByIDsCalls)
+	require.Equal(t, 1, repo.batchResetCalls)
+}
+
+func TestAdminService_AdminBatchSyncAPIKey7dWindow_UsesSelectedAccount(t *testing.T) {
+	now := time.Now().UTC()
+	resetAt := now.Add(72 * time.Hour).Truncate(time.Second)
+	groupID := int64(3)
+	key := &APIKey{ID: 12, Key: "sk-sync", GroupID: &groupID, Usage7d: 8, RateLimit7d: 20}
+	keyRepo := &apiKeyBatchRepoStub{keys: map[int64]*APIKey{12: key}}
+	accountRepo := &accountRepoStubForBulkUpdate{getByIDAccounts: map[int64]*Account{
+		42: {ID: 42, GroupIDs: []int64{groupID}, Extra: map[string]any{"codex_7d_reset_at": resetAt.Format(time.RFC3339)}},
+	}}
+	svc := &adminServiceImpl{apiKeyRepo: keyRepo, accountRepo: accountRepo}
+
+	updated, err := svc.AdminBatchSyncAPIKey7dWindow(context.Background(), []int64{12}, groupID, 42)
+
+	require.NoError(t, err)
+	require.Len(t, updated, 1)
+	require.NotNil(t, keyRepo.updatedAll[12].Window7dStart)
+	require.WithinDuration(t, resetAt.Add(-RateLimitWindow7d), *keyRepo.updatedAll[12].Window7dStart, time.Second)
+	require.Equal(t, 8.0, keyRepo.updatedAll[12].Usage7d, "sync must not clear existing usage")
+	require.Equal(t, 1, keyRepo.getByIDsCalls)
+	require.Equal(t, 1, keyRepo.batchSyncCalls)
+}
+
+func TestAdminService_AdminBatchResetAPIKey7dUsage_RejectsEmptySelection(t *testing.T) {
+	svc := &adminServiceImpl{}
+	_, err := svc.AdminBatchResetAPIKey7dUsage(context.Background(), nil, 3)
+	require.Equal(t, "API_KEY_IDS_REQUIRED", infraerrors.Reason(err))
+}
+
+func TestAdminService_AdminBatchResetAPIKey7dUsage_RejectsKeyFromAnotherGroup(t *testing.T) {
+	groupID := int64(4)
+	repo := &apiKeyBatchRepoStub{keys: map[int64]*APIKey{11: {ID: 11, GroupID: &groupID}}}
+	svc := &adminServiceImpl{apiKeyRepo: repo}
+	_, err := svc.AdminBatchResetAPIKey7dUsage(context.Background(), []int64{11}, 3)
+	require.Equal(t, "API_KEY_GROUP_MISMATCH", infraerrors.Reason(err))
+	require.Zero(t, repo.batchResetCalls)
+}
+
+func TestAdminService_AdminBatchSyncAPIKey7dWindow_RejectsAccountFromAnotherGroup(t *testing.T) {
+	resetAt := time.Now().Add(24 * time.Hour)
+	accountRepo := &accountRepoStubForBulkUpdate{getByIDAccounts: map[int64]*Account{
+		42: {ID: 42, GroupIDs: []int64{4}, Extra: map[string]any{"codex_7d_reset_at": resetAt.Format(time.RFC3339)}},
+	}}
+	svc := &adminServiceImpl{accountRepo: accountRepo}
+	_, err := svc.AdminBatchSyncAPIKey7dWindow(context.Background(), []int64{11}, 3, 42)
+	require.Equal(t, "ACCOUNT_GROUP_MISMATCH", infraerrors.Reason(err))
+}
 
 func TestAdminService_AdminUpdateAPIKeyGroupID_KeyNotFound(t *testing.T) {
 	repo := &apiKeyRepoStubForGroupUpdate{getErr: ErrAPIKeyNotFound}

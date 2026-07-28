@@ -11,6 +11,7 @@ import type {
   GroupStat,
   ApiKeyUsageTrendPoint,
   UserUsageTrendPoint,
+  UserRequestBodyTrendPoint,
   UserSpendingRankingResponse,
   UserBreakdownItem,
   UsageRequestType
@@ -237,6 +238,18 @@ export interface UserTrendResponse {
   granularity: string
 }
 
+export interface UserRequestBodyTrendResponse {
+  trend: UserRequestBodyTrendPoint[]
+  start_date: string
+  end_date: string
+  granularity: string
+}
+
+export interface UserRequestBodyTrendParams
+  extends Pick<TrendParams, 'start_date' | 'end_date'> {
+  limit?: number
+}
+
 export interface UserSpendingRankingParams
   extends Pick<TrendParams, 'start_date' | 'end_date'> {
   limit?: number
@@ -251,6 +264,16 @@ export async function getUserUsageTrend(params?: UserTrendParams): Promise<UserT
   const { data } = await apiClient.get<UserTrendResponse>('/admin/dashboard/users-trend', {
     params
   })
+  return data
+}
+
+export async function getUserRequestBodyTrend(
+  params?: UserRequestBodyTrendParams
+): Promise<UserRequestBodyTrendResponse> {
+  const { data } = await apiClient.get<UserRequestBodyTrendResponse>(
+    '/admin/dashboard/request-body-trend',
+    { params }
+  )
   return data
 }
 
@@ -333,6 +356,7 @@ export const dashboardAPI = {
   getSnapshotV2,
   getApiKeyUsageTrend,
   getUserUsageTrend,
+  getUserRequestBodyTrend,
   getUserSpendingRanking,
   getBatchUsersUsage,
   getBatchApiKeysUsage

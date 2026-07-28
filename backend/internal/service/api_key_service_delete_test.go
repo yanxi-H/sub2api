@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -29,8 +30,10 @@ type apiKeyRepoStub struct {
 	getByIDErr             error   // GetKeyAndOwnerID 的错误返回值
 	deleteErr              error   // Delete 的错误返回值
 	updateErr              error   // Update 的错误返回值
+	existsByKey            bool
 	deletedIDs             []int64 // 记录已删除的 API Key ID 列表
 	updatedKeys            []APIKey
+	createdKeys            []APIKey
 	allowListByUserID      bool
 	listByUserIDKeys       []APIKey
 	listByUserIDErr        error
@@ -50,7 +53,10 @@ type apiKeyRepoStub struct {
 // 以下方法在本测试中不应被调用，使用 panic 确保测试失败时能快速定位问题
 
 func (s *apiKeyRepoStub) Create(ctx context.Context, key *APIKey) error {
-	panic("unexpected Create call")
+	if key != nil {
+		s.createdKeys = append(s.createdKeys, *key)
+	}
+	return nil
 }
 
 func (s *apiKeyRepoStub) GetByID(ctx context.Context, id int64) (*APIKey, error) {
@@ -62,6 +68,23 @@ func (s *apiKeyRepoStub) GetByID(ctx context.Context, id int64) (*APIKey, error)
 		return &clone, nil
 	}
 	panic("unexpected GetByID call")
+}
+
+func TestAPIKeyService_Create_AssignsKeyToSpecifiedUser(t *testing.T) {
+	targetUserID := int64(42)
+	apiKeyRepo := &apiKeyRepoStub{}
+	userRepo := &userRepoStub{user: &User{ID: targetUserID, Status: StatusActive}}
+	svc := NewAPIKeyService(apiKeyRepo, userRepo, nil, nil, nil, nil, &config.Config{})
+
+	created, err := svc.Create(context.Background(), 1, CreateAPIKeyRequest{
+		Name:   "assigned-by-admin",
+		UserID: &targetUserID,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, targetUserID, created.UserID)
+	require.Len(t, apiKeyRepo.createdKeys, 1)
+	require.Equal(t, targetUserID, apiKeyRepo.createdKeys[0].UserID)
 }
 
 func (s *apiKeyRepoStub) GetKeyAndOwnerID(ctx context.Context, id int64) (string, int64, error) {
@@ -123,50 +146,6 @@ func (s *apiKeyRepoStub) ListByUserID(ctx context.Context, userID int64, params 
 	}, nil
 }
 
-// ListAll 管理员全局视图的测试桩：管理员路径未在此文件启用时不应被调用。
-func (s *apiKeyRepoStub) ListAll(ctx context.Context, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
-	panic("unexpected ListAll call")
-}
-
-// listAllApiKeyRepoStub 专用于管理员 List/UpdateAsAdmin/DeleteAsAdmin 路径的测试桩。
-// 它在 apiKeyRepoStub 基础上支持 ListAll，便于验证「管理员能看到/操作全系统所有用户的 Key」。
-type listAllApiKeyRepoStub struct {
-	apiKeyRepoStub
-	allKeys     []APIKey
-	listAllErr  error
-	listAllArg  *APIKeyListFilters // 记录最近一次传入的 filters（用于断言 UserID 过滤）
-	updateCalls []int64            // 记录被 Update 的 Key ID
-}
-
-func (s *listAllApiKeyRepoStub) ListAll(_ context.Context, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
-	if s.listAllErr != nil {
-		return nil, nil, s.listAllErr
-	}
-	f := filters
-	s.listAllArg = &f
-	var keys []APIKey
-	if filters.UserID != nil {
-		for i := range s.allKeys {
-			if s.allKeys[i].UserID == *filters.UserID {
-				keys = append(keys, s.allKeys[i])
-			}
-		}
-	} else {
-		keys = append([]APIKey(nil), s.allKeys...)
-	}
-	return keys, &pagination.PaginationResult{
-		Total:    int64(len(keys)),
-		Page:     params.Page,
-		PageSize: params.PageSize,
-		Pages:    1,
-	}, nil
-}
-
-func (s *listAllApiKeyRepoStub) Update(ctx context.Context, key *APIKey) error {
-	s.updateCalls = append(s.updateCalls, key.ID)
-	return nil
-}
-
 func (s *apiKeyRepoStub) ListAllByUserID(ctx context.Context, userID int64, filters APIKeyListFilters) ([]APIKey, error) {
 	if !s.allowListAllByUserID {
 		panic("unexpected ListAllByUserID call")
@@ -212,6 +191,50 @@ func filterAPIKeyStubKeys(userID int64, keys []APIKey, filters APIKeyListFilters
 	return result
 }
 
+// ListAll 管理员全局视图的测试桩：管理员路径未在此文件启用时不应被调用。
+func (s *apiKeyRepoStub) ListAll(ctx context.Context, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
+	panic("unexpected ListAll call")
+}
+
+// listAllApiKeyRepoStub 专用于管理员 List/UpdateAsAdmin/DeleteAsAdmin 路径的测试桩。
+// 它在 apiKeyRepoStub 基础上支持 ListAll，便于验证「管理员能看到/操作全系统所有用户的 Key」。
+type listAllApiKeyRepoStub struct {
+	apiKeyRepoStub
+	allKeys     []APIKey
+	listAllErr  error
+	listAllArg  *APIKeyListFilters // 记录最近一次传入的 filters（用于断言 UserID 过滤）
+	updateCalls []int64            // 记录被 Update 的 Key ID
+}
+
+func (s *listAllApiKeyRepoStub) ListAll(_ context.Context, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
+	if s.listAllErr != nil {
+		return nil, nil, s.listAllErr
+	}
+	f := filters
+	s.listAllArg = &f
+	var keys []APIKey
+	if filters.UserID != nil {
+		for i := range s.allKeys {
+			if s.allKeys[i].UserID == *filters.UserID {
+				keys = append(keys, s.allKeys[i])
+			}
+		}
+	} else {
+		keys = append([]APIKey(nil), s.allKeys...)
+	}
+	return keys, &pagination.PaginationResult{
+		Total:    int64(len(keys)),
+		Page:     params.Page,
+		PageSize: params.PageSize,
+		Pages:    1,
+	}, nil
+}
+
+func (s *listAllApiKeyRepoStub) Update(ctx context.Context, key *APIKey) error {
+	s.updateCalls = append(s.updateCalls, key.ID)
+	return nil
+}
+
 func (s *apiKeyRepoStub) VerifyOwnership(ctx context.Context, userID int64, apiKeyIDs []int64) ([]int64, error) {
 	panic("unexpected VerifyOwnership call")
 }
@@ -221,7 +244,7 @@ func (s *apiKeyRepoStub) CountByUserID(ctx context.Context, userID int64) (int64
 }
 
 func (s *apiKeyRepoStub) ExistsByKey(ctx context.Context, key string) (bool, error) {
-	panic("unexpected ExistsByKey call")
+	return s.existsByKey, nil
 }
 
 func (s *apiKeyRepoStub) ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]APIKey, *pagination.PaginationResult, error) {
@@ -332,6 +355,159 @@ func (s *apiKeyCacheStub) PublishAuthCacheInvalidation(ctx context.Context, cach
 
 func (s *apiKeyCacheStub) SubscribeAuthCacheInvalidation(ctx context.Context, handler func(cacheKey string)) error {
 	return nil
+}
+
+type apiKeyAccountRepoStub struct {
+	account *Account
+	err     error
+}
+
+func (s *apiKeyAccountRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.account == nil || s.account.ID != id {
+		return nil, ErrAccountNotFound
+	}
+	clone := *s.account
+	return &clone, nil
+}
+
+type rateLimitInvalidatorStub struct {
+	ids []int64
+}
+
+func (s *rateLimitInvalidatorStub) InvalidateAPIKeyRateLimit(ctx context.Context, keyID int64) error {
+	s.ids = append(s.ids, keyID)
+	return nil
+}
+
+func TestAPIKeyService_Update_Sync7dWindowFromAccount(t *testing.T) {
+	resetAt := time.Now().Add(21*time.Hour + 30*time.Minute).UTC().Truncate(time.Second)
+	account := &Account{
+		ID:    101,
+		Extra: map[string]any{"codex_7d_reset_at": resetAt.Format(time.RFC3339)},
+	}
+	previousWindowStart := time.Now().Add(-2 * 24 * time.Hour)
+	repo := &apiKeyRepoStub{
+		apiKey: &APIKey{
+			ID:            42,
+			UserID:        7,
+			Key:           "sk-test",
+			Name:          "key",
+			Status:        StatusAPIKeyActive,
+			RateLimit7d:   100,
+			Usage7d:       12,
+			Window7dStart: &previousWindowStart,
+		},
+	}
+	invalidator := &rateLimitInvalidatorStub{}
+	svc := &APIKeyService{
+		apiKeyRepo:            repo,
+		accountRepo:           &apiKeyAccountRepoStub{account: account},
+		rateLimitCacheInvalid: invalidator,
+	}
+
+	updated, err := svc.UpdateAsAdmin(context.Background(), 42, 1, UpdateAPIKeyRequest{
+		Sync7dWindowAccountID: &account.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Window7dStart)
+	require.Equal(t, resetAt.Add(-RateLimitWindow7d), updated.Window7dStart.UTC())
+	require.Equal(t, 12.0, updated.Usage7d, "syncing the window should not reset usage")
+	require.Len(t, repo.updatedKeys, 1)
+	require.Equal(t, []int64{42}, invalidator.ids)
+}
+
+func TestAPIKeyService_Update_Sync7dWindowRequiresAdmin(t *testing.T) {
+	accountID := int64(101)
+	repo := &apiKeyRepoStub{
+		apiKey: &APIKey{ID: 42, UserID: 7, Key: "sk-test", Status: StatusAPIKeyActive},
+	}
+	svc := &APIKeyService{
+		apiKeyRepo:  repo,
+		accountRepo: &apiKeyAccountRepoStub{account: &Account{ID: accountID}},
+	}
+
+	_, err := svc.Update(context.Background(), 42, 7, UpdateAPIKeyRequest{
+		Sync7dWindowAccountID: &accountID,
+	})
+	require.ErrorIs(t, err, ErrInsufficientPerms)
+	require.Empty(t, repo.updatedKeys)
+}
+
+func TestAPIKeyService_Update_Sync7dWindowUnavailable(t *testing.T) {
+	accountID := int64(101)
+	repo := &apiKeyRepoStub{
+		apiKey: &APIKey{ID: 42, UserID: 7, Key: "sk-test", Status: StatusAPIKeyActive},
+	}
+	svc := &APIKeyService{
+		apiKeyRepo: repo,
+		accountRepo: &apiKeyAccountRepoStub{account: &Account{
+			ID:    accountID,
+			Extra: map[string]any{"codex_7d_reset_at": time.Now().Add(-time.Hour).Format(time.RFC3339)},
+		}},
+	}
+
+	_, err := svc.UpdateAsAdmin(context.Background(), 42, 1, UpdateAPIKeyRequest{
+		Sync7dWindowAccountID: &accountID,
+	})
+	require.ErrorIs(t, err, ErrAPIKey7dWindowSyncUnavailable)
+	require.Empty(t, repo.updatedKeys)
+}
+
+func TestAPIKeyService_Update_Sync7dWindowMissingAccountRepo(t *testing.T) {
+	accountID := int64(101)
+	repo := &apiKeyRepoStub{
+		apiKey: &APIKey{ID: 42, UserID: 7, Key: "sk-test", Status: StatusAPIKeyActive},
+	}
+	svc := &APIKeyService{apiKeyRepo: repo}
+
+	_, err := svc.UpdateAsAdmin(context.Background(), 42, 1, UpdateAPIKeyRequest{
+		Sync7dWindowAccountID: &accountID,
+	})
+	require.ErrorIs(t, err, ErrAPIKey7dWindowSyncUnavailable)
+	require.Empty(t, repo.updatedKeys)
+}
+
+func TestAPIKeyService_Update_ResetUsageThenSyncs7dWindow(t *testing.T) {
+	resetAt := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Second)
+	account := &Account{
+		ID:    101,
+		Extra: map[string]any{"passive_usage_7d_reset": resetAt.Unix()},
+	}
+	repo := &apiKeyRepoStub{
+		apiKey: &APIKey{
+			ID:          42,
+			UserID:      7,
+			Key:         "sk-test",
+			Status:      StatusAPIKeyActive,
+			RateLimit5h: 10,
+			RateLimit1d: 20,
+			RateLimit7d: 30,
+			Usage5h:     1,
+			Usage1d:     2,
+			Usage7d:     3,
+		},
+	}
+	resetUsage := true
+	svc := &APIKeyService{
+		apiKeyRepo:  repo,
+		accountRepo: &apiKeyAccountRepoStub{account: account},
+	}
+
+	updated, err := svc.UpdateAsAdmin(context.Background(), 42, 1, UpdateAPIKeyRequest{
+		ResetRateLimitUsage:   &resetUsage,
+		Sync7dWindowAccountID: &account.ID,
+	})
+	require.NoError(t, err)
+	require.Zero(t, updated.Usage5h)
+	require.Zero(t, updated.Usage1d)
+	require.Zero(t, updated.Usage7d)
+	require.Nil(t, updated.Window5hStart)
+	require.Nil(t, updated.Window1dStart)
+	require.NotNil(t, updated.Window7dStart)
+	require.Equal(t, resetAt.Add(-RateLimitWindow7d), updated.Window7dStart.UTC())
 }
 
 // TestApiKeyService_Delete_OwnerMismatch 测试非所有者尝试删除时返回权限错误。
@@ -654,4 +830,52 @@ func TestApiKeyService_UpdateAsAdmin_BypassesOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "renamed-by-admin", key.Name)
 	require.Equal(t, []int64{70}, repo.updateCalls)
+}
+
+func TestAPIKeyService_RegenerateAsAdmin_PreservesUsageAndLimits(t *testing.T) {
+	groupID := int64(7)
+	window5h := time.Now().Add(-time.Hour)
+	window1d := time.Now().Add(-2 * time.Hour)
+	window7d := time.Now().Add(-3 * time.Hour)
+	original := &APIKey{
+		ID:            71,
+		UserID:        10,
+		Key:           "sk-old-secret",
+		Name:          "retain-settings",
+		GroupID:       &groupID,
+		Status:        StatusActive,
+		Quota:         50,
+		QuotaUsed:     12.5,
+		RateLimit5h:   5,
+		RateLimit1d:   10,
+		RateLimit7d:   20,
+		Usage5h:       1.5,
+		Usage1d:       3.5,
+		Usage7d:       7.5,
+		Window5hStart: &window5h,
+		Window1dStart: &window1d,
+		Window7dStart: &window7d,
+		IPWhitelist:   []string{"203.0.113.0/24"},
+		IPBlacklist:   []string{"198.51.100.4"},
+	}
+	repo := &apiKeyRepoStub{apiKey: original}
+	cache := &apiKeyCacheStub{}
+	svc := &APIKeyService{apiKeyRepo: repo, cache: cache}
+
+	regenerated, err := svc.RegenerateAsAdmin(context.Background(), original.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, original.Key, regenerated.Key)
+	require.Len(t, repo.updatedKeys, 1)
+	require.Equal(t, original.Quota, regenerated.Quota)
+	require.Equal(t, original.QuotaUsed, regenerated.QuotaUsed)
+	require.Equal(t, original.RateLimit5h, regenerated.RateLimit5h)
+	require.Equal(t, original.RateLimit1d, regenerated.RateLimit1d)
+	require.Equal(t, original.RateLimit7d, regenerated.RateLimit7d)
+	require.Equal(t, original.Usage5h, regenerated.Usage5h)
+	require.Equal(t, original.Usage1d, regenerated.Usage1d)
+	require.Equal(t, original.Usage7d, regenerated.Usage7d)
+	require.Equal(t, original.Window5hStart, regenerated.Window5hStart)
+	require.Equal(t, original.Window1dStart, regenerated.Window1dStart)
+	require.Equal(t, original.Window7dStart, regenerated.Window7dStart)
+	require.Equal(t, []string{svc.authCacheKey(original.Key)}, cache.deleteAuthKeys)
 }

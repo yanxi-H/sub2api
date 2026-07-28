@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 type stubQuotaAccountRepo struct {
 	AccountRepository
 	accounts map[int64]*Account
+	mu       sync.Mutex
 }
 
 func (r *stubQuotaAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -44,6 +46,22 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 		return fmt.Errorf("account %d not found", id)
 	}
 	acc.Credentials = credentials
+	return nil
+}
+
+func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	acc, ok := r.accounts[id]
+	if !ok {
+		return fmt.Errorf("account %d not found", id)
+	}
+	if acc.Extra == nil {
+		acc.Extra = make(map[string]any)
+	}
+	for key, value := range updates {
+		acc.Extra[key] = value
+	}
 	return nil
 }
 
@@ -204,6 +222,10 @@ func TestResetCreditAgentIdentityUsesAssertionAndRecoversInvalidTaskOnce(t *test
 			_, _ = w.Write([]byte(`{"task_id":"task-reset-new"}`))
 			return
 		}
+		if r.URL.Path == "/backend-api/wham/rate-limit-reset-credits" {
+			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
+			return
+		}
 		resetCalls++
 		assertions = append(assertions, r.Header.Get("authorization"))
 		require.Equal(t, "account-reset-recovery", r.Header.Get("chatgpt-account-id"))
@@ -263,6 +285,10 @@ func TestResetCreditAgentIdentityReusesConcurrentlyRecoveredTask(t *testing.T) {
 		if strings.Contains(r.URL.Path, "/task/register") {
 			registerCalls++
 			_, _ = w.Write([]byte(`{"task_id":"task-reset-unexpected"}`))
+			return
+		}
+		if r.URL.Path == "/backend-api/wham/rate-limit-reset-credits" {
+			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
 			return
 		}
 		resetCalls++
@@ -535,6 +561,10 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 		{ExpiresAt: "2026-07-03T04:05:06Z"},
 		{ExpiresAt: "2026-07-04T04:05:06Z"},
 	}, usage.RateLimitResetCredits.Credits)
+	snapshot := OpenAIResetCreditSnapshotFromExtra(account.Extra)
+	require.NotNil(t, snapshot)
+	require.Equal(t, 2, snapshot.AvailableCount)
+	require.Equal(t, usage.RateLimitResetCredits.Credits, snapshot.Credits)
 
 	encoded, err := json.Marshal(usage)
 	require.NoError(t, err)

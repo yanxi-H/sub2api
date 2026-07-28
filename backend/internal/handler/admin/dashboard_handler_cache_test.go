@@ -16,8 +16,26 @@ import (
 
 type dashboardUsageRepoCacheProbe struct {
 	service.UsageLogRepository
-	trendCalls      atomic.Int32
-	usersTrendCalls atomic.Int32
+	trendCalls             atomic.Int32
+	usersTrendCalls        atomic.Int32
+	requestBodyTrendCalls  atomic.Int32
+	requestBodyGranularity string
+}
+
+func (r *dashboardUsageRepoCacheProbe) GetUserRequestBodyTrend(
+	ctx context.Context,
+	startTime, endTime time.Time,
+	granularity string,
+	limit int,
+) ([]usagestats.UserRequestBodyTrendPoint, error) {
+	r.requestBodyTrendCalls.Add(1)
+	r.requestBodyGranularity = granularity
+	return []usagestats.UserRequestBodyTrendPoint{{
+		Date:                "2026-03-01 00:05",
+		UserID:              1,
+		Requests:            1,
+		AvgRequestBodyBytes: 1024,
+	}}, nil
 }
 
 func (r *dashboardUsageRepoCacheProbe) GetUsageTrendWithFilters(
@@ -61,6 +79,7 @@ func (r *dashboardUsageRepoCacheProbe) GetUserUsageTrend(
 func resetDashboardReadCachesForTest() {
 	dashboardTrendCache = newSnapshotCache(30 * time.Second)
 	dashboardUsersTrendCache = newSnapshotCache(30 * time.Second)
+	dashboardRequestBodyCache = newSnapshotCache(30 * time.Second)
 	dashboardAPIKeysTrendCache = newSnapshotCache(30 * time.Second)
 	dashboardModelStatsCache = newSnapshotCache(30 * time.Second)
 	dashboardGroupStatsCache = newSnapshotCache(30 * time.Second)
@@ -115,4 +134,25 @@ func TestDashboardHandler_GetUserUsageTrend_UsesCache(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec2.Code)
 	require.Equal(t, "hit", rec2.Header().Get("X-Snapshot-Cache"))
 	require.Equal(t, int32(1), repo.usersTrendCalls.Load())
+}
+
+func TestDashboardHandler_GetUserRequestBodyTrend_AlwaysUsesFiveMinuteBuckets(t *testing.T) {
+	t.Cleanup(resetDashboardReadCachesForTest)
+	resetDashboardReadCachesForTest()
+
+	gin.SetMode(gin.TestMode)
+	repo := &dashboardUsageRepoCacheProbe{}
+	dashboardSvc := service.NewDashboardService(repo, nil, nil, nil)
+	handler := NewDashboardHandler(dashboardSvc, nil)
+	router := gin.New()
+	router.GET("/admin/dashboard/request-body-trend", handler.GetUserRequestBodyTrend)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/dashboard/request-body-trend?start_date=2026-03-01&end_date=2026-03-02&granularity=hour", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int32(1), repo.requestBodyTrendCalls.Load())
+	require.Equal(t, userRequestBodyTrendGranularity, repo.requestBodyGranularity)
+	require.Contains(t, rec.Body.String(), `"granularity":"5minute"`)
 }

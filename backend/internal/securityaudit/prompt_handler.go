@@ -105,20 +105,26 @@ func (h *PromptAdminHandler) ListEvents(c *gin.Context) {
 }
 
 func (h *PromptAdminHandler) GetEvent(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
+		setPromptAdminAudit(c, "failed", "prompt_audit_invalid_event_id", nil)
 		response.ErrorFrom(c, infraerrors.BadRequest("prompt_audit_invalid_event_id", "事件 ID 无效"))
 		return
 	}
 	event, err := h.service.GetEvent(c.Request.Context(), id)
 	if errors.Is(err, ErrEventNotFound) {
+		setPromptAdminAudit(c, "failed", "prompt_audit_event_not_found", map[string]any{"event_id": id})
 		response.ErrorFrom(c, infraerrors.NotFound("prompt_audit_event_not_found", "提示词审计事件不存在"))
 		return
 	}
 	if err != nil {
+		setPromptAdminAudit(c, "failed", infraerrors.Reason(err), map[string]any{"event_id": id})
 		response.ErrorFrom(c, err)
 		return
 	}
+	setPromptAdminAudit(c, "success", "", map[string]any{"event_id": id})
 	response.Success(c, event)
 }
 

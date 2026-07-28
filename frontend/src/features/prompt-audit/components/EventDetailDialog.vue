@@ -12,7 +12,8 @@
       <div class="mt-5 h-[min(62vh,36rem)] overflow-y-auto" data-test="event-detail-tab-panel">
         <div v-show="activeTab === 'summary'" class="grid gap-5 lg:grid-cols-2" role="tabpanel">
           <div>
-            <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.events.promptFull') }}</h4>
+            <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ promptHeading(event) }}</h4>
+            <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ promptHint(event) }}</p>
             <pre class="mt-2 max-h-[min(46vh,26rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-4 text-sm text-gray-700 dark:bg-dark-900 dark:text-dark-200" data-test="summary-prompt-full">{{ displayPrompt(event) }}</pre>
           </div>
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
@@ -29,8 +30,8 @@
         <div v-show="activeTab === 'risks'" class="space-y-5" role="tabpanel">
           <div class="grid gap-4 lg:grid-cols-2">
             <section data-test="risk-prompt-preview">
-              <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.promptAudit.events.promptFull') }}</h4>
-              <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.promptAudit.events.promptFullHint') }}</p>
+              <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ promptHeading(event) }}</h4>
+              <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ promptHint(event) }}</p>
               <pre class="mt-2 h-[min(46vh,26rem)] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-4 text-sm text-gray-700 dark:bg-dark-900 dark:text-dark-200" data-test="risk-prompt-full">{{ displayPrompt(event) }}</pre>
             </section>
             <section data-test="risk-guard-return">
@@ -95,6 +96,12 @@ const RISK_LEVELS = new Set(['low', 'medium', 'high', 'critical'])
 
 function displayPrompt(event: PromptAuditEvent): string {
   return event.snapshot.full_prompt || event.snapshot.redacted_preview || '—'
+}
+function promptHeading(event: PromptAuditEvent): string {
+  return t(event.snapshot.full_prompt ? 'admin.promptAudit.events.promptFull' : 'admin.promptAudit.events.promptFallback')
+}
+function promptHint(event: PromptAuditEvent): string {
+  return t(event.snapshot.full_prompt ? 'admin.promptAudit.events.promptFullHint' : 'admin.promptAudit.events.promptFallbackHint')
 }
 
 function formatDecisionAction(decision: string, action: string): string {

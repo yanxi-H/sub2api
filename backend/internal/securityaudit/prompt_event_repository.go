@@ -58,6 +58,7 @@ type EventRepository interface {
 	DeleteEventsByIDs(ctx context.Context, ids []int64) (*DeleteResult, error)
 	PreviewDelete(ctx context.Context, filter EventFilter) (*DeletePreview, error)
 	DeleteEventsByFilter(ctx context.Context, filter EventFilter, snapshotMaxID int64, batchSize int) (*DeleteResult, error)
+	PurgeFullPromptsBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error)
 }
 
 func (r *PostgreSQLRepository) ListEvents(ctx context.Context, filter EventFilter, page, pageSize int) (*EventPage, error) {
@@ -225,6 +226,34 @@ func (r *PostgreSQLRepository) DeleteEventsByFilter(ctx context.Context, filter 
 	}
 	total.JobIDs = canonicalInt64s(total.JobIDs)
 	return total, nil
+}
+
+// PurgeFullPromptsBefore clears one bounded batch of expired prompt bodies
+// while preserving the event metadata needed for security investigations.
+func (r *PostgreSQLRepository) PurgeFullPromptsBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("prompt audit repository unavailable")
+	}
+	if batchSize < 1 || batchSize > 1000 {
+		batchSize = 200
+	}
+	result, err := r.db.ExecContext(ctx, `
+		WITH selected AS (
+			SELECT e.id
+			FROM prompt_audit_events e
+			WHERE e.created_at < $1 AND e.full_prompt <> ''
+			ORDER BY e.created_at, e.id
+			LIMIT $2
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE prompt_audit_events e
+		SET full_prompt = ''
+		FROM selected s
+		WHERE e.id=s.id`, cutoff.UTC(), batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 func FilterHash(filter EventFilter, snapshotMaxID int64) string {

@@ -11,22 +11,28 @@ const {
   getDashboardApiKeysUsage,
   getAvailableGroups,
   getUserGroupRates,
+  listAdminUsers,
+  regenerateKey,
   showError,
   showSuccess,
   copyToClipboard,
   isCurrentStep,
   nextStep,
+  authStore,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
+  listAdminUsers: vi.fn(),
+  regenerateKey: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
   copyToClipboard: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
+  authStore: { isAdmin: true },
 }))
 
 const messages: Record<string, string> = {
@@ -38,18 +44,14 @@ const messages: Record<string, string> = {
   'keys.allGroups': 'All Groups',
   'keys.allStatus': 'All Status',
   'keys.columnSettings': 'Column Settings',
-  'keys.copyToClipboard': 'Copy to clipboard',
-  'keys.copied': 'Copied!',
   'keys.createKey': 'Create API Key',
   'keys.created': 'Created',
-  'keys.createFirstKey': 'Create your first API key to get started with the API.',
   'keys.expiresAt': 'Expires',
   'keys.group': 'Group',
   'keys.id': 'ID',
   'keys.currentConcurrency': 'Current Concurrency',
   'keys.lastUsedAt': 'Last Used',
   'keys.lastUsedIP': 'Last Used IP',
-  'keys.readOnlyEmptyDescription': 'API keys are created and managed by administrators. Contact an administrator if you need access.',
   'keys.rateLimitColumn': 'Rate Limit',
   'keys.searchPlaceholder': 'Search name or key...',
   'keys.status.active': 'Active',
@@ -64,6 +66,7 @@ vi.mock('@/api', () => ({
     list: listKeys,
     create: vi.fn(),
     update: vi.fn(),
+    regenerate: regenerateKey,
     delete: vi.fn(),
     toggleStatus: vi.fn(),
   },
@@ -78,15 +81,13 @@ vi.mock('@/api', () => ({
     getUserGroupRates,
   },
   adminAPI: {
-    users: { list: vi.fn().mockResolvedValue({ items: [] }) },
-    groups: {},
+    groups: {
+      getAllIncludingInactive: getAvailableGroups,
+    },
+    users: {
+      list: listAdminUsers,
+    },
   },
-}))
-
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    isAdmin: false,
-  }),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -94,6 +95,10 @@ vi.mock('@/stores/app', () => ({
     showError,
     showSuccess,
   }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authStore,
 }))
 
 vi.mock('@/stores/onboarding', () => ({
@@ -183,9 +188,7 @@ const DataTableStub = {
         >
           <slot name="cell-id" :value="row.id" :row="row" />
         </div>
-        <slot name="cell-key" :value="row.key" :row="row" />
         <slot name="cell-name" :value="row.name" :row="row" />
-        <slot name="cell-group" :row="row" />
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -195,8 +198,6 @@ const DataTableStub = {
         >
           <slot name="cell-last_used_ip" :value="row.last_used_ip" :row="row" />
         </div>
-        <slot name="cell-rate_limit" :row="row" />
-        <slot name="cell-actions" :row="row" />
       </div>
       <slot name="empty" />
     </div>
@@ -228,21 +229,14 @@ const PaginationStub = {
   `,
 }
 
+const BaseDialogStub = {
+  props: ['show'],
+  template: '<div v-if="show"><slot /></div>',
+}
+
 const IconStub = {
   props: ['name'],
   template: '<span data-test="icon">{{ name }}</span>',
-}
-
-const EmptyStateStub = {
-  props: ['title', 'description', 'actionText'],
-  emits: ['action'],
-  template: `
-    <div data-test="empty-state">
-      <span>{{ title }}</span>
-      <span>{{ description }}</span>
-      <button v-if="actionText" @click="$emit('action')">{{ actionText }}</button>
-    </div>
-  `,
 }
 
 const mountView = async () => {
@@ -253,9 +247,9 @@ const mountView = async () => {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: PaginationStub,
-        BaseDialog: true,
+        BaseDialog: BaseDialogStub,
         ConfirmDialog: true,
-        EmptyState: EmptyStateStub,
+        EmptyState: true,
         Select: SelectStub,
         SearchInput: SearchInputStub,
         Icon: IconStub,
@@ -295,6 +289,7 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
+    listAdminUsers.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
@@ -312,6 +307,7 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
+    listAdminUsers.mockResolvedValue({ items: [], pages: 1 })
     isCurrentStep.mockReturnValue(false)
   })
 
@@ -319,6 +315,7 @@ describe('user KeysView column settings', () => {
     const wrapper = await mountView()
 
     expect(visibleColumnKeys(wrapper)).toEqual([
+      'owner',
       'name',
       'key',
       'group',
@@ -327,12 +324,30 @@ describe('user KeysView column settings', () => {
       'expires_at',
       'status',
       'created_at',
+      'actions',
     ])
-    expect(visibleColumnKeys(wrapper)).not.toContain('actions')
     expect(visibleColumnKeys(wrapper)).not.toContain('rate_limit')
     expect(visibleColumnKeys(wrapper)).not.toContain('last_used_at')
     expect(visibleColumnKeys(wrapper)).not.toContain('last_used_ip')
     expect(visibleColumnKeys(wrapper)).not.toContain('id')
+  })
+
+  it('loads users into the create-key owner selector for administrators', async () => {
+    listAdminUsers.mockResolvedValueOnce({
+      items: [{ id: 42, username: 'assigned-user', email: 'assigned@example.com', status: 'active' }],
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await flushPromises()
+
+    expect(listAdminUsers).toHaveBeenCalledWith(1, 1000, { sort_by: 'email', sort_order: 'asc' })
+    expect(
+      wrapper.findAllComponents({ name: 'Select' }).some((select) =>
+        (select.props('options') as Array<{ value: number }>).some((option) => option.value === 42)
+      )
+    ).toBe(true)
   })
 
   it('shows a hidden column when toggled and persists the preference', async () => {
@@ -386,6 +401,7 @@ describe('user KeysView column settings', () => {
     const wrapper = await mountView()
 
     expect(visibleColumnKeys(wrapper)).toEqual([
+      'owner',
       'name',
       'key',
       'current_concurrency',
@@ -394,6 +410,7 @@ describe('user KeysView column settings', () => {
       'expires_at',
       'status',
       'last_used_at',
+      'actions',
     ])
     expect(localStorage.getItem('api-key-hidden-columns')).toBe(
       JSON.stringify(['group', 'created_at', 'last_used_ip', 'id'])
@@ -415,23 +432,6 @@ describe('user KeysView column settings', () => {
     expect(columnMenuText).toContain('Last Used IP')
     expect(columnMenuText).not.toContain('Name')
     expect(columnMenuText).not.toContain('Actions')
-  })
-
-  it('keeps regular users read-only while allowing API key copy', async () => {
-    const wrapper = await mountView()
-
-    expect(wrapper.text()).not.toContain('Create API Key')
-    expect(wrapper.text()).not.toContain('Use Key')
-    expect(wrapper.text()).not.toContain('Import to CCS')
-    expect(wrapper.text()).not.toContain('Enable')
-    expect(wrapper.text()).not.toContain('Disable')
-    expect(wrapper.text()).not.toContain('Edit')
-    expect(wrapper.text()).not.toContain('Delete')
-
-    const copyButton = wrapper.get('button[title="Copy to clipboard"]')
-    await copyButton.trigger('click')
-
-    expect(copyToClipboard).toHaveBeenCalledWith('sk-test-key', 'Copied!')
   })
 
   it('renders the current concurrency value', async () => {

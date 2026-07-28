@@ -12,6 +12,8 @@ interface Props {
   platform?: string
   groupId?: number | null
   errorType: 'request' | 'upstream'
+  userId?: number | null
+  errorTypes?: string[]
 }
 
 const props = defineProps<Props>()
@@ -112,6 +114,8 @@ async function fetchErrorLogs() {
     const platform = String(props.platform || '').trim()
     if (platform) params.platform = platform
     if (typeof props.groupId === 'number' && props.groupId > 0) params.group_id = props.groupId
+    if (typeof props.userId === 'number' && props.userId > 0) params.user_id = props.userId
+    if ((props.errorTypes?.length ?? 0) > 0) params.error_types = props.errorTypes?.join(',')
 
     if (q.value.trim()) params.q = q.value.trim()
     if (statusCode.value === 'other') params.status_codes_other = '1'
@@ -160,7 +164,7 @@ watch(
 )
 
 watch(
-  () => [props.timeRange, props.platform, props.groupId] as const,
+  () => [props.timeRange, props.platform, props.groupId, props.userId, props.errorTypes?.join(',')] as const,
   () => {
     if (!props.show) return
     page.value = 1

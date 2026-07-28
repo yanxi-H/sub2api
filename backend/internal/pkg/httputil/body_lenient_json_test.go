@@ -3,12 +3,34 @@ package httputil
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/tidwall/gjson"
 )
+
+type countingBodyReader struct {
+	remaining int64
+	read      int64
+}
+
+func (r *countingBodyReader) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	n := int64(len(p))
+	if n > r.remaining {
+		n = r.remaining
+	}
+	for i := int64(0); i < n; i++ {
+		p[i] = 'a'
+	}
+	r.remaining -= n
+	r.read += n
+	return int(n), nil
+}
 
 func TestNormalizeLenientJSONRequestBody_accepts_client_control_chars_in_strings(t *testing.T) {
 	tests := []struct {
@@ -163,6 +185,25 @@ func TestNormalizeLenientJSONRequestBody_allows_http_requests_with_client_contro
 				t.Fatalf("status mismatch: got %d want %d", resp.StatusCode, tt.want)
 			}
 		})
+	}
+}
+
+func TestReadLenientJSONRequestBodyWithPreallocRejectsRawBodyDuringRead(t *testing.T) {
+	const limit = int64(16)
+	reader := &countingBodyReader{remaining: 64 * 1024 * 1024}
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", io.NopCloser(reader))
+
+	_, err := ReadLenientJSONRequestBodyWithPrealloc(req, limit)
+
+	var maxErr *http.MaxBytesError
+	if !errors.As(err, &maxErr) {
+		t.Fatalf("expected MaxBytesError, got %v", err)
+	}
+	if maxErr.Limit != limit {
+		t.Fatalf("limit = %d, want %d", maxErr.Limit, limit)
+	}
+	if reader.read != limit+1 {
+		t.Fatalf("read bytes = %d, want %d", reader.read, limit+1)
 	}
 }
 

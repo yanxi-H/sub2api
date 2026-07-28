@@ -49,6 +49,7 @@ export async function getById(id: number): Promise<ApiKey> {
 /**
  * Create new API key
  * @param name - Key name
+ * @param userId - Optional target user ID for admin-created keys
  * @param groupId - Optional group ID
  * @param customKey - Optional custom key value
  * @param ipWhitelist - Optional IP whitelist
@@ -61,6 +62,7 @@ export async function getById(id: number): Promise<ApiKey> {
  */
 export async function create(
   name: string,
+  userId?: number | null,
   groupId?: number | null,
   customKey?: string,
   ipWhitelist?: string[],
@@ -68,9 +70,11 @@ export async function create(
   quota?: number,
   expiresInDays?: number,
   rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
-  userId?: number
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
+  if (userId !== undefined && userId !== null) {
+    payload.user_id = userId
+  }
   if (groupId !== undefined) {
     payload.group_id = groupId
   }
@@ -98,7 +102,7 @@ export async function create(
   if (rateLimitData?.rate_limit_7d && rateLimitData.rate_limit_7d > 0) {
     payload.rate_limit_7d = rateLimitData.rate_limit_7d
   }
-  if (userId !== undefined) {
+  if (userId !== undefined && userId !== null) {
     payload.user_id = userId
   }
 
@@ -114,6 +118,14 @@ export async function create(
  */
 export async function update(id: number, updates: UpdateApiKeyRequest): Promise<ApiKey> {
   const { data } = await apiClient.put<ApiKey>(`/keys/${id}`, updates)
+  return data
+}
+
+/**
+ * Regenerate an API key secret while retaining its configuration and usage state.
+ */
+export async function regenerate(id: number): Promise<ApiKey> {
+  const { data } = await apiClient.post<ApiKey>(`/keys/${id}/regenerate`)
   return data
 }
 
@@ -142,6 +154,7 @@ export const keysAPI = {
   getById,
   create,
   update,
+  regenerate,
   delete: deleteKey,
   toggleStatus
 }

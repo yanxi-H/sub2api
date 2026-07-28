@@ -86,7 +86,6 @@ func TestPatchGrokResponsesBodySanitizesComposerReasoningParameters(t *testing.T
 		})
 	}
 }
-
 func TestExtractGrokResponsesReasoningEffortSupportsOpenAICompatibleField(t *testing.T) {
 	t.Parallel()
 

@@ -191,6 +191,31 @@ func TestAPIKeyRepository_UpdateLastUsed(t *testing.T) {
 	require.WithinDuration(t, target, after.UpdatedAt, time.Second)
 }
 
+func TestAPIKeyRepository_UpdatePersistsRegeneratedKey(t *testing.T) {
+	repo, client := newAPIKeyRepoSQLite(t)
+	ctx := context.Background()
+	user := mustCreateAPIKeyRepoUser(t, ctx, client, "regenerate-key-persistence@test.com")
+
+	key := &service.APIKey{
+		UserID: user.ID,
+		Key:    "sk-before-regenerate",
+		Name:   "Regenerated Key",
+		Status: service.StatusActive,
+	}
+	require.NoError(t, repo.Create(ctx, key))
+
+	oldKey := key.Key
+	key.Key = "sk-after-regenerate"
+	require.NoError(t, repo.Update(ctx, key))
+
+	persisted, err := repo.GetByID(ctx, key.ID)
+	require.NoError(t, err)
+	require.Equal(t, key.Key, persisted.Key)
+
+	_, err = repo.GetByKey(ctx, oldKey)
+	require.Error(t, err, "the old secret must no longer identify the API key")
+}
+
 func TestAPIKeyRepository_UpdateLastUsedDeletedKey(t *testing.T) {
 	repo, client := newAPIKeyRepoSQLite(t)
 	ctx := context.Background()

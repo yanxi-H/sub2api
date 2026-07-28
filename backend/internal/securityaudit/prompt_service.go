@@ -27,6 +27,7 @@ type PromptService struct {
 	cancel       context.CancelFunc
 	background   context.Context
 	enqueueWG    sync.WaitGroup
+	retentionWG  sync.WaitGroup
 	enqueueSlots chan struct{}
 	probeMu      sync.RWMutex
 	probes       map[string]ProbeResult
@@ -63,6 +64,8 @@ func (s *PromptService) Start(ctx context.Context) error {
 	s.lifecycleMu.Unlock()
 	configErr := s.config.Start(background)
 	workerErr := s.runner.Start(background)
+	s.retentionWG.Add(1)
+	go s.retentionLoop(background)
 	return errors.Join(configErr, workerErr)
 }
 
@@ -90,6 +93,15 @@ func (s *PromptService) Shutdown(ctx context.Context) error {
 			workerErr = ctx.Err()
 		}
 	}
+	retentionDone := make(chan struct{})
+	go func() { s.retentionWG.Wait(); close(retentionDone) }()
+	select {
+	case <-retentionDone:
+	case <-ctx.Done():
+		if workerErr == nil {
+			workerErr = ctx.Err()
+		}
+	}
 	var configErr error
 	if s.config != nil {
 		configErr = s.config.Shutdown(ctx)
@@ -98,6 +110,85 @@ func (s *PromptService) Shutdown(ctx context.Context) error {
 		return workerErr
 	}
 	return configErr
+}
+
+const (
+	retentionCleanupInterval      = time.Hour
+	retentionCleanupBacklogRetry  = 30 * time.Second
+	retentionCleanupBatchSize     = 200
+	retentionCleanupBudget        = 5 * time.Second
+	retentionCleanupBatchCooldown = 20 * time.Millisecond
+)
+
+func (s *PromptService) retentionLoop(ctx context.Context) {
+	defer s.retentionWG.Done()
+	backlog := s.cleanupExpiredPrompts(ctx)
+	for {
+		delay := retentionCleanupInterval
+		if backlog {
+			delay = retentionCleanupBacklogRetry
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+			backlog = s.cleanupExpiredPrompts(ctx)
+		}
+	}
+}
+
+// cleanupExpiredPrompts returns true when the time budget expires with a
+// possible backlog, causing the scheduler to retry shortly instead of waiting
+// for the normal hourly interval.
+func (s *PromptService) cleanupExpiredPrompts(ctx context.Context) bool {
+	if s == nil || s.config == nil || s.repo == nil {
+		return false
+	}
+	cfg, ok := s.config.Active()
+	if !ok {
+		return false
+	}
+	retentionDays := cfg.RetentionDays
+	if retentionDays < 1 || retentionDays > MaxRetentionDays {
+		retentionDays = DefaultRetentionDays
+	}
+	cutoff := s.clock.Now().AddDate(0, 0, -retentionDays)
+	started := time.Now()
+	var purged int64
+	for {
+		count, err := s.repo.PurgeFullPromptsBefore(ctx, cutoff, retentionCleanupBatchSize)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return false
+			}
+			LogWarn(EventRetentionCleanupFail, map[string]any{
+				"status": "failed", "error_code": "retention_cleanup_failed", "retention_days": retentionDays,
+			})
+			return true
+		}
+		purged += count
+		if count < retentionCleanupBatchSize {
+			if purged > 0 {
+				LogInfo(EventRetentionCleanup, map[string]any{
+					"status": "completed", "purged_total": purged, "retention_days": retentionDays, "backlog": false,
+				})
+			}
+			return false
+		}
+		if time.Since(started) >= retentionCleanupBudget {
+			LogInfo(EventRetentionCleanup, map[string]any{
+				"status": "partial", "purged_total": purged, "retention_days": retentionDays, "backlog": true,
+			})
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(retentionCleanupBatchCooldown):
+		}
+	}
 }
 
 func (s *PromptService) EffectiveMode() Mode {
@@ -345,7 +436,7 @@ func (s *PromptService) resolveProbeEndpoint(input UpdateEndpoint) (ActiveEndpoi
 	if limit == 0 {
 		limit = DefaultInputLimit
 	}
-	storage := storageConfig{Enabled: false, Strategy: "priority", WorkerCount: DefaultWorkerCount, QueueCapacity: DefaultQueueCapacity, Scanners: append([]string(nil), AllScannerIDs...), AllGroups: true,
+	storage := storageConfig{Enabled: false, Strategy: "priority", WorkerCount: DefaultWorkerCount, QueueCapacity: DefaultQueueCapacity, RetentionDays: DefaultRetentionDays, Scanners: append([]string(nil), AllScannerIDs...), AllGroups: true,
 		Endpoints: []StorageEndpoint{{ID: strings.TrimSpace(input.ID), Name: strings.TrimSpace(input.Name), Protocol: "openai_compatible", BaseURL: baseURL, Model: model, TimeoutMS: timeout, InputLimit: limit}}}
 	if storage.Endpoints[0].ID == "" {
 		storage.Endpoints[0].ID = "probe"

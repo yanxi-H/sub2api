@@ -78,6 +78,22 @@
               />
               <span class="hidden sm:inline">{{ t('admin.dashboard.rateLimits.liveRefresh') }}</span>
             </button>
+            <button
+              v-if="activeTab === 'accounts'"
+              type="button"
+              data-testid="reset-credit-refresh"
+              class="btn btn-secondary h-9 flex-shrink-0 rounded-lg px-3 py-0 text-xs"
+              :title="t('admin.dashboard.rateLimits.resetCreditsRefreshHint')"
+              :disabled="resetCreditRefreshing || activeLoading || resetCreditRefreshableAccountIds.length === 0"
+              @click="refreshOpenAIResetCredits"
+            >
+              <Icon
+                :name="resetCreditRefreshing ? 'refresh' : 'key'"
+                size="sm"
+                :class="resetCreditRefreshing ? 'animate-spin' : ''"
+              />
+              <span class="hidden sm:inline">{{ t('admin.dashboard.rateLimits.resetCreditsRefresh') }}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -136,19 +152,9 @@
                   {{ refreshErrorLabel(item.refresh_error) }}
                 </p>
               </div>
-              <div class="flex flex-shrink-0 items-center gap-1.5">
-                <span
-                  class="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] font-medium"
-                  :class="(item.current_concurrency ?? 0) > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400'"
-                  :title="t('admin.dashboard.rateLimits.currentConcurrency')"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full" :class="(item.current_concurrency ?? 0) > 0 ? 'bg-emerald-500' : 'bg-gray-400'"></span>
-                  {{ item.current_concurrency ?? 0 }}
-                </span>
-                <span class="rounded-md px-2 py-1 text-[11px] font-medium" :class="statusClass(item.status)">
-                  {{ statusLabel(item.status) }}
-                </span>
-              </div>
+              <span class="flex-shrink-0 rounded-md px-2 py-1 text-[11px] font-medium" :class="statusClass(item.status)">
+                {{ statusLabel(item.status) }}
+              </span>
             </div>
             <div class="grid grid-cols-2 gap-3 px-3.5 py-3">
               <div class="min-w-0">
@@ -166,21 +172,118 @@
                 />
               </div>
             </div>
-            <!-- 账号额度分配概览 -->
-            <div class="border-t border-gray-100 px-3.5 py-2 dark:border-dark-700/70">
-              <div class="flex items-center justify-between gap-2 text-[11px]">
-                <span class="text-gray-400">{{ t('admin.dashboard.rateLimits.quotaAllocation') }}</span>
-                <div class="flex items-center gap-3">
-                  <span class="text-gray-500 dark:text-gray-400">
-                    {{ t('admin.dashboard.rateLimits.quotaTotal') }}: <span class="font-medium text-gray-700 dark:text-gray-200">{{ formatUsd(item.quota_limit ?? 0) }}</span>
-                  </span>
-                  <span class="text-gray-500 dark:text-gray-400">
-                    {{ t('admin.dashboard.rateLimits.allocated') }}: <span class="font-medium text-gray-700 dark:text-gray-200">{{ formatUsd(item.allocated_limit ?? 0) }}</span>
-                  </span>
-                  <span :class="(item.available_limit ?? 0) < 0 ? 'font-semibold text-red-600 dark:text-red-400' : 'font-medium text-emerald-600 dark:text-emerald-400'">
-                    {{ t('admin.dashboard.rateLimits.available') }}: {{ formatUsd(item.available_limit ?? 0) }}
-                  </span>
+            <div class="border-t border-gray-100 px-3.5 py-3 dark:border-dark-700/70" data-testid="seven-day-capacity">
+              <div class="mb-2 flex min-w-0 items-center justify-between gap-2">
+                <p class="truncate text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                  {{ t('admin.dashboard.rateLimits.sevenDayUsdCapacity') }}
+                </p>
+                <p v-if="item.seven_day_capacity" class="flex-shrink-0 text-[11px] text-gray-400">
+                  {{ t('admin.dashboard.rateLimits.estimatedTotal', { amount: formatUsd(item.seven_day_capacity.estimated_total_usd) }) }}
+                </p>
+              </div>
+              <div v-if="item.seven_day_capacity" class="space-y-2.5">
+                <div data-testid="actual-capacity-row">
+                  <div class="mb-1 flex min-w-0 items-center justify-between gap-2 text-[11px]">
+                    <span class="truncate font-medium text-gray-600 dark:text-gray-300">{{ t('admin.dashboard.rateLimits.actualRemaining') }}</span>
+                    <span class="flex-shrink-0 font-semibold text-gray-800 dark:text-gray-100">
+                      {{ t('admin.dashboard.rateLimits.remainingAmount', { amount: formatUsd(item.seven_day_capacity.actual_remaining_usd) }) }} · {{ formatPercent(item.seven_day_capacity.actual_remaining_percent) }}
+                    </span>
+                  </div>
+                  <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
+                    <div class="h-full rounded-full" :class="remainingClass(item.seven_day_capacity.actual_remaining_percent)" :style="{ width: `${clampedUtilization(item.seven_day_capacity.actual_remaining_percent)}%` }"></div>
+                  </div>
+                  <p class="mt-1 text-[10px] text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.usedAmount', { amount: formatUsd(item.seven_day_capacity.actual_used_usd) }) }}
+                  </p>
                 </div>
+                <div data-testid="allocation-capacity-row">
+                  <div class="mb-1 flex min-w-0 items-center justify-between gap-2 text-[11px]">
+                    <span class="truncate font-medium text-gray-600 dark:text-gray-300">{{ t('admin.dashboard.rateLimits.unallocatedRemaining') }}</span>
+                    <span v-if="item.seven_day_capacity.unallocated_remaining_usd !== null && item.seven_day_capacity.unallocated_remaining_percent !== null" class="flex-shrink-0 font-semibold text-gray-800 dark:text-gray-100">
+                      {{ t('admin.dashboard.rateLimits.remainingAmount', { amount: formatUsd(item.seven_day_capacity.unallocated_remaining_usd) }) }} · {{ formatPercent(item.seven_day_capacity.unallocated_remaining_percent) }}
+                    </span>
+                  </div>
+                  <div v-if="item.seven_day_capacity.unallocated_remaining_percent !== null" class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
+                    <div class="h-full rounded-full" :class="remainingClass(item.seven_day_capacity.unallocated_remaining_percent)" :style="{ width: `${clampedUtilization(item.seven_day_capacity.unallocated_remaining_percent)}%` }"></div>
+                  </div>
+                  <p v-if="item.seven_day_capacity.allocated_usd !== null" class="mt-1 text-[10px] text-gray-400">
+                    {{ item.seven_day_capacity.allocation_unlimited ? t('admin.dashboard.rateLimits.allocatedUnlimited') : t('admin.dashboard.rateLimits.allocatedAmount', { amount: formatUsd(item.seven_day_capacity.allocated_usd) }) }}
+                  </p>
+                  <p v-else class="mt-1 text-[10px] text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.allocationUnavailable') }}
+                  </p>
+                </div>
+              </div>
+              <p v-else class="text-[11px] text-gray-400">
+                {{ t('admin.dashboard.rateLimits.capacityUnavailable') }}
+              </p>
+            </div>
+            <div
+              v-if="item.supports_openai_reset_credits"
+              class="border-t border-gray-100 px-3.5 py-2.5 dark:border-dark-700/70"
+              data-testid="reset-credit-summary"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center justify-between gap-3 text-left"
+                :aria-expanded="isResetCreditDetailsOpen(item.id)"
+                :aria-label="t('admin.dashboard.rateLimits.resetCreditsDetails')"
+                @click="toggleResetCreditDetails(item.id)"
+              >
+                <span class="flex min-w-0 items-center gap-1.5">
+                  <Icon name="key" size="xs" class="text-indigo-500" />
+                  <span class="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                    {{ t('admin.dashboard.rateLimits.resetCredits') }}
+                  </span>
+                  <span
+                    v-if="item.openai_reset_credits"
+                    class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
+                  >
+                    {{ t('admin.dashboard.rateLimits.resetCreditsCount', { count: item.openai_reset_credits.available_count }) }}
+                  </span>
+                  <span v-else class="text-[11px] text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.resetCreditsUnknown') }}
+                  </span>
+                </span>
+                <Icon :name="isResetCreditDetailsOpen(item.id) ? 'chevronUp' : 'chevronDown'" size="xs" class="flex-shrink-0 text-gray-400" />
+              </button>
+              <div
+                v-if="isResetCreditDetailsOpen(item.id)"
+                class="mt-2 border-t border-gray-100 pt-2 text-[11px] dark:border-dark-700/70"
+                data-testid="reset-credit-details"
+              >
+                <template v-if="item.openai_reset_credits">
+                  <p v-if="item.openai_reset_credits.available_count === 0" class="text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.resetCreditsNoAvailable') }}
+                  </p>
+                  <ul v-else-if="item.openai_reset_credits.credits?.length" class="space-y-1 text-gray-600 dark:text-gray-300">
+                    <li
+                      v-for="(credit, index) in item.openai_reset_credits.credits"
+                      :key="`${credit.expires_at}-${index}`"
+                      class="flex min-w-0 items-center gap-1.5"
+                    >
+                      <span class="h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400"></span>
+                      <span class="truncate" :title="formatDateTime(credit.expires_at)">
+                        {{ t('admin.dashboard.rateLimits.resetCreditsExpiresAt', { time: formatDateTime(credit.expires_at) }) }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p
+                    v-if="item.openai_reset_credits.credits?.length && item.openai_reset_credits.credits.length < item.openai_reset_credits.available_count"
+                    class="mt-1 text-[10px] text-gray-400"
+                  >
+                    {{ t('admin.dashboard.rateLimits.resetCreditsExpiryPartial', { shown: item.openai_reset_credits.credits.length, total: item.openai_reset_credits.available_count }) }}
+                  </p>
+                  <p v-if="!item.openai_reset_credits.credits?.length" class="text-gray-400">
+                    {{ t('admin.dashboard.rateLimits.resetCreditsExpiryUnavailable') }}
+                  </p>
+                  <p class="mt-1.5 text-[10px] text-gray-400" :title="formatDateTime(item.openai_reset_credits.checked_at)">
+                    {{ t('admin.dashboard.rateLimits.resetCreditsCheckedAt', { time: formatDateTime(item.openai_reset_credits.checked_at) }) }}
+                  </p>
+                </template>
+                <p v-else class="text-gray-400">
+                  {{ t('admin.dashboard.rateLimits.resetCreditsUnavailable') }}
+                </p>
               </div>
             </div>
           </article>
@@ -454,7 +557,9 @@ const keyLoaded = ref(false)
 const accountError = ref('')
 const keyError = ref('')
 const liveRefreshing = ref(false)
+const resetCreditRefreshing = ref(false)
 const liveMessage = ref('')
+const expandedResetCreditAccountIDs = ref<number[]>([])
 const openBatchGroupKey = ref<string | null>(null)
 const openBatchGroup = ref<ApiKeyRateLimitGroup | null>(null)
 const openBatchAction = ref<KeyBatchAction | null>(null)
@@ -516,6 +621,9 @@ const activeSearch = computed({
   }
 })
 const refreshableAccountIds = computed(() => accountItems.value.filter((item) => item.supports_live_refresh).map((item) => item.id))
+const resetCreditRefreshableAccountIds = computed(() => accountItems.value
+  .filter((item) => item.supports_openai_reset_credits)
+  .map((item) => item.id))
 const canSubmitBatchAction = computed(() => {
   if (batchSubmitting.value || selectedBatchKeyIDs.value.length === 0) return false
   return openBatchAction.value === 'reset' || (openBatchAction.value === 'sync' && selectedSyncAccountID.value !== null)
@@ -722,6 +830,42 @@ async function refreshUpstream(): Promise<void> {
   }
 }
 
+function isResetCreditDetailsOpen(accountID: number): boolean {
+  return expandedResetCreditAccountIDs.value.includes(accountID)
+}
+
+function toggleResetCreditDetails(accountID: number): void {
+  expandedResetCreditAccountIDs.value = isResetCreditDetailsOpen(accountID)
+    ? expandedResetCreditAccountIDs.value.filter((id) => id !== accountID)
+    : [...expandedResetCreditAccountIDs.value, accountID]
+}
+
+async function refreshOpenAIResetCredits(): Promise<void> {
+  const ids = resetCreditRefreshableAccountIds.value
+  if (ids.length === 0 || resetCreditRefreshing.value) return
+  resetCreditRefreshing.value = true
+  liveMessage.value = ''
+  try {
+    const refreshed = await adminAPI.accounts.refreshOpenAIResetCredits(ids)
+    const byID = new Map(refreshed.map((item) => [item.id, item]))
+    accountItems.value = accountItems.value.map((item) => {
+      const result = byID.get(item.id)
+      return result?.openai_reset_credits
+        ? { ...item, openai_reset_credits: result.openai_reset_credits }
+        : item
+    })
+    const failures = refreshed.filter((item) => item.refresh_error).length
+    const successes = refreshed.length - failures
+    liveMessage.value = failures > 0
+      ? t('admin.dashboard.rateLimits.resetCreditsRefreshPartial', { success: successes, failed: failures })
+      : t('admin.dashboard.rateLimits.resetCreditsRefreshSuccess', { count: successes })
+  } catch (error: any) {
+    liveMessage.value = error?.message || t('admin.dashboard.rateLimits.resetCreditsRefreshFailed')
+  } finally {
+    resetCreditRefreshing.value = false
+  }
+}
+
 function formatUsd(value: number): string {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -764,6 +908,12 @@ function clampedUtilization(value: number | null): number {
 function utilizationClass(value: number | null): string {
   if ((value ?? 0) >= 90) return 'bg-red-500'
   if ((value ?? 0) >= 70) return 'bg-amber-500'
+  return 'bg-emerald-500'
+}
+
+function remainingClass(value: number | null): string {
+  if ((value ?? 0) <= 10) return 'bg-red-500'
+  if ((value ?? 0) <= 30) return 'bg-amber-500'
   return 'bg-emerald-500'
 }
 

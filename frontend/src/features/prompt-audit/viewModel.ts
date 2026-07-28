@@ -32,6 +32,7 @@ export function configToDraft(config: PromptAuditConfig): PromptAuditDraft {
     ...cloneData(config),
     group_ids: [...(config.group_ids ?? [])],
     scanners: [...(config.scanners ?? [])],
+    retention_days: Number(config.retention_days) || 30,
     endpoints: (config.endpoints ?? []).map((endpoint) => ({
       ...endpoint,
       token: '',
@@ -66,6 +67,7 @@ export function buildUpdateRequest(draft: PromptAuditDraft): PromptAuditUpdateRe
     strategy: 'priority',
     worker_count: Number(draft.worker_count),
     queue_capacity: Number(draft.queue_capacity),
+    retention_days: Number(draft.retention_days),
     scanners: [...draft.scanners],
     all_groups: draft.all_groups,
     group_ids: draft.all_groups ? [] : [...draft.group_ids].sort((a, b) => a - b),

@@ -336,6 +336,28 @@
               </div>
             </div>
           </div>
+
+          <div class="card p-4">
+            <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.dashboard.requestBodyTrend') }} (Top 12)
+            </h3>
+            <div class="h-64">
+              <div v-if="requestBodyTrendLoading" class="flex h-full items-center justify-center">
+                <LoadingSpinner size="md" />
+              </div>
+              <Line
+                v-else-if="requestBodyTrendChartData"
+                :data="requestBodyTrendChartData"
+                :options="requestBodyLineOptions"
+              />
+              <div
+                v-else
+                class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+              >
+                {{ t('admin.dashboard.noDataAvailable') }}
+              </div>
+            </div>
+          </div>
         </div>
       </template>
     </div>
@@ -355,6 +377,7 @@ import type {
   TrendDataPoint,
   ModelStat,
   UserUsageTrendPoint,
+  UserRequestBodyTrendPoint,
   UserSpendingRankingItem
 } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -397,6 +420,7 @@ const stats = ref<DashboardStats | null>(null)
 const loading = ref(false)
 const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
+const requestBodyTrendLoading = ref(false)
 const rankingLoading = ref(false)
 const rankingError = ref(false)
 
@@ -404,12 +428,14 @@ const rankingError = ref(false)
 const trendData = ref<TrendDataPoint[]>([])
 const modelStats = ref<ModelStat[]>([])
 const userTrend = ref<UserUsageTrendPoint[]>([])
+const requestBodyTrend = ref<UserRequestBodyTrendPoint[]>([])
 const rankingItems = ref<UserSpendingRankingItem[]>([])
 const rankingTotalActualCost = ref(0)
 const rankingTotalRequests = ref(0)
 const rankingTotalTokens = ref(0)
 let chartLoadSeq = 0
 let usersTrendLoadSeq = 0
+let requestBodyTrendLoadSeq = 0
 let rankingLoadSeq = 0
 const rankingLimit = 12
 
@@ -511,6 +537,35 @@ const lineOptions = computed(() => ({
   }
 }))
 
+const requestBodyLineOptions = computed(() => ({
+  ...lineOptions.value,
+  plugins: {
+    ...lineOptions.value.plugins,
+    tooltip: {
+      ...(lineOptions.value.plugins as any).tooltip,
+      callbacks: {
+        label: (context: any) => {
+          const point = context.dataset.points?.[context.dataIndex] as UserRequestBodyTrendPoint | undefined
+          const avg = formatBytes(Number(context.raw || 0))
+          const max = formatBytes(point?.max_request_body_bytes || 0)
+          const requests = point?.requests || 0
+          return `${context.dataset.label}: ${avg} avg, ${max} max, ${formatNumber(requests)} req`
+        }
+      }
+    }
+  },
+  scales: {
+    ...lineOptions.value.scales,
+    y: {
+      ...(lineOptions.value.scales as any).y,
+      ticks: {
+        ...((lineOptions.value.scales as any).y?.ticks || {}),
+        callback: (value: string | number) => formatBytes(Number(value))
+      }
+    }
+  }
+}))
+
 // User trend chart data
 const userTrendChartData = computed(() => {
   if (!userTrend.value?.length) return null
@@ -573,6 +628,64 @@ const userTrendChartData = computed(() => {
   }
 })
 
+const requestBodyTrendChartData = computed(() => {
+  if (!requestBodyTrend.value?.length) return null
+
+  const getDisplayName = (point: UserRequestBodyTrendPoint): string => {
+    const username = point.username?.trim()
+    if (username) return username
+    const email = point.email?.trim()
+    if (email) return email
+    return t('admin.redeem.userPrefix', { id: point.user_id })
+  }
+
+  const userGroups = new Map<number, { name: string; data: Map<string, UserRequestBodyTrendPoint> }>()
+  const allDates = new Set<string>()
+
+  requestBodyTrend.value.forEach((point) => {
+    allDates.add(point.date)
+    const key = point.user_id
+    if (!userGroups.has(key)) {
+      userGroups.set(key, { name: getDisplayName(point), data: new Map() })
+    }
+    userGroups.get(key)!.data.set(point.date, point)
+  })
+
+  const sortedDates = Array.from(allDates).sort()
+  const colors = [
+    '#2563eb',
+    '#059669',
+    '#d97706',
+    '#dc2626',
+    '#7c3aed',
+    '#db2777',
+    '#0d9488',
+    '#ea580c',
+    '#4f46e5',
+    '#65a30d',
+    '#0891b2',
+    '#9333ea'
+  ]
+
+  const datasets = Array.from(userGroups.values()).map((group, idx) => {
+    const points = sortedDates.map((date) => group.data.get(date) || null)
+    return {
+      label: group.name,
+      data: points.map((point) => point?.avg_request_body_bytes || 0),
+      points,
+      borderColor: colors[idx % colors.length],
+      backgroundColor: `${colors[idx % colors.length]}20`,
+      fill: false,
+      tension: 0.3
+    }
+  })
+
+  return {
+    labels: sortedDates,
+    datasets
+  }
+})
+
 // Format helpers
 const formatTokens = (value: number | undefined): string => {
   if (value === undefined || value === null) return '0'
@@ -593,6 +706,20 @@ const toFiniteNumber = (value: unknown): number => {
 
 const formatNumber = (value: number | null | undefined): string => {
   return toFiniteNumber(value).toLocaleString()
+}
+
+const formatBytes = (value: number | null | undefined): string => {
+  const safeValue = toFiniteNumber(value)
+  if (safeValue >= 1024 * 1024 * 1024) {
+    return `${(safeValue / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  }
+  if (safeValue >= 1024 * 1024) {
+    return `${(safeValue / (1024 * 1024)).toFixed(2)} MB`
+  }
+  if (safeValue >= 1024) {
+    return `${(safeValue / 1024).toFixed(1)} KB`
+  }
+  return `${Math.round(safeValue)} B`
 }
 
 const formatCost = (value: number | null | undefined): string => {
@@ -705,6 +832,28 @@ const loadUsersTrend = async () => {
   }
 }
 
+const loadRequestBodyTrend = async () => {
+  const currentSeq = ++requestBodyTrendLoadSeq
+  requestBodyTrendLoading.value = true
+  try {
+    const response = await adminAPI.dashboard.getUserRequestBodyTrend({
+      start_date: startDate.value,
+      end_date: endDate.value,
+      limit: 12
+    })
+    if (currentSeq !== requestBodyTrendLoadSeq) return
+    requestBodyTrend.value = response.trend || []
+  } catch (error) {
+    if (currentSeq !== requestBodyTrendLoadSeq) return
+    console.error('Error loading request body trend:', error)
+    requestBodyTrend.value = []
+  } finally {
+    if (currentSeq === requestBodyTrendLoadSeq) {
+      requestBodyTrendLoading.value = false
+    }
+  }
+}
+
 const loadUserSpendingRanking = async () => {
   const currentSeq = ++rankingLoadSeq
   rankingLoading.value = true
@@ -739,6 +888,7 @@ const loadDashboardStats = async () => {
   await Promise.all([
     loadDashboardSnapshot(true),
     loadUsersTrend(),
+    loadRequestBodyTrend(),
     loadUserSpendingRanking()
   ])
 }
@@ -747,6 +897,7 @@ const loadChartData = async () => {
   await Promise.all([
     loadDashboardSnapshot(false),
     loadUsersTrend(),
+    loadRequestBodyTrend(),
     loadUserSpendingRanking()
   ])
 }

@@ -18,6 +18,7 @@ const config = (): PromptAuditConfig => ({
   strategy: 'priority',
   worker_count: 4,
   queue_capacity: 100,
+  retention_days: 30,
   scanners: SCANNER_CATALOG.map((item) => item.id),
   all_groups: true,
   group_ids: [],
@@ -62,6 +63,13 @@ describe('Prompt Audit view model', () => {
     expect(draftFingerprint(changed)).toBe(draftFingerprint(original))
     changed.queue_capacity += 1
     expect(draftFingerprint(changed)).not.toBe(draftFingerprint(original))
+  })
+
+  it('defaults legacy configs to 30-day full-prompt retention', () => {
+    const legacy = { ...config(), retention_days: undefined } as unknown as PromptAuditConfig
+    const draft = configToDraft(legacy)
+    expect(draft.retention_days).toBe(30)
+    expect(buildUpdateRequest(draft).retention_days).toBe(30)
   })
 
   it('requires a valid explicit range and sends canonical ISO timestamps for filter deletion', () => {

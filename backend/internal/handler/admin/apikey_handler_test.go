@@ -21,6 +21,8 @@ func setupAPIKeyHandler(adminSvc service.AdminService) *gin.Engine {
 	router := gin.New()
 	h := NewAdminAPIKeyHandler(adminSvc)
 	router.PUT("/api/v1/admin/api-keys/:id", h.UpdateGroup)
+	router.POST("/api/v1/admin/api-keys/batch-sync-7d-window", h.BatchSync7dWindow)
+	router.POST("/api/v1/admin/api-keys/batch-reset-7d-usage", h.BatchReset7dUsage)
 	return router
 }
 
@@ -35,6 +37,47 @@ func TestAdminAPIKeyHandler_UpdateGroup_InvalidID(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "Invalid API key ID")
+}
+
+func TestAdminAPIKeyHandler_BatchSync7dWindow(t *testing.T) {
+	svc := newStubAdminService()
+	router := setupAPIKeyHandler(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/api-keys/batch-sync-7d-window", bytes.NewBufferString(`{"api_key_ids":[10],"group_id":3,"account_id":42}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []int64{10}, svc.lastBatchAPIKeyIDs)
+	require.Equal(t, int64(3), svc.lastBatchGroupID)
+	require.Equal(t, int64(42), svc.lastBatchAccountID)
+	require.Equal(t, "sync", svc.lastBatchAPIKeyAction)
+	require.Contains(t, rec.Body.String(), `"updated_count":1`)
+}
+
+func TestAdminAPIKeyHandler_BatchReset7dUsage(t *testing.T) {
+	svc := newStubAdminService()
+	router := setupAPIKeyHandler(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/api-keys/batch-reset-7d-usage", bytes.NewBufferString(`{"api_key_ids":[10],"group_id":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []int64{10}, svc.lastBatchAPIKeyIDs)
+	require.Zero(t, svc.lastBatchGroupID)
+	require.Equal(t, "reset", svc.lastBatchAPIKeyAction)
+}
+
+func TestAdminAPIKeyHandler_BatchReset7dUsage_RequiresGroup(t *testing.T) {
+	router := setupAPIKeyHandler(newStubAdminService())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/api-keys/batch-reset-7d-usage", bytes.NewBufferString(`{"api_key_ids":[10]}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestAdminAPIKeyHandler_UpdateGroup_InvalidJSON(t *testing.T) {

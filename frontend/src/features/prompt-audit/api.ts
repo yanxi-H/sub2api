@@ -59,8 +59,8 @@ export async function listEvents(
   return data
 }
 
-export async function getEvent(id: number): Promise<PromptAuditEvent> {
-  const { data } = await apiClient.get<PromptAuditEvent>(`${basePath}/events/${id}`)
+export async function getEvent(id: number, signal?: AbortSignal): Promise<PromptAuditEvent> {
+  const { data } = await apiClient.get<PromptAuditEvent>(`${basePath}/events/${id}`, { signal })
   return data
 }
 

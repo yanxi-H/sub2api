@@ -53,7 +53,7 @@ export default {
     policy: {
       title: '审计策略', description: '配置适用分组、九类输入风险、Worker 与队列边界。', scope: '适用范围', allGroups: '全部分组', selectedGroups: '指定分组',
       searchGroups: '搜索分组', noGroups: '没有匹配分组', missingGroups: '配置中包含已删除的分组 ID', selectedCount: '已选择 {count} 个分组',
-      scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
+      scanners: 'Qwen3Guard 输入风险分类', workerCount: 'Worker 数量', queueCapacity: '持久队列容量', retentionDays: '完整原文保留天数', retentionDaysHint: '保留期内命中事件的原文不会脱敏；到期后只清除原文，用户、API Key 和风险结果等审计信息继续保留。', strategy: '节点策略', strategyHint: '按配置顺序优先尝试，必要时故障切换。',
     },
     saveBar: { enabled: '启用提示词审计', blocking: '同步阻止', storePass: '保存安全事件', dirty: '有未保存的更改', synced: '配置已同步' },
     blockingConfirm: {
@@ -76,6 +76,8 @@ export default {
       detailTitle: '提示词审计事件详情', tabs: { summary: '审计摘要', risks: '具体风险', technical: '技术信息' },
       promptFull: '完整提示词（未脱敏）',
       promptFullHint: '完整提示词已随事件入库，仅供管理员复核触发内容；请按敏感数据妥善处理，切勿外泄。',
+      promptFallback: '脱敏预览（完整原文已清理）',
+      promptFallbackHint: '完整原文未保留或已超过保留期限；以下脱敏预览和其他审计信息仍可用于复核。',
       guardReturn: '模型审计返回',
       guardReturnHint: '展示 Guard 归一化后的结构化结果（判定、分类、分数与脱敏证据），不含原始响应体。',
       riskSummaries: '风险摘要',
@@ -92,7 +94,7 @@ export default {
     messages: { saved: '提示词审计配置已保存，明文 API Key 状态已清除。', probeSucceeded: '审计节点连接正常。', deleted: '已删除 {count} 条审计事件。' },
     errors: {
       loadConfig: '无法加载提示词审计配置。', loadRuntime: '无法加载提示词审计运行态。', loadGroups: '无法加载分组列表。', loadEvents: '无法加载审计事件。', loadDetail: '无法加载事件详情。', saveConfig: '配置保存失败。', probe: '节点探测失败。', delete: '事件删除失败。', previewDelete: '无法生成删除预览，请检查时间范围。', deleteConfirmation: '删除确认无效或已过期，请重新预览。',
-      prompt_audit_config_conflict: '配置已被其他管理员更新。请重新加载服务端配置，再决定如何合并本地草稿。',
+      prompt_audit_config_conflict: '配置已被其他管理员更新。请重新加载服务端配置，再决定如何合并本地草稿。', prompt_audit_invalid_retention_days: '完整原文保留天数必须在 1 到 3650 天之间。',
       prompt_guard_requires_audit_enabled: '开启同步阻止前必须先启用提示词审计。', prompt_audit_invalid_endpoint: '审计节点配置无效。', prompt_audit_endpoint_required: '启用审计前至少需要一个启用节点。', prompt_audit_groups_required: '指定分组模式至少需要选择一个分组。', prompt_audit_scanners_required: '至少需要启用一个风险分类。',
     },
   },

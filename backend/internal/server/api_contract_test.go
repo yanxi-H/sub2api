@@ -213,61 +213,13 @@ func TestAPIContracts(t *testing.T) {
 			}`,
 		},
 		{
-			name:   "POST /api/v1/keys requires admin",
+			name:   "POST /api/v1/keys",
 			method: http.MethodPost,
 			path:   "/api/v1/keys",
 			body:   `{"name":"Key One","custom_key":"sk_custom_1234567890"}`,
 			headers: map[string]string{
 				"Content-Type": "application/json",
 			},
-			wantStatus: http.StatusForbidden,
-			wantJSON: `{
-				"code": 403,
-				"message": "Only administrators can manage API keys"
-			}`,
-		},
-		{
-			name: "PUT /api/v1/keys/:id requires admin",
-			setup: func(t *testing.T, deps *contractDeps) {
-				t.Helper()
-				deps.apiKeyRepo.MustSeed(&service.APIKey{
-					ID:        100,
-					UserID:    1,
-					Key:       "sk_custom_1234567890",
-					Name:      "Key One",
-					Status:    service.StatusActive,
-					CreatedAt: deps.now,
-					UpdatedAt: deps.now,
-				})
-			},
-			method: http.MethodPut,
-			path:   "/api/v1/keys/100",
-			body:   `{"name":"Renamed"}`,
-			headers: map[string]string{
-				"Content-Type": "application/json",
-			},
-			wantStatus: http.StatusForbidden,
-			wantJSON: `{
-				"code": 403,
-				"message": "Only administrators can manage API keys"
-			}`,
-		},
-		{
-			name: "DELETE /api/v1/keys/:id requires admin",
-			setup: func(t *testing.T, deps *contractDeps) {
-				t.Helper()
-				deps.apiKeyRepo.MustSeed(&service.APIKey{
-					ID:        100,
-					UserID:    1,
-					Key:       "sk_custom_1234567890",
-					Name:      "Key One",
-					Status:    service.StatusActive,
-					CreatedAt: deps.now,
-					UpdatedAt: deps.now,
-				})
-			},
-			method:     http.MethodDelete,
-			path:       "/api/v1/keys/100",
 			wantStatus: http.StatusForbidden,
 			wantJSON: `{
 				"code": 403,
@@ -1456,8 +1408,6 @@ func newContractDeps(t *testing.T) *contractDeps {
 	v1Keys.Use(jwtAuth)
 	v1Keys.GET("/keys", apiKeyHandler.List)
 	v1Keys.POST("/keys", apiKeyHandler.Create)
-	v1Keys.PUT("/keys/:id", apiKeyHandler.Update)
-	v1Keys.DELETE("/keys/:id", apiKeyHandler.Delete)
 	v1Keys.GET("/groups/available", apiKeyHandler.GetAvailableGroups)
 
 	v1Usage := v1.Group("")
@@ -2604,6 +2554,10 @@ func (r *stubUsageLogRepo) GetAPIKeyUsageTrend(ctx context.Context, startTime, e
 }
 
 func (r *stubUsageLogRepo) GetUserUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserUsageTrendPoint, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetUserRequestBodyTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) ([]usagestats.UserRequestBodyTrendPoint, error) {
 	return nil, errors.New("not implemented")
 }
 

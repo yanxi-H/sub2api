@@ -37,6 +37,7 @@ type stubAdminService struct {
 	getAccountResult                    *service.Account
 	updateAccountCalls                  int
 	updateAccountExtraCalls             int
+	apiKey7dAllocationErr               error
 	checkMixedErr                       error
 	lastMixedCheck                      struct {
 		accountID int64
@@ -62,7 +63,11 @@ type stubAdminService struct {
 		sortOrder string
 		calls     int
 	}
-	lastListProxies struct {
+	lastBatchAPIKeyIDs    []int64
+	lastBatchGroupID      int64
+	lastBatchAccountID    int64
+	lastBatchAPIKeyAction string
+	lastListProxies       struct {
 		protocol  string
 		status    string
 		search    string
@@ -376,6 +381,39 @@ func (s *stubAdminService) DeleteGroup(ctx context.Context, id int64) error {
 
 func (s *stubAdminService) GetGroupAPIKeys(ctx context.Context, groupID int64, page, pageSize int) ([]service.APIKey, int64, error) {
 	return s.apiKeys, int64(len(s.apiKeys)), nil
+}
+
+func (s *stubAdminService) GetAPIKey7dAllocations(_ context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]service.APIKey7dAllocation, error) {
+	if s.apiKey7dAllocationErr != nil {
+		return nil, s.apiKey7dAllocationErr
+	}
+	result := make(map[int64]service.APIKey7dAllocation)
+	wanted := make(map[int64]struct{}, len(groupIDs))
+	for _, groupID := range groupIDs {
+		wanted[groupID] = struct{}{}
+	}
+	for _, key := range s.apiKeys {
+		if key.Status != service.StatusAPIKeyActive {
+			continue
+		}
+		groupID := int64(0)
+		if key.GroupID != nil {
+			groupID = *key.GroupID
+			if _, ok := wanted[groupID]; !ok {
+				continue
+			}
+		} else if !includeUngrouped {
+			continue
+		}
+		allocation := result[groupID]
+		if key.RateLimit7d <= 0 {
+			allocation.Unlimited = true
+		} else {
+			allocation.AllocatedUSD += key.RateLimit7d
+		}
+		result[groupID] = allocation
+	}
+	return result, nil
 }
 
 func (s *stubAdminService) GetGroupRateMultipliers(_ context.Context, _ int64) ([]service.UserGroupRateEntry, error) {
@@ -754,35 +792,34 @@ func (s *stubAdminService) AdminResetAPIKeyRateLimitUsage(ctx context.Context, k
 	return nil, service.ErrAPIKeyNotFound
 }
 
-func (s *stubAdminService) AdminSetAPIKeyWindowStart(ctx context.Context, keyID int64, w5h, w1d, w7d *time.Time) (*service.APIKey, error) {
+func (s *stubAdminService) AdminBatchSyncAPIKey7dWindow(_ context.Context, keyIDs []int64, groupID, accountID int64) ([]*service.APIKey, error) {
+	s.lastBatchAPIKeyIDs = append([]int64(nil), keyIDs...)
+	s.lastBatchGroupID = groupID
+	s.lastBatchAccountID = accountID
+	s.lastBatchAPIKeyAction = "sync"
+	return s.batchAPIKeys(keyIDs), nil
+}
+
+func (s *stubAdminService) AdminBatchResetAPIKey7dUsage(_ context.Context, keyIDs []int64, groupID int64) ([]*service.APIKey, error) {
+	s.lastBatchAPIKeyIDs = append([]int64(nil), keyIDs...)
+	s.lastBatchGroupID = groupID
+	s.lastBatchAPIKeyAction = "reset"
+	return s.batchAPIKeys(keyIDs), nil
+}
+
+func (s *stubAdminService) batchAPIKeys(keyIDs []int64) []*service.APIKey {
+	selected := make(map[int64]struct{}, len(keyIDs))
+	for _, id := range keyIDs {
+		selected[id] = struct{}{}
+	}
+	items := make([]*service.APIKey, 0, len(keyIDs))
 	for i := range s.apiKeys {
-		if s.apiKeys[i].ID == keyID {
-			if w5h != nil {
-				s.apiKeys[i].Window5hStart = w5h
-			}
-			if w1d != nil {
-				s.apiKeys[i].Window1dStart = w1d
-			}
-			if w7d != nil {
-				s.apiKeys[i].Window7dStart = w7d
-			}
-			k := s.apiKeys[i]
-			return &k, nil
+		if _, ok := selected[s.apiKeys[i].ID]; ok {
+			key := s.apiKeys[i]
+			items = append(items, &key)
 		}
 	}
-	return nil, service.ErrAPIKeyNotFound
-}
-
-func (s *stubAdminService) AdminBatchSyncAPIKey7dWindow(ctx context.Context, keyIDs []int64, groupID, accountID int64) ([]*service.APIKey, error) {
-	return nil, nil
-}
-
-func (s *stubAdminService) AdminBatchResetAPIKey7dUsage(ctx context.Context, keyIDs []int64, groupID int64) ([]*service.APIKey, error) {
-	return nil, nil
-}
-
-func (s *stubAdminService) GetAPIKey7dAllocations(ctx context.Context, groupIDs []int64, includeUngrouped bool) (map[int64]service.APIKey7dAllocation, error) {
-	return map[int64]service.APIKey7dAllocation{}, nil
+	return items
 }
 
 func (s *stubAdminService) ResetAccountQuota(ctx context.Context, id int64) error {

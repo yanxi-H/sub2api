@@ -36,7 +36,18 @@ jobs:
         run: make test-unit
       - name: Integration tests
         working-directory: backend
-        run: make test-integration
+        shell: bash
+        run: |
+          log_file="$(mktemp)"
+          if make test-integration >"$log_file" 2>&1; then
+            cat "$log_file"
+            exit 0
+          fi
+
+          cat "$log_file"
+          annotation="$(tail -c 12000 "$log_file" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e ':a;N;$!ba;s/\n/%0A/g')"
+          echo "::error title=Integration tests failed::$annotation"
+          exit 1
 
   frontend:
     runs-on: ubuntu-latest

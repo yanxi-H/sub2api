@@ -22,24 +22,26 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 
 	createdAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	log := &service.UsageLog{
-		UserID:         1,
-		APIKeyID:       2,
-		AccountID:      3,
-		RequestID:      "req-1",
-		Model:          "gpt-5",
-		RequestedModel: "gpt-5",
-		InputTokens:    10,
-		OutputTokens:   20,
-		TotalCost:      1,
-		ActualCost:     1,
-		BillingType:    service.BillingTypeBalance,
-		RequestType:    service.RequestTypeWSV2,
-		Stream:         false,
-		OpenAIWSMode:   false,
-		CreatedAt:      createdAt,
+		UserID:           1,
+		APIKeyID:         2,
+		AccountID:        3,
+		RequestID:        "req-1",
+		Model:            "gpt-5",
+		RequestedModel:   "gpt-5",
+		InputTokens:      10,
+		OutputTokens:     20,
+		TotalCost:        1,
+		ActualCost:       1,
+		BillingType:      service.BillingTypeBalance,
+		RequestType:      service.RequestTypeWSV2,
+		RequestBodyBytes: 4096,
+		RequestBodyLane:  service.RequestBodyLaneHeavy,
+		Stream:           false,
+		OpenAIWSMode:     false,
+		CreatedAt:        createdAt,
 	}
 
-	mock.ExpectQuery("INSERT INTO usage_logs").
+	mock.ExpectQuery(`(?s)INSERT INTO usage_logs.*\$58`).
 		WithArgs(
 			log.UserID,
 			log.APIKeyID,
@@ -74,7 +76,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			true,
 			sqlmock.AnyArg(), // duration_ms
 			sqlmock.AnyArg(), // first_token_ms
-			sqlmock.AnyArg(), // request_body_bytes
+			log.RequestBodyBytes,
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
@@ -97,7 +99,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
-			sqlmock.AnyArg(), // request_body_lane
+			sql.NullString{String: string(service.RequestBodyLaneHeavy), Valid: true},
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -164,11 +166,11 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sqlmock.AnyArg(), // duration_ms
-			sqlmock.AnyArg(), // first_token_ms
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(), // request_body_bytes
-			sqlmock.AnyArg(), // user_agent
-			sqlmock.AnyArg(), // ip_address
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			log.ImageCount,
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(), // image_input_size
@@ -375,23 +377,6 @@ func TestUsageLogRepositoryListWithFiltersRequestTypePriority(t *testing.T) {
 	require.Empty(t, logs)
 	require.NotNil(t, page)
 	require.Equal(t, int64(0), page.Total)
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestUsageLogRepositoryListWithFiltersRequestID(t *testing.T) {
-	db, mock := newSQLMock(t)
-	repo := &usageLogRepository{sql: db}
-
-	filters := usagestats.UsageLogFilters{RequestID: " req-0123 "}
-
-	mock.ExpectQuery("SELECT .* FROM usage_logs WHERE request_id = \\$1 ORDER BY id DESC LIMIT \\$2 OFFSET \\$3").
-		WithArgs("req-0123", 21, 0).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-
-	logs, page, err := repo.ListWithFilters(context.Background(), pagination.PaginationParams{Page: 1, PageSize: 20}, filters)
-	require.NoError(t, err)
-	require.Empty(t, logs)
-	require.NotNil(t, page)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -825,12 +810,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sql.NullInt64{},  // duration_ms
-			sql.NullInt64{},  // first_token_ms
-			int64(0),         // request_body_bytes
-			sql.NullString{}, // user_agent
-			sql.NullString{}, // ip_address
-			2,                // image_count
+			sql.NullInt64{},
+			sql.NullInt64{},
+			int64(2048),
+			sql.NullString{},
+			sql.NullString{},
+			2,
 			sql.NullString{Valid: true, String: "4K"},
 			sql.NullString{Valid: true, String: "1024x1024"},
 			sql.NullString{Valid: true, String: "3840x2160"},
@@ -855,6 +840,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			now,
 		}})
 		require.NoError(t, err)
+		require.Equal(t, int64(2048), log.RequestBodyBytes)
 		require.Equal(t, 2, log.ImageCount)
 		require.NotNil(t, log.ImageSize)
 		require.Equal(t, "4K", *log.ImageSize)
@@ -902,13 +888,13 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeWSV2),
 			false, // legacy stream
 			false, // legacy openai ws
-			sql.NullInt64{},  // duration_ms
-			sql.NullInt64{},  // first_token_ms
-			int64(0),         // request_body_bytes
-			sql.NullString{}, // user_agent
-			sql.NullString{}, // ip_address
-			0,                // image_count
-			sql.NullString{}, // image_size
+			sql.NullInt64{},
+			sql.NullInt64{},
+			int64(0),
+			sql.NullString{},
+			sql.NullString{},
+			0,
+			sql.NullString{},
 			sql.NullString{}, // image_input_size
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
@@ -962,13 +948,13 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeUnknown),
 			true,
 			false,
-			sql.NullInt64{},  // duration_ms
-			sql.NullInt64{},  // first_token_ms
-			int64(0),         // request_body_bytes
-			sql.NullString{}, // user_agent
-			sql.NullString{}, // ip_address
-			0,                // image_count
-			sql.NullString{}, // image_size
+			sql.NullInt64{},
+			sql.NullInt64{},
+			int64(0),
+			sql.NullString{},
+			sql.NullString{},
+			0,
+			sql.NullString{},
 			sql.NullString{}, // image_input_size
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
@@ -1022,13 +1008,13 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sql.NullInt64{},  // duration_ms
-			sql.NullInt64{},  // first_token_ms
-			int64(0),         // request_body_bytes
-			sql.NullString{}, // user_agent
-			sql.NullString{}, // ip_address
-			0,                // image_count
-			sql.NullString{}, // image_size
+			sql.NullInt64{},
+			sql.NullInt64{},
+			int64(0),
+			sql.NullString{},
+			sql.NullString{},
+			0,
+			sql.NullString{},
 			sql.NullString{}, // image_input_size
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source

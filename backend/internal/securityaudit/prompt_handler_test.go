@@ -198,6 +198,18 @@ func TestPromptAdminProbeSupportsTemporaryOrSavedTokenWithoutEcho(t *testing.T) 
 	}
 }
 
+func TestPromptAdminEventDetailDisablesCachingWithoutRedactingFullPrompt(t *testing.T) {
+	const fullPrompt = "matched keyword and complete unredacted prompt"
+	service := &fakePromptAdminService{get: func(context.Context, int64) (*Event, error) {
+		return &Event{ID: 7, Snapshot: PromptSnapshot{FullPrompt: fullPrompt}}, nil
+	}}
+	response := promptAdminRequest(t, promptAdminRouter(service), http.MethodGet, "/admin/prompt-audit/events/7", nil)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, "no-cache", response.Header().Get("Pragma"))
+	require.Contains(t, response.Body.String(), fullPrompt)
+}
+
 func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
 	router := promptAdminRouter(&fakePromptAdminService{})
 	for _, tc := range []struct {

@@ -34,6 +34,8 @@ const (
 	EventEventsDeleted        = "prompt_audit.events_deleted"
 	EventDeletePreviewed      = "prompt_audit.events_delete_previewed"
 	EventEventsFilterDeleted  = "prompt_audit.events_filter_deleted"
+	EventRetentionCleanup     = "prompt_audit.retention_cleanup"
+	EventRetentionCleanupFail = "prompt_audit.retention_cleanup_failed"
 )
 
 var knownLogEvents = map[string]struct{}{
@@ -44,6 +46,7 @@ var knownLogEvents = map[string]struct{}{
 	EventChunkStarted: {}, EventChunkCompleted: {}, EventChunkFailed: {}, EventChunksAggregated: {},
 	EventEvaluationStarted: {}, EventGuardAllowed: {}, EventGuardBlocked: {}, EventGuardFailed: {}, EventResultRecordFailed: {},
 	EventEventDeleted: {}, EventEventsDeleted: {}, EventDeletePreviewed: {}, EventEventsFilterDeleted: {},
+	EventRetentionCleanup: {}, EventRetentionCleanupFail: {},
 }
 
 var allowedLogFields = map[string]struct{}{
@@ -55,6 +58,7 @@ var allowedLogFields = map[string]struct{}{
 	"queue_length": {}, "queue_capacity": {}, "stage": {}, "upstream_dispatched": {},
 	"billing_preconsumed": {}, "worker_id": {}, "reclaimed_total": {}, "attempts": {},
 	"max_attempts": {}, "claim_version": {}, "http_status": {}, "retryable": {},
+	"purged_total": {}, "retention_days": {}, "backlog": {},
 }
 
 func LogInfo(event string, fields map[string]any) {

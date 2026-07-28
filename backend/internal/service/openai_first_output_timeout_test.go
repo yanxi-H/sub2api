@@ -333,6 +333,41 @@ func TestOpenAINativeFirstOutputTimeoutDisarmsAfterSemanticOutput(t *testing.T) 
 	require.Equal(t, "42", rec.Result().Header.Get("X-Ratelimit-Remaining-Requests"))
 }
 
+func TestOpenAINativeLifecycleOutputDisarmsTimeoutButTTFTWaitsForToken(t *testing.T) {
+	cfg := &config.Config{Gateway: config.GatewayConfig{
+		OpenAIFirstOutputTimeoutSeconds: 1,
+		MaxLineSize:                     defaultMaxLineSize,
+	}}
+	svc := &OpenAIGatewayService{cfg: cfg, responseHeaderFilter: compileResponseHeaderFilter(cfg)}
+	pr, pw := io.Pipe()
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		defer func() { _ = pw.Close() }()
+		_, _ = pw.Write([]byte("data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\"}}\n\n"))
+		time.Sleep(1100 * time.Millisecond)
+		_, _ = pw.Write([]byte("data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{}\"}\n\n"))
+		_, _ = pw.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_lifecycle\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"))
+	}()
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: pr}
+
+	result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI}, time.Now(), "model", "model")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.firstTokenMs)
+	require.GreaterOrEqual(t, *result.firstTokenMs, 1000, "lifecycle output must not be reported as the first token")
+	require.Contains(t, rec.Body.String(), "response.output_item.added")
+	select {
+	case <-writerDone:
+	case <-time.After(time.Second):
+		t.Fatal("upstream writer did not finish")
+	}
+}
+
 func TestOpenAINativeFirstOutputTimeoutWaitsForCompleteSemanticEvent(t *testing.T) {
 	const lineSize = 68106
 	prefix := `data: {"type":"response.output_text.delta","delta":"`
@@ -425,7 +460,7 @@ func TestOpenAINativeFirstOutputEOFDispatchesTerminalEventWithoutBlankLine(t *te
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.NotNil(t, result.firstTokenMs)
+	require.Nil(t, result.firstTokenMs, "a terminal lifecycle event is not a token")
 	require.Equal(t, "resp_eof", result.responseID)
 	require.Equal(t, 3, result.usage.InputTokens)
 	require.Equal(t, 2, result.usage.OutputTokens)

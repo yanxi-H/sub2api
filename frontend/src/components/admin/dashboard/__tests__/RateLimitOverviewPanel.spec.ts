@@ -3,9 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { ApiKey } from '@/types'
 import RateLimitOverviewPanel from '../RateLimitOverviewPanel.vue'
 
-const { listUsageWindows, refreshUsageWindows, listAccounts, listKeys, batchSync7dWindow, batchReset7dUsage, showSuccess, showError } = vi.hoisted(() => ({
+const { listUsageWindows, refreshUsageWindows, refreshOpenAIResetCredits, listAccounts, listKeys, batchSync7dWindow, batchReset7dUsage, showSuccess, showError } = vi.hoisted(() => ({
   listUsageWindows: vi.fn(),
   refreshUsageWindows: vi.fn(),
+  refreshOpenAIResetCredits: vi.fn(),
   listAccounts: vi.fn(),
   listKeys: vi.fn(),
   batchSync7dWindow: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/api/admin', () => ({
     accounts: {
       listUsageWindows,
       refreshUsageWindows,
+      refreshOpenAIResetCredits,
       list: listAccounts
     },
     apiKeys: { batchSync7dWindow, batchReset7dUsage }
@@ -54,8 +56,24 @@ const accountItem = {
   status: 'active',
   five_hour: { utilization: 35, resets_at: null, remaining_seconds: 0 },
   seven_day: { utilization: 68, resets_at: null, remaining_seconds: 0 },
+  seven_day_capacity: {
+    estimated_total_usd: 100,
+    actual_used_usd: 68,
+    actual_remaining_usd: 32,
+    actual_remaining_percent: 32,
+    allocated_usd: 75,
+    unallocated_remaining_usd: 25,
+    unallocated_remaining_percent: 25,
+    allocation_unlimited: false
+  },
   updated_at: null,
-  supports_live_refresh: true
+  supports_live_refresh: true,
+  supports_openai_reset_credits: true,
+  openai_reset_credits: {
+    available_count: 2,
+    credits: [{ expires_at: '2026-08-01T00:00:00.000Z' }, { expires_at: '2026-08-02T00:00:00.000Z' }],
+    checked_at: '2026-07-23T08:00:00.000Z'
+  }
 }
 
 const apiKey = {
@@ -99,6 +117,7 @@ describe('RateLimitOverviewPanel', () => {
   beforeEach(() => {
     listUsageWindows.mockReset()
     refreshUsageWindows.mockReset()
+    refreshOpenAIResetCredits.mockReset()
     listAccounts.mockReset()
     listKeys.mockReset()
     batchSync7dWindow.mockReset()
@@ -117,6 +136,16 @@ describe('RateLimitOverviewPanel', () => {
       {
         ...accountItem,
         five_hour: { utilization: 91, resets_at: null, remaining_seconds: 0 }
+      }
+    ])
+    refreshOpenAIResetCredits.mockResolvedValue([
+      {
+        id: 11,
+        openai_reset_credits: {
+          available_count: 1,
+          credits: [{ expires_at: '2026-08-03T00:00:00.000Z' }],
+          checked_at: '2026-07-23T09:00:00.000Z'
+        }
       }
     ])
     listAccounts.mockResolvedValue({
@@ -149,12 +178,65 @@ describe('RateLimitOverviewPanel', () => {
     expect(wrapper.text()).toContain('Codex Primary')
     expect(wrapper.text()).toContain('35%')
     expect(wrapper.text()).toContain('68%')
+    expect(wrapper.get('[data-testid="seven-day-capacity"]').text()).toContain('$100.00')
+    expect(wrapper.get('[data-testid="actual-capacity-row"]').text()).toContain('$32.00')
+    expect(wrapper.get('[data-testid="actual-capacity-row"]').text()).toContain('$68.00')
+    expect(wrapper.get('[data-testid="actual-capacity-row"]').text()).toContain('32%')
+    expect(wrapper.get('[data-testid="actual-capacity-row"] .h-full').attributes('style')).toContain('width: 32%')
+    expect(wrapper.get('[data-testid="allocation-capacity-row"]').text()).toContain('$25.00')
+    expect(wrapper.get('[data-testid="allocation-capacity-row"]').text()).toContain('$75.00')
+    expect(wrapper.get('[data-testid="allocation-capacity-row"]').text()).toContain('25%')
+    expect(wrapper.get('[data-testid="allocation-capacity-row"] .h-full').attributes('style')).toContain('width: 25%')
 
     await wrapper.get('[data-testid="live-refresh"]').trigger('click')
     await flushPromises()
 
     expect(refreshUsageWindows).toHaveBeenCalledWith([11])
     expect(wrapper.text()).toContain('91%')
+  })
+
+  it('keeps actual capacity visible when allocation data is unavailable', async () => {
+    listUsageWindows.mockResolvedValue({
+      items: [{
+        ...accountItem,
+        seven_day_capacity: {
+          ...accountItem.seven_day_capacity,
+          allocated_usd: null,
+          unallocated_remaining_usd: null,
+          unallocated_remaining_percent: null
+        }
+      }],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      pages: 1
+    })
+
+    const wrapper = mount(RateLimitOverviewPanel)
+    await flushPromises()
+    await wrapper.get('[data-testid="accounts-tab"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="actual-capacity-row"]').text()).toContain('$32.00')
+    expect(wrapper.get('[data-testid="allocation-capacity-row"]').text()).toContain('admin.dashboard.rateLimits.allocationUnavailable')
+  })
+
+  it('shows cached reset credits, expands their expirations, and refreshes only eligible accounts', async () => {
+    const wrapper = mount(RateLimitOverviewPanel)
+    await flushPromises()
+    await wrapper.get('[data-testid="accounts-tab"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="reset-credit-summary"]').text()).toContain('2')
+    expect(wrapper.find('[data-testid="reset-credit-details"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="reset-credit-summary"] button').trigger('click')
+    expect(wrapper.get('[data-testid="reset-credit-details"]').text()).toContain('2026')
+
+    await wrapper.get('[data-testid="reset-credit-refresh"]').trigger('click')
+    await flushPromises()
+
+    expect(refreshOpenAIResetCredits).toHaveBeenCalledWith([11])
+    expect(wrapper.get('[data-testid="reset-credit-summary"]').text()).toContain('1')
   })
 
   it('groups API keys by assigned group, sorts keys by utilization, and marks recent activity', async () => {

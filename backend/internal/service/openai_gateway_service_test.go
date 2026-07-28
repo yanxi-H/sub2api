@@ -1477,6 +1477,8 @@ func TestOpenAIStreamingResponseFailedBeforeOutputReturnsFailover(t *testing.T) 
 	require.Contains(t, string(failoverErr.ResponseBody), "An error occurred while processing your request")
 	require.False(t, c.Writer.Written())
 	require.Empty(t, rec.Body.String())
+	_, streamFailureMarked := GetOpsStreamError(c)
+	require.False(t, streamFailureMarked, "a retryable failed attempt must not poison a later successful failover")
 }
 
 func TestOpenAIStreamingResponseFailedBeforeOutputCapacityErrorReturnsFailover(t *testing.T) {
@@ -1606,6 +1608,10 @@ func TestOpenAIStreamingResponseFailedAfterOutputSanitizesVerboseResponseForClie
 	require.NotContains(t, body, `"instructions"`)
 	require.NotContains(t, body, `"output"`)
 	require.NotContains(t, body, `"usage"`)
+	streamErr, streamFailureMarked := GetOpsStreamError(c)
+	require.True(t, streamFailureMarked)
+	require.Equal(t, http.StatusBadRequest, streamErr.IntendedStatus)
+	require.Equal(t, "context_length_exceeded", streamErr.Code)
 }
 
 func TestOpenAIStreamingContextWindowResponseFailedBeforeOutputPassesThrough(t *testing.T) {

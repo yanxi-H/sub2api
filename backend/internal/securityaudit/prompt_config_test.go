@@ -288,6 +288,7 @@ func TestParseLegacyConfigDefaultsMissingFieldsWithoutEnablingBlocking(t *testin
 	require.Equal(t, "priority", storage.Strategy)
 	require.Equal(t, DefaultWorkerCount, storage.WorkerCount)
 	require.Equal(t, DefaultQueueCapacity, storage.QueueCapacity)
+	require.Equal(t, DefaultRetentionDays, storage.RetentionDays)
 	require.Equal(t, AllScannerIDs, storage.Scanners)
 	require.True(t, storage.AllGroups)
 }
@@ -306,6 +307,8 @@ func TestUpdateConfigStrictBoundsAndKnownValues(t *testing.T) {
 		{name: "worker high", mutate: func(req *UpdateConfigRequest) { req.WorkerCount = MaxWorkerCount + 1 }, reason: "prompt_audit_invalid_worker_count"},
 		{name: "capacity low", mutate: func(req *UpdateConfigRequest) { req.QueueCapacity = 0 }, reason: "prompt_audit_invalid_queue_capacity"},
 		{name: "capacity high", mutate: func(req *UpdateConfigRequest) { req.QueueCapacity = MaxQueueCapacity + 1 }, reason: "prompt_audit_invalid_queue_capacity"},
+		{name: "retention negative", mutate: func(req *UpdateConfigRequest) { req.RetentionDays = -1 }, reason: "prompt_audit_invalid_retention_days"},
+		{name: "retention high", mutate: func(req *UpdateConfigRequest) { req.RetentionDays = MaxRetentionDays + 1 }, reason: "prompt_audit_invalid_retention_days"},
 		{name: "unknown scanner", mutate: func(req *UpdateConfigRequest) { req.Scanners = []string{"made_up"} }, reason: "prompt_audit_invalid_scanner"},
 		{name: "group required", mutate: func(req *UpdateConfigRequest) { req.AllGroups = false; req.GroupIDs = nil }, reason: "prompt_audit_groups_required"},
 		{name: "group positive", mutate: func(req *UpdateConfigRequest) { req.AllGroups = false; req.GroupIDs = []int64{0} }, reason: "prompt_audit_invalid_group"},

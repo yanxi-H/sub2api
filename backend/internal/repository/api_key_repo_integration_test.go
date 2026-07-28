@@ -150,6 +150,28 @@ func (s *APIKeyRepoSuite) TestUpdate() {
 	s.Require().Equal(service.StatusDisabled, got.Status)
 }
 
+func (s *APIKeyRepoSuite) TestUpdate_PersistsRegeneratedKey() {
+	user := s.mustCreateUser("regenerate-key@test.com")
+	key := &service.APIKey{
+		UserID: user.ID,
+		Key:    "sk-before-regenerate",
+		Name:   "Regenerated Key",
+		Status: service.StatusActive,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+
+	oldKey := key.Key
+	key.Key = "sk-after-regenerate"
+	s.Require().NoError(s.repo.Update(s.ctx, key))
+
+	persisted, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(key.Key, persisted.Key)
+
+	_, err = s.repo.GetByKey(s.ctx, oldKey)
+	s.Require().Error(err, "the old secret must no longer identify the API key")
+}
+
 func (s *APIKeyRepoSuite) TestUpdate_ClearGroupID() {
 	user := s.mustCreateUser("cleargroup@test.com")
 	group := s.mustCreateGroup("g-clear")

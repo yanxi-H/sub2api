@@ -13,6 +13,7 @@ export interface OpsRequestDetailsPreset {
   title: string
   kind?: OpsRequestDetailsParams['kind']
   sort?: OpsRequestDetailsParams['sort']
+  user_id?: number
   min_duration_ms?: number
   max_duration_ms?: number
 }
@@ -78,6 +79,7 @@ const fetchData = async () => {
     if (platform) params.platform = platform
     if (typeof props.groupId === 'number' && props.groupId > 0) params.group_id = props.groupId
 
+    if (typeof props.preset.user_id === 'number') params.user_id = props.preset.user_id
     if (typeof props.preset.min_duration_ms === 'number') params.min_duration_ms = props.preset.min_duration_ms
     if (typeof props.preset.max_duration_ms === 'number') params.max_duration_ms = props.preset.max_duration_ms
 
@@ -112,6 +114,7 @@ watch(
     props.groupId,
     props.preset.kind,
     props.preset.sort,
+    props.preset.user_id,
     props.preset.min_duration_ms,
     props.preset.max_duration_ms
   ],

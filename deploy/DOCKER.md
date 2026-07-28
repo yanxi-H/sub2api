@@ -15,6 +15,19 @@ docker run -d \
 
 ## Docker Compose
 
+The repository's default `docker-compose.yml` intentionally runs the custom
+local tag `sub2api:latest`. Before starting it, either build that tag or import
+an artifact with the same tag:
+
+```bash
+cd deploy
+./build_image.sh
+# Alternatively: docker load -i /path/to/sub2api-image.tar
+docker compose up -d
+```
+
+The example below uses the published upstream image instead.
+
 ```yaml
 version: '3.8'
 

@@ -55,6 +55,10 @@ func TestParseOpsDuration(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, time.Hour, dur)
 
+	dur, ok = parseOpsDuration("3d")
+	require.True(t, ok)
+	require.Equal(t, 72*time.Hour, dur)
+
 	_, ok = parseOpsDuration("invalid")
 	require.False(t, ok)
 }

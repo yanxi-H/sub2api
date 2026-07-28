@@ -53,7 +53,7 @@ describe('Prompt Audit components', () => {
   it('supports group search, stale configured groups, nine scanners, and bounded worker inputs', async () => {
     const draft: PromptAuditDraft = {
       enabled: true, blocking_enabled: false, store_pass_events: false, effective_mode: 'async_audit', strategy: 'priority',
-      worker_count: 4, queue_capacity: 100, scanners: SCANNER_CATALOG.map((item) => item.id), all_groups: false, group_ids: [1, 99],
+      worker_count: 4, queue_capacity: 100, retention_days: 30, scanners: SCANNER_CATALOG.map((item) => item.id), all_groups: false, group_ids: [1, 99],
       endpoints: [endpoint()], config_version: 1, updated_at: '', updated_by: 0, change_summary: '',
     }
     const wrapper = mount(PolicyPanel, {
@@ -67,6 +67,9 @@ describe('Prompt Audit components', () => {
     await wrapper.get('[aria-label="admin.promptAudit.policy.workerCount"]').setValue('6')
     const emitted = wrapper.emitted('update:draft')?.at(-1)?.[0] as PromptAuditDraft
     expect(emitted.worker_count).toBe(6)
+    await wrapper.get('[aria-label="admin.promptAudit.policy.retentionDays"]').setValue('45')
+    const retention = wrapper.emitted('update:draft')?.at(-1)?.[0] as PromptAuditDraft
+    expect(retention.retention_days).toBe(45)
   })
 
   it('keeps identity fields separate, supports selection, and opens filter deletion from the toolbar', async () => {
@@ -252,5 +255,7 @@ describe('Prompt Audit components', () => {
     const riskTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text().includes('admin.promptAudit.events.tabs.risks'))
     await riskTab!.trigger('click')
     expect(wrapper.get('[data-test="risk-prompt-full"]').text()).toContain('legacy redacted preview')
+    expect(wrapper.get('[data-test="risk-prompt-preview"]').text()).toContain('admin.promptAudit.events.promptFallback')
+    expect(wrapper.get('[data-test="risk-prompt-preview"]').text()).toContain('admin.promptAudit.events.promptFallbackHint')
   })
 })

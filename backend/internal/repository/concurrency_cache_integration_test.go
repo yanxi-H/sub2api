@@ -50,6 +50,123 @@ func (s *ConcurrencyCacheSuite) apiKeyConcurrencyCache() apiKeyConcurrencyCacheF
 	return cache
 }
 
+func (s *ConcurrencyCacheSuite) requestBodyAdmissionCache() service.RequestBodyAdmissionCache {
+	cache, ok := s.cache.(service.RequestBodyAdmissionCache)
+	require.True(s.T(), ok)
+	return cache
+}
+
+func mustRedisExists(t *testing.T, client *redis.Client, key string) int64 {
+	t.Helper()
+	value, err := client.Exists(context.Background(), key).Result()
+	require.NoError(t, err)
+	return value
+}
+
+func mustRedisZRange(t *testing.T, client *redis.Client, key string) []string {
+	t.Helper()
+	value, err := client.ZRange(context.Background(), key, 0, -1).Result()
+	require.NoError(t, err)
+	return value
+}
+
+func mustRedisGet(t *testing.T, client *redis.Client, key string) string {
+	t.Helper()
+	value, err := client.Get(context.Background(), key).Result()
+	require.NoError(t, err)
+	return value
+}
+
+func (s *ConcurrencyCacheSuite) TestRequestBodyLane_EnforcesScopeAndPerUserLimits() {
+	cache := s.requestBodyAdmissionCache()
+	ctx := context.Background()
+
+	acquired, err := cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1001, 2, 1, "req-1")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+
+	acquired, err = cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1001, 2, 1, "req-2")
+	require.NoError(s.T(), err)
+	require.False(s.T(), acquired, "one user may only hold one active heavy request")
+
+	acquired, err = cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1002, 2, 1, "req-3")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+
+	acquired, err = cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1003, 2, 1, "req-4")
+	require.NoError(s.T(), err)
+	require.False(s.T(), acquired, "the account heavy lane is limited to two permits")
+
+	require.NoError(s.T(), cache.ReleaseRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1001, 1, "req-1"))
+	acquired, err = cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1003, 2, 1, "req-4")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+}
+
+func (s *ConcurrencyCacheSuite) TestRequestBodyLane_PerUserActiveLimitSpansLanes() {
+	cache := s.requestBodyAdmissionCache()
+	ctx := context.Background()
+
+	acquired, err := cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1001, 2, 1, "req-heavy")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+
+	acquired, err = cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneRecovery, 0, 1001, 1, 1, "req-recovery")
+	require.NoError(s.T(), err)
+	require.False(s.T(), acquired, "one user may only hold one active large request across all lanes")
+
+	require.NoError(s.T(), cache.ReleaseRequestBodyLane(ctx, service.RequestBodyLaneHeavy, 42, 1001, 1, "req-heavy"))
+	acquired, err = cache.AcquireRequestBodyLane(ctx, service.RequestBodyLaneRecovery, 0, 1001, 1, 1, "req-recovery")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+}
+
+func (s *ConcurrencyCacheSuite) TestRequestBodyLaneWaitCount_IsBoundedPerUser() {
+	cache := s.requestBodyAdmissionCache()
+	allowed, err := cache.IncrementRequestBodyLaneWaitCount(s.ctx, 1001, 1, "waiter-1")
+	require.NoError(s.T(), err)
+	require.True(s.T(), allowed)
+
+	allowed, err = cache.IncrementRequestBodyLaneWaitCount(s.ctx, 1001, 1, "waiter-1")
+	require.NoError(s.T(), err)
+	require.True(s.T(), allowed, "re-registering the same waiter is idempotent")
+
+	allowed, err = cache.IncrementRequestBodyLaneWaitCount(s.ctx, 1001, 1, "waiter-2")
+	require.NoError(s.T(), err)
+	require.False(s.T(), allowed, "one user may only queue one large request across all lanes")
+
+	require.NoError(s.T(), cache.DecrementRequestBodyLaneWaitCount(s.ctx, 1001, "waiter-2"))
+	allowed, err = cache.IncrementRequestBodyLaneWaitCount(s.ctx, 1001, 1, "waiter-2")
+	require.NoError(s.T(), err)
+	require.False(s.T(), allowed, "a different waiter cannot clear the current owner")
+
+	require.NoError(s.T(), cache.DecrementRequestBodyLaneWaitCount(s.ctx, 1001, "waiter-1"))
+	allowed, err = cache.IncrementRequestBodyLaneWaitCount(s.ctx, 1001, 1, "waiter-2")
+	require.NoError(s.T(), err)
+	require.True(s.T(), allowed)
+}
+
+func (s *ConcurrencyCacheSuite) TestRequestBodyLaneAcquireDoesNotClearAnotherWaiter() {
+	cache := s.requestBodyAdmissionCache()
+	const userID int64 = 1004
+
+	acquired, err := cache.AcquireRequestBodyLane(s.ctx, service.RequestBodyLaneHeavy, 44, userID, 1, 1, "active-a")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+	allowed, err := cache.IncrementRequestBodyLaneWaitCount(s.ctx, userID, 1, "waiter-b")
+	require.NoError(s.T(), err)
+	require.True(s.T(), allowed)
+
+	require.NoError(s.T(), cache.ReleaseRequestBodyLane(s.ctx, service.RequestBodyLaneHeavy, 44, userID, 1, "active-a"))
+	acquired, err = cache.AcquireRequestBodyLane(s.ctx, service.RequestBodyLaneHeavy, 44, userID, 1, 1, "racer-c")
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+
+	allowed, err = cache.IncrementRequestBodyLaneWaitCount(s.ctx, userID, 1, "waiter-d")
+	require.NoError(s.T(), err)
+	require.False(s.T(), allowed, "a racing acquire must preserve the existing waiter's ownership")
+}
+
 func (s *ConcurrencyCacheSuite) TestOpenAIWSIngressAPIKeySlot_HardLimitRefreshAndRelease() {
 	apiKeyID := int64(9011)
 	firstLeaseID := "ingress-first"
@@ -505,6 +622,53 @@ func (s *ConcurrencyCacheSuite) TestCleanupStaleProcessSlots() {
 	require.Equal(s.T(), []string{"oldproc-unindexed"}, unindexedMembers)
 	_, err = s.rdb.Get(s.ctx, unindexedAccountWaitKey).Result()
 	require.NoError(s.T(), err)
+}
+
+func (s *ConcurrencyCacheSuite) TestCleanupStaleProcessSlots_RemovesRequestBodyAdmissionLeases() {
+	recoveryScopeKey := requestBodyLaneScopeKey(service.RequestBodyLaneRecovery, 0)
+	heavyScopeKey := requestBodyLaneScopeKey(service.RequestBodyLaneHeavy, 42)
+	oldUserKey := requestBodyLaneUserKey(1001)
+	activeUserKey := requestBodyLaneUserKey(1002)
+	oldUserWaitKey := requestBodyLaneWaitKey(1001)
+	activeUserWaitKey := requestBodyLaneWaitKey(1002)
+	recoveryWaitKey := requestBodyLaneScopeWaitKey(service.RequestBodyLaneRecovery, 0)
+	now, err := s.rawCache.redisUnixSeconds(s.ctx)
+	require.NoError(s.T(), err)
+
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, recoveryScopeKey,
+		redis.Z{Score: float64(now), Member: "oldproc-1:1"},
+	).Err())
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, heavyScopeKey,
+		redis.Z{Score: float64(now), Member: "oldproc-2:1"},
+		redis.Z{Score: float64(now), Member: "activeproc-2:1"},
+	).Err())
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, oldUserKey,
+		redis.Z{Score: float64(now), Member: "recovery:oldproc-1"},
+	).Err())
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, activeUserKey,
+		redis.Z{Score: float64(now), Member: "heavy:activeproc-2"},
+	).Err())
+	require.NoError(s.T(), s.rdb.Set(s.ctx, oldUserWaitKey, "recovery:oldproc-wait", testSlotTTL).Err())
+	require.NoError(s.T(), s.rdb.Set(s.ctx, activeUserWaitKey, "heavy:activeproc-wait", testSlotTTL).Err())
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, recoveryWaitKey,
+		redis.Z{Score: float64(now), Member: "1001:oldproc-wait"},
+		redis.Z{Score: float64(now), Member: "1002:activeproc-wait"},
+	).Err())
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, requestBodyActiveIndexKey,
+		redis.Z{Score: float64(now + 60), Member: "1001"},
+		redis.Z{Score: float64(now + 60), Member: "1002"},
+	).Err())
+
+	require.NoError(s.T(), s.cache.CleanupStaleProcessSlots(s.ctx, "activeproc-"))
+
+	require.EqualValues(s.T(), 0, mustRedisExists(s.T(), s.rdb, recoveryScopeKey))
+	require.Equal(s.T(), []string{"activeproc-2:1"}, mustRedisZRange(s.T(), s.rdb, heavyScopeKey))
+	require.EqualValues(s.T(), 0, mustRedisExists(s.T(), s.rdb, oldUserKey))
+	require.Equal(s.T(), []string{"heavy:activeproc-2"}, mustRedisZRange(s.T(), s.rdb, activeUserKey))
+	require.EqualValues(s.T(), 0, mustRedisExists(s.T(), s.rdb, oldUserWaitKey))
+	require.Equal(s.T(), "heavy:activeproc-wait", mustRedisGet(s.T(), s.rdb, activeUserWaitKey))
+	require.Equal(s.T(), []string{"1002:activeproc-wait"}, mustRedisZRange(s.T(), s.rdb, recoveryWaitKey))
+	require.Equal(s.T(), []string{"1002"}, mustRedisZRange(s.T(), s.rdb, requestBodyActiveIndexKey))
 }
 
 func (s *ConcurrencyCacheSuite) TestGetAccountConcurrency_Missing() {

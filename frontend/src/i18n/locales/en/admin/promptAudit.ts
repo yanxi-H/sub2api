@@ -53,7 +53,7 @@ export default {
     policy: {
       title: 'Audit policy', description: 'Configure group scope, nine input-risk categories, workers, and queue bounds.', scope: 'Scope', allGroups: 'All groups', selectedGroups: 'Selected groups',
       searchGroups: 'Search groups', noGroups: 'No matching groups', missingGroups: 'Configured IDs for groups that no longer exist', selectedCount: '{count} groups selected',
-      scanners: 'Qwen3Guard input-risk categories', workerCount: 'Worker count', queueCapacity: 'Persistent queue capacity', strategy: 'Node strategy', strategyHint: 'Try nodes in configuration order and fail over when allowed.',
+      scanners: 'Qwen3Guard input-risk categories', workerCount: 'Worker count', queueCapacity: 'Persistent queue capacity', retentionDays: 'Full-prompt retention (days)', retentionDaysHint: 'Matched prompt text stays unredacted during this period. Afterward only the prompt body is cleared; identity and risk metadata remain.', strategy: 'Node strategy', strategyHint: 'Try nodes in configuration order and fail over when allowed.',
     },
     saveBar: { enabled: 'Enable prompt audit', blocking: 'Synchronous blocking', storePass: 'Store safe events', dirty: 'Unsaved changes', synced: 'Configuration synced' },
     blockingConfirm: {
@@ -76,6 +76,8 @@ export default {
       detailTitle: 'Prompt audit event details', tabs: { summary: 'Audit summary', risks: 'Specific risks', technical: 'Technical details' },
       promptFull: 'Full prompt (unredacted)',
       promptFullHint: 'The full prompt is stored with this event for admin review only. Treat it as sensitive data and do not share it.',
+      promptFallback: 'Redacted preview (full prompt cleared)',
+      promptFallbackHint: 'The full prompt was not retained or has expired. The redacted preview and remaining audit metadata are still available.',
       guardReturn: 'Model audit return',
       guardReturnHint: 'Normalized Guard result (decision, categories, scores, and redacted evidence). Raw response bodies are not stored.',
       riskSummaries: 'Risk summaries',
@@ -92,7 +94,7 @@ export default {
     messages: { saved: 'Prompt Audit configuration saved; plaintext API Key state was cleared.', probeSucceeded: 'The audit node is reachable.', deleted: 'Deleted {count} audit events.' },
     errors: {
       loadConfig: 'Unable to load Prompt Audit configuration.', loadRuntime: 'Unable to load Prompt Audit runtime.', loadGroups: 'Unable to load groups.', loadEvents: 'Unable to load audit events.', loadDetail: 'Unable to load event details.', saveConfig: 'Unable to save the configuration.', probe: 'Node probe failed.', delete: 'Unable to delete events.', previewDelete: 'Unable to create a deletion preview. Check the time range.', deleteConfirmation: 'The deletion confirmation is invalid or expired. Preview again.',
-      prompt_audit_config_conflict: 'Another administrator updated this configuration. Reload the server version before deciding how to merge your draft.',
+      prompt_audit_config_conflict: 'Another administrator updated this configuration. Reload the server version before deciding how to merge your draft.', prompt_audit_invalid_retention_days: 'Full-prompt retention must be between 1 and 3650 days.',
       prompt_guard_requires_audit_enabled: 'Enable Prompt Audit before synchronous blocking.', prompt_audit_invalid_endpoint: 'The audit node configuration is invalid.', prompt_audit_endpoint_required: 'Enable at least one audit node before enabling Prompt Audit.', prompt_audit_groups_required: 'Select at least one group in selected-group mode.', prompt_audit_scanners_required: 'Enable at least one risk category.',
     },
   },

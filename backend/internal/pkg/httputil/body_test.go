@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -139,5 +140,39 @@ func TestReadRequestBodyWithPrealloc_RespectsIdentityEncoding(t *testing.T) {
 	}
 	if string(got) != samplePayload {
 		t.Fatalf("body mismatch: got %q", got)
+	}
+}
+
+func TestReadAllWithLimit_ReportsOversizedBody(t *testing.T) {
+	_, err := readAllWithLimit(strings.NewReader("12345"), 4)
+	if err == nil {
+		t.Fatal("expected an oversized-body error")
+	}
+	var maxErr *http.MaxBytesError
+	if !errors.As(err, &maxErr) {
+		t.Fatalf("expected http.MaxBytesError, got %T: %v", err, err)
+	}
+	if maxErr.Limit != 4 {
+		t.Fatalf("limit mismatch: got %d want 4", maxErr.Limit)
+	}
+}
+
+func TestDecompressRequestBody_ReportsOverflowWhenRequested(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write([]byte("12345")); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+
+	_, err := decompressRequestBody("gzip", compressed.Bytes(), 4, true)
+	var maxErr *http.MaxBytesError
+	if !errors.As(err, &maxErr) {
+		t.Fatalf("expected http.MaxBytesError, got %T: %v", err, err)
+	}
+	if maxErr.Limit != 4 {
+		t.Fatalf("limit mismatch: got %d want 4", maxErr.Limit)
 	}
 }

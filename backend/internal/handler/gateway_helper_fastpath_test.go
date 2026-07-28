@@ -15,6 +15,7 @@ type concurrencyCacheMock struct {
 	acquireAccountSlotFn  func(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error)
 	acquireIngressLeaseFn func(ctx context.Context, apiKeyID int64, maxConnections int, leaseID string) (bool, error)
 	releaseIngressLeaseFn func(ctx context.Context, apiKeyID int64, leaseID string) error
+	incrementUserWaitFn   func(ctx context.Context, userID int64, maxWait int) (bool, error)
 	releaseUserCalled     int32
 	releaseAccountCalled  int32
 	releaseIngressCalled  int32
@@ -73,6 +74,9 @@ func (m *concurrencyCacheMock) GetUserConcurrency(ctx context.Context, userID in
 }
 
 func (m *concurrencyCacheMock) IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error) {
+	if m.incrementUserWaitFn != nil {
+		return m.incrementUserWaitFn(ctx, userID, maxWait)
+	}
 	return true, nil
 }
 

@@ -139,6 +139,7 @@
       @criteria-change="clearDeletePreview"
     />
     <EventDetailDialog :show="showEventDetail" :event="activeEvent" :loading="loading.detail" @close="closeEventDetail" />
+    <TotpStepUpDialog :controller="eventDetailStepUp" />
   </AppLayout>
 </template>
 
@@ -147,6 +148,8 @@ import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
+import { isStepUpBlocked, isStepUpCancelled, stepUpBlockReason, useStepUp } from '@/composables/useStepUp'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
 import RuntimeOverview from './components/RuntimeOverview.vue'
@@ -172,6 +175,7 @@ import { buildUpdateRequest, cloneData, configToDraft, draftFingerprint, emptyEv
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
+const eventDetailStepUp = useStepUp()
 type PromptAuditPageTab = 'config' | 'events'
 const activeTab = ref<PromptAuditPageTab>('events')
 const pageTabs = computed(() => [
@@ -188,6 +192,8 @@ const appliedFilters = ref<PromptEventFilters>(emptyEventFilters())
 const selectedEventIds = ref<number[]>([])
 const activeEvent = ref<PromptAuditEvent | null>(null)
 const showEventDetail = ref(false)
+let detailRequestSequence = 0
+let detailAbortController: AbortController | null = null
 const probeResults = reactive<Record<string, PromptProbeResult>>({})
 const probingIds = ref<string[]>([])
 const showFilterDelete = ref(false)
@@ -354,14 +360,46 @@ function applyEventFilters(value: PromptEventFilters) {
 function changePage(value: number) { events.page = value; void loadEvents() }
 function changePageSize(value: number) { events.page_size = value; events.page = 1; void loadEvents() }
 async function openEvent(id: number) {
+  if (loading.detail || eventDetailStepUp.visible.value) return
+  const requestSequence = ++detailRequestSequence
+  const abortController = new AbortController()
+  detailAbortController = abortController
   showEventDetail.value = true
   loading.detail = true
   activeEvent.value = null
-  try { activeEvent.value = await promptAuditAPI.getEvent(id) }
-  catch (error) { appStore.showError(errorMessage(error, 'admin.promptAudit.errors.loadDetail')); showEventDetail.value = false }
-  finally { loading.detail = false }
+  try {
+    const event = await eventDetailStepUp.run(() => promptAuditAPI.getEvent(id, abortController.signal))
+    if (requestSequence === detailRequestSequence) activeEvent.value = event
+  } catch (error) {
+    if (requestSequence !== detailRequestSequence) return
+    if (!isStepUpCancelled(error)) {
+      if (isStepUpBlocked(error)) {
+        appStore.showError(
+          stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
+            ? t('stepUp.adminApiKeyForbidden')
+            : t('stepUp.notEnabled')
+        )
+      } else {
+        appStore.showError(errorMessage(error, 'admin.promptAudit.errors.loadDetail'))
+      }
+    }
+    showEventDetail.value = false
+  }
+  finally {
+    if (requestSequence === detailRequestSequence) {
+      loading.detail = false
+      detailAbortController = null
+    }
+  }
 }
-function closeEventDetail() { showEventDetail.value = false; activeEvent.value = null }
+function closeEventDetail() {
+  detailRequestSequence++
+  detailAbortController?.abort()
+  detailAbortController = null
+  loading.detail = false
+  showEventDetail.value = false
+  activeEvent.value = null
+}
 function requestSingleDelete(id: number) { deleteRequest.mode = 'single'; deleteRequest.ids = [id] }
 function requestBatchDelete() { if (selectedEventIds.value.length) { deleteRequest.mode = 'batch'; deleteRequest.ids = [...selectedEventIds.value] } }
 function clearDeleteRequest() { deleteRequest.mode = ''; deleteRequest.ids = [] }

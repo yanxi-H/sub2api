@@ -77,3 +77,26 @@ func TestGetUserBreakdownStatsRequestTypeIncludesLegacyFallback(t *testing.T) {
 	require.Empty(t, rows)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestGetUserRequestBodyTrend_SelectsTopUsersBeforeTimeBuckets(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &usageLogRepository{sql: db}
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+
+	queryPattern := `(?s)WITH top_users AS \(.*ORDER BY SUM\(request_body_bytes\) DESC.*LIMIT \$3.*date_trunc\('hour', u\.created_at\).*INTERVAL '5 minutes'.*EXTRACT\(MINUTE FROM u\.created_at\) / 5.*u\.user_id IN \(SELECT user_id FROM top_users\).*u\.created_at >= \$4.*u\.created_at < \$5`
+	mock.ExpectQuery(queryPattern).
+		WithArgs(start, end, 12, start, end).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"date", "user_id", "email", "username", "requests",
+			"total_request_body_bytes", "avg_request_body_bytes", "max_request_body_bytes",
+		}).AddRow("2026-07-01 00:00", int64(7), "user@example.com", "user", 3, int64(900), int64(300), int64(500)))
+
+	rows, err := repo.GetUserRequestBodyTrend(context.Background(), start, end, "5minute", 12)
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, int64(7), rows[0].UserID)
+	require.Equal(t, float64(300), rows[0].AvgRequestBodyBytes)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
