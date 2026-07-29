@@ -206,7 +206,7 @@ func TestAPIKeyRepository_UpdatePersistsRegeneratedKey(t *testing.T) {
 
 	oldKey := key.Key
 	key.Key = "sk-after-regenerate"
-	require.NoError(t, repo.Update(ctx, key))
+	require.NoError(t, repo.Update(ctx, key, service.APIKeyUpdateFields{Key: true}))
 
 	persisted, err := repo.GetByID(ctx, key.ID)
 	require.NoError(t, err)

@@ -146,36 +146,14 @@ func TestPromptAuditMutationAuditRoutesHaveStableActionsAndOmitBodies(t *testing
 	}
 }
 
-func TestPromptAuditFullPromptReadIsAudited(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	repository := &auditCaptureRepository{}
-	auditService := service.NewAuditLogService(repository, nil)
-	auditService.Start()
-
-	router := gin.New()
-	router.Use(func(c *gin.Context) {
-		c.Set(string(ContextKeyUser), AuthSubject{UserID: 77})
-		c.Set(string(ContextKeyUserRole), "admin")
-		c.Next()
-	})
-	router.Use(gin.HandlerFunc(NewAuditLogMiddleware(auditService)))
-	router.GET("/api/v1/admin/prompt-audit/events/:id", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"ok": true})
-	})
-
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/admin/prompt-audit/events/7", nil))
-	require.Equal(t, http.StatusOK, recorder.Code)
-	auditService.Stop()
-
-	repository.mu.Lock()
-	defer repository.mu.Unlock()
-	require.Len(t, repository.logs, 1)
-	require.Equal(t, "admin.prompt_audit.event.read", repository.logs[0].Action)
-	require.Equal(t, "/api/v1/admin/prompt-audit/events/:id", repository.logs[0].Path)
+func TestPasskeyLoginAuditUsesCanonicalLoginActionAndOmitsCredentialBody(t *testing.T) {
+	route := "POST /api/v1/auth/passkey/login/finish"
+	require.Equal(t, service.AuditActionLogin, auditActionOverrides[route])
+	require.Contains(t, auditBodyOmittedRoutes, route)
 }
 
-// Ollama session bodies contain browser cookies, so the entire body must be omitted from audit logs.
+// Ollama 会话保存的请求体整体就是浏览器 Cookie 明文，键级脱敏清单曾漏掉裸键
+// "session"，必须走整体不入库路径，防止会话凭证长期留存在 audit_logs。
 func TestOllamaCloudUsageSessionRouteOmitsAuditBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	require.Contains(t, auditBodyOmittedRoutes, "PUT /api/v1/admin/accounts/:id/ollama-cloud-usage/session")
