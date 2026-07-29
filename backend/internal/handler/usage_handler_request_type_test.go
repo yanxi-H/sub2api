@@ -85,6 +85,8 @@ func newUserUsageRequestTypeTestRouter(repo *userUsageRepoCapture) *gin.Engine {
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 42})
+		// 测试默认模拟管理员视角(能看到成本)
+		c.Set(string(middleware2.ContextKeyUserRole), service.RoleAdmin)
 		c.Next()
 	})
 	router.GET("/usage", handler.List)
