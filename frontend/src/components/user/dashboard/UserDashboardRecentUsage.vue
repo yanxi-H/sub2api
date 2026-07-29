@@ -23,7 +23,7 @@
             </div>
           </div>
           <div class="text-right">
-            <p class="text-sm font-semibold">
+            <p v-if="isAdmin" class="text-sm font-semibold">
               <span class="text-green-600 dark:text-green-400" :title="t('dashboard.actual')">${{ formatCost(log.actual_cost) }}</span>
               <span class="font-normal text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / ${{ formatCost(log.total_cost) }}</span>
             </p>
@@ -42,6 +42,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -53,5 +54,6 @@ defineProps<{
   loading: boolean
 }>()
 const { t } = useI18n()
+const isAdmin = useAuthStore().isAdmin
 const formatCost = (c: number) => c.toFixed(4)
 </script>

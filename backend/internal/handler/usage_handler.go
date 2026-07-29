@@ -245,6 +245,19 @@ func (h *UsageHandler) List(c *gin.Context) {
 	for i := range records {
 		out = append(out, *dto.UsageLogFromService(&records[i]))
 	}
+	// 非管理员隐藏实际成本（防止用户看到真实费率）
+	if role, hasRole := middleware2.GetUserRoleFromContext(c); !hasRole || role != service.RoleAdmin {
+		for i := range out {
+			out[i].TotalCost = 0
+			out[i].ActualCost = 0
+			out[i].InputCost = 0
+			out[i].OutputCost = 0
+			out[i].CacheCreationCost = 0
+			out[i].CacheReadCost = 0
+			out[i].ImageInputCost = 0
+			out[i].ImageOutputCost = 0
+		}
+	}
 	response.Paginated(c, out, result.Total, page, pageSize)
 }
 
@@ -450,6 +463,20 @@ func (h *UsageHandler) DashboardStats(c *gin.Context) {
 		return
 	}
 
+	// 非管理员隐藏实际成本（防止用户看到真实费率）
+	if role, hasRole := middleware2.GetUserRoleFromContext(c); !hasRole || role != service.RoleAdmin {
+		if stats != nil {
+			stats.TotalCost = 0
+			stats.TotalActualCost = 0
+			stats.TodayCost = 0
+			stats.TodayActualCost = 0
+			for i := range stats.ByPlatform {
+				stats.ByPlatform[i].TotalActualCost = 0
+				stats.ByPlatform[i].TodayActualCost = 0
+			}
+		}
+	}
+
 	response.Success(c, stats)
 }
 
@@ -496,8 +523,17 @@ func (h *UsageHandler) DashboardModels(c *gin.Context) {
 		return
 	}
 
+	models := userModelStatsFromUsageStats(stats)
+	// 非管理员隐藏实际成本（防止用户看到真实费率）
+	if role, hasRole := middleware2.GetUserRoleFromContext(c); !hasRole || role != service.RoleAdmin {
+		for i := range models {
+			models[i].Cost = 0
+			models[i].ActualCost = 0
+		}
+	}
+
 	response.Success(c, gin.H{
-		"models":     userModelStatsFromUsageStats(stats),
+		"models":     models,
 		"start_date": parsed.StartTime.Format("2006-01-02"),
 		"end_date":   parsed.EndTime.Add(-24 * time.Hour).Format("2006-01-02"),
 	})
