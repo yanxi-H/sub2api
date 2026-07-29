@@ -506,6 +506,9 @@ type UsageLog struct {
 	DurationMs   *int   `json:"duration_ms"`
 	FirstTokenMs *int   `json:"first_token_ms"`
 
+	// 请求体大小（字节）
+	RequestBodyBytes int64 `json:"request_body_bytes"`
+
 	// 图片生成字段
 	ImageCount         int            `json:"image_count"`
 	ImageSize          *string        `json:"image_size"`

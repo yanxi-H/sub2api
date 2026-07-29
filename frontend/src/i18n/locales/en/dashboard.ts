@@ -341,6 +341,7 @@ export default {
     latency: 'Latency',
     latencyFirstToken: 'First',
     latencyDuration: 'Total',
+    requestBodySize: 'Body Size',
     time: 'Time',
     ws: 'WS',
     stream: 'Stream',

@@ -220,6 +220,11 @@
           <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDateTime(value) }}</span>
         </template>
 
+        <template #cell-request_body_bytes="{ row }">
+          <span v-if="row.request_body_bytes > 0" class="text-sm font-medium tabular-nums text-gray-600 dark:text-gray-400">{{ formatBytes(row.request_body_bytes) }}</span>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-600">-</span>
+        </template>
+
         <template #cell-user_agent="{ row }">
           <span v-if="row.user_agent" class="text-sm text-gray-600 dark:text-gray-400 block max-w-[320px] truncate" :title="row.user_agent">{{ formatUserAgent(row.user_agent) }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
@@ -618,6 +623,13 @@ const formatDuration = (ms: number | null | undefined): string => {
   const totalSec = Math.round(ms / 1000)
   if (totalSec < 3600) return `${Math.floor(totalSec / 60)}m ${totalSec % 60}s`
   return `${Math.floor(totalSec / 3600)}h ${Math.floor((totalSec % 3600) / 60)}m`
+}
+
+const formatBytes = (bytes: number | null | undefined): string => {
+  if (bytes == null || bytes <= 0) return '-'
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`
 }
 
 // Cost tooltip functions
