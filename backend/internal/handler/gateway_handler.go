@@ -1789,7 +1789,7 @@ func (h *GatewayHandler) handleStreamingAwareError(c *gin.Context, status int, e
 		// response.completed/failed/incomplete/cancelled 集合。
 		// Anthropic-backed Responses 路径同样会因为通用 error 帧被拒。
 		if inboundIsResponses(c) {
-			if writeResponsesFailedSSE(c, errType, "", message) {
+			if writeResponsesFailedSSE(c, errType, message) {
 				return
 			}
 		}

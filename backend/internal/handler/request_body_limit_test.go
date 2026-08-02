@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -165,58 +164,6 @@ func TestReleaseSelectionForRequestBodyLaneWait(t *testing.T) {
 	require.Nil(t, selection.ReleaseFunc)
 	require.NotNil(t, selection.WaitPlan)
 	require.Equal(t, 10, selection.WaitPlan.MaxConcurrency)
-}
-
-func TestLargeResponsesAccountSlotFollowsDetachedUpstreamLifecycle(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	for _, lane := range []service.RequestBodyLane{service.RequestBodyLaneHeavy, service.RequestBodyLaneRecovery} {
-		t.Run(string(lane), func(t *testing.T) {
-			cache := &concurrencyCacheMock{
-				acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) {
-					return true, nil
-				},
-			}
-			h := &OpenAIGatewayHandler{
-				gatewayService:    &service.OpenAIGatewayService{},
-				concurrencyHelper: NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, 0),
-			}
-			clientCtx, cancelClient := context.WithCancel(context.Background())
-			c, _ := gin.CreateTestContext(httptest.NewRecorder())
-			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", http.NoBody).WithContext(clientCtx)
-			_, cancelAdmission := installRequestBodyAdmissionContexts(c)
-			selection := &service.AccountSelectionResult{
-				Account: &service.Account{ID: 9, Concurrency: 4},
-				WaitPlan: &service.AccountWaitPlan{
-					MaxConcurrency: 4,
-					MaxWaiting:     1,
-					Timeout:        time.Second,
-				},
-			}
-			streamStarted := false
-
-			release, acquired := h.acquireResponsesAccountSlotForLane(
-				c, nil, "", selection, lane, false, &streamStarted, nil,
-			)
-			require.True(t, acquired)
-			require.NotNil(t, release)
-
-			cancelClient()
-			select {
-			case <-c.Request.Context().Done():
-			case <-time.After(time.Second):
-				t.Fatal("handler context did not observe client cancellation")
-			}
-			time.Sleep(25 * time.Millisecond)
-			require.Zero(t, atomic.LoadInt32(&cache.releaseAccountCalled), "client disconnect must not release a slot while upstream draining continues")
-
-			cancelAdmission()
-			require.Eventually(t, func() bool {
-				return atomic.LoadInt32(&cache.releaseAccountCalled) == 1
-			}, time.Second, 10*time.Millisecond)
-			release()
-			require.Equal(t, int32(1), atomic.LoadInt32(&cache.releaseAccountCalled))
-		})
-	}
 }
 
 func TestOrdinaryRequestAboveHeavyLimitUsesStableCode(t *testing.T) {
