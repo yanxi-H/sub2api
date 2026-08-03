@@ -162,7 +162,7 @@ func (s *APIKeyRepoSuite) TestUpdate_PersistsRegeneratedKey() {
 
 	oldKey := key.Key
 	key.Key = "sk-after-regenerate"
-	s.Require().NoError(s.repo.Update(s.ctx, key))
+	s.Require().NoError(s.repo.Update(s.ctx, key, service.APIKeyUpdateFields{Key: true}))
 
 	persisted, err := s.repo.GetByID(s.ctx, key.ID)
 	s.Require().NoError(err)

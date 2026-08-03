@@ -43,8 +43,14 @@ export interface MonitorCenterIncident {
   status: string
   impact: string
   affected_components: string[]
+  affected_groups: string[]
+  started_at?: string | null
+  created_at?: string | null
   updated_at: string
+  resolved_at?: string | null
+  url?: string
   latest_update?: MonitorCenterIncidentUpdate
+  updates: MonitorCenterIncidentUpdate[]
 }
 
 export interface MonitorCenterOpenAIStatusResponse {
@@ -68,6 +74,24 @@ export interface MonitorCenterOpenAIHistoryPoint {
   active_incident_count: number
   fetch_status: 'success' | 'failed' | string
   latency_ms: number
+  failure_reason?: string
+  incident_refs?: Record<string, string[]>
+}
+
+export interface MonitorCenterOpenAIGroupStatistics {
+  sample_count: number
+  known_sample_count: number
+  operational_count: number
+  availability_pct: number
+}
+
+export interface MonitorCenterOpenAIHistoryStatistics {
+  sample_count: number
+  successful_count: number
+  fetch_success_pct: number
+  average_latency_ms: number
+  anomaly_count: number
+  groups: Record<string, MonitorCenterOpenAIGroupStatistics>
 }
 
 export interface MonitorCenterOpenAIHistoryResponse {
@@ -75,12 +99,15 @@ export interface MonitorCenterOpenAIHistoryResponse {
   end_time: string
   bucket: string
   points: MonitorCenterOpenAIHistoryPoint[]
+  statistics: MonitorCenterOpenAIHistoryStatistics
+  incidents: MonitorCenterIncident[]
 }
 
 export interface MonitorCenterProbePoint {
   timestamp: string
   status: MonitorCenterStatus
   latency_ms?: number | null
+  failure_reason?: string
 }
 
 export interface MonitorCenterProbeResponse {
@@ -92,6 +119,7 @@ export interface MonitorCenterProbeResponse {
   endpoint_kind?: 'openai_direct' | 'custom_endpoint' | 'unknown' | string
   status: MonitorCenterStatus
   latency_ms?: number | null
+  failure_reason?: string
   consecutive_failures: number
   last_checked_at?: string | null
   last_success_at?: string | null

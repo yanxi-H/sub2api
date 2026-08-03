@@ -266,6 +266,9 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 	builder := client.APIKey.Update().
 		Where(apikey.IDEQ(key.ID), apikey.DeletedAtIsNil()).
 		SetUpdatedAt(now)
+	if fields.Key {
+		builder.SetKey(key.Key)
+	}
 	if fields.Name {
 		builder.SetName(key.Name)
 	}
@@ -304,6 +307,16 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 		} else {
 			builder.ClearWindow1dStart()
 		}
+		if key.Window7dStart != nil {
+			builder.SetWindow7dStart(*key.Window7dStart)
+		} else {
+			builder.ClearWindow7dStart()
+		}
+	}
+	if fields.Usage7d {
+		builder.SetUsage7d(key.Usage7d)
+	}
+	if fields.Window7dStart {
 		if key.Window7dStart != nil {
 			builder.SetWindow7dStart(*key.Window7dStart)
 		} else {

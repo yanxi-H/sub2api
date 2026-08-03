@@ -74,7 +74,8 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 		tx,
 		"usage_logs",
 		"usage_logs_request_type_check",
-		"0, 1, 2, 3, 4",
+		"request_type >= 0",
+		"request_type <= 5",
 	)
 	requireColumn(t, tx, "usage_logs", "image_input_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_output_size", "character varying", 32, true)

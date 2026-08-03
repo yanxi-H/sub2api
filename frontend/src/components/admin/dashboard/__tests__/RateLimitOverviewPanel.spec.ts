@@ -265,6 +265,70 @@ describe('RateLimitOverviewPanel', () => {
     expect(wrapper.text()).toContain('$40.00 / $100.00')
   })
 
+  it('uses each owner\'s latest key expiry across pages and shows red, amber, and green signals', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2026-07-15T12:00:00.000Z')
+    vi.setSystemTime(now)
+    const expiresIn = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString()
+    const redOwnerKey = {
+      ...apiKey,
+      id: 24,
+      name: 'Expiring Key',
+      user_id: 9,
+      user: { id: 9, username: 'bob', email: 'bob@example.com', role: 'user', status: 'active' },
+      expires_at: expiresIn(3)
+    } as ApiKey
+
+    listKeys.mockResolvedValue({
+      items: [
+        { ...apiKey, expires_at: expiresIn(2) },
+        { ...otherOwnerApiKey, expires_at: expiresIn(7) },
+        redOwnerKey
+      ],
+      total: 1001,
+      page: 1,
+      page_size: 1000,
+      pages: 2
+    })
+    listKeys.mockResolvedValueOnce({
+      items: [
+        { ...apiKey, expires_at: expiresIn(2) },
+        { ...otherOwnerApiKey, expires_at: expiresIn(7) },
+        redOwnerKey
+      ],
+      total: 1001,
+      page: 1,
+      page_size: 1000,
+      pages: 2
+    }).mockResolvedValueOnce({
+      items: [{ ...higherUsageApiKey, expires_at: expiresIn(8) }],
+      total: 1001,
+      page: 2,
+      page_size: 1000,
+      pages: 2
+    })
+
+    const wrapper = mount(RateLimitOverviewPanel)
+    await flushPromises()
+
+    const rowsForOwner = (owner: string) => wrapper.findAll('[data-testid="key-row"]')
+      .filter((row) => row.text().includes(owner))
+    const yuanSignals = rowsForOwner('yuan').map((row) => row.get('[data-testid="key-expiry-signal"]'))
+
+    expect(listKeys).toHaveBeenNthCalledWith(
+      2,
+      2,
+      1000,
+      expect.objectContaining({ sort_by: 'id', sort_order: 'asc' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(yuanSignals).toHaveLength(1)
+    expect(yuanSignals.map((signal) => signal.attributes('data-expiry-status'))).toEqual(['green'])
+    expect(yuanSignals[0].text()).toContain('8')
+    expect(rowsForOwner('alice')[0].get('[data-testid="key-expiry-signal"]').attributes('data-expiry-status')).toBe('amber')
+    expect(rowsForOwner('bob')[0].get('[data-testid="key-expiry-signal"]').attributes('data-expiry-status')).toBe('red')
+  })
+
   it('keeps reset times visible and expires the recent activity indicator', async () => {
     vi.useFakeTimers()
     const now = new Date('2026-07-15T08:00:00.000Z')

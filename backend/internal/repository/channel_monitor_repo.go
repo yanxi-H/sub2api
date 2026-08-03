@@ -282,15 +282,73 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 	return out, nil
 }
 
-// ListHistoryRange returns every sample in the bounded monitor-center window.
-// The handler currently limits this to three days, so even a 15-second monitor
-// remains bounded while avoiding the truncation caused by a fixed row limit.
+// ListHistoryRange returns one representative sample per monitor-center bucket.
+// The worst status wins; ties prefer the highest latency and latest sample.
 func (r *channelMonitorRepository) ListHistoryRange(
 	ctx context.Context,
 	monitorID int64,
 	model string,
 	start, end time.Time,
+	bucket time.Duration,
 ) ([]*service.ChannelMonitorHistoryEntry, error) {
+	if bucket < time.Minute {
+		bucket = time.Minute
+	}
+	const query = `
+WITH ranked AS (
+    SELECT id, model, status, latency_ms, ping_latency_ms, message, checked_at,
+           ROW_NUMBER() OVER (
+               PARTITION BY FLOOR(EXTRACT(EPOCH FROM checked_at) / $5)
+               ORDER BY CASE status
+                   WHEN 'error' THEN 4
+                   WHEN 'failed' THEN 3
+                   WHEN 'degraded' THEN 2
+                   WHEN 'operational' THEN 1
+                   ELSE 3
+               END DESC,
+               latency_ms DESC NULLS LAST,
+               checked_at DESC
+           ) AS rank
+    FROM channel_monitor_histories
+    WHERE monitor_id = $1
+      AND checked_at >= $2
+      AND checked_at <= $3
+      AND ($4 = '' OR model = $4)
+)
+SELECT id, model, status, latency_ms, ping_latency_ms, message, checked_at
+FROM ranked
+WHERE rank = 1
+ORDER BY checked_at DESC`
+	rows, err := r.db.QueryContext(ctx, query, monitorID, start.UTC(), end.UTC(), strings.TrimSpace(model), int64(bucket/time.Second))
+	if err != nil {
+		return nil, fmt.Errorf("list history range: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]*service.ChannelMonitorHistoryEntry, 0, service.MonitorHistoryMaxLimit)
+	for rows.Next() {
+		entry := &service.ChannelMonitorHistoryEntry{}
+		if err := rows.Scan(&entry.ID, &entry.Model, &entry.Status, &entry.LatencyMs, &entry.PingLatencyMs, &entry.Message, &entry.CheckedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListRecentHistoryRange preserves raw ordering for current state and failure streaks.
+func (r *channelMonitorRepository) ListRecentHistoryRange(
+	ctx context.Context,
+	monitorID int64,
+	model string,
+	start, end time.Time,
+	limit int,
+) ([]*service.ChannelMonitorHistoryEntry, error) {
+	if limit <= 0 || limit > service.MonitorHistoryMaxLimit {
+		limit = service.MonitorHistoryMaxLimit
+	}
 	q := r.client.ChannelMonitorHistory.Query().Where(
 		channelmonitorhistory.MonitorIDEQ(monitorID),
 		channelmonitorhistory.CheckedAtGTE(start.UTC()),
@@ -299,9 +357,9 @@ func (r *channelMonitorRepository) ListHistoryRange(
 	if strings.TrimSpace(model) != "" {
 		q = q.Where(channelmonitorhistory.ModelEQ(model))
 	}
-	rows, err := q.Order(dbent.Desc(channelmonitorhistory.FieldCheckedAt)).All(ctx)
+	rows, err := q.Order(dbent.Desc(channelmonitorhistory.FieldCheckedAt)).Limit(limit).All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list history range: %w", err)
+		return nil, fmt.Errorf("list recent history range: %w", err)
 	}
 	out := make([]*service.ChannelMonitorHistoryEntry, 0, len(rows))
 	for _, row := range rows {

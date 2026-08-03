@@ -2091,7 +2091,14 @@ const confirmResetQuota = () => {
 // Set expiration date based on quick select days
 const setExpirationDays = (days: number) => {
   formData.value.expiration_preset = days.toString() as '7' | '30' | '90'
-  const expDate = new Date()
+  const now = new Date()
+  const currentExpiry = formData.value.expiration_date
+    ? new Date(formData.value.expiration_date)
+    : null
+  // Editing extends the displayed expiry; expired or missing values restart from now.
+  const expDate = currentExpiry && Number.isFinite(currentExpiry.getTime()) && currentExpiry > now
+    ? new Date(currentExpiry)
+    : now
   expDate.setDate(expDate.getDate() + days)
   formData.value.expiration_date = formatDateTimeLocal(expDate.toISOString())
 }

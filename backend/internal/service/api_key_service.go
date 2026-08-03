@@ -61,13 +61,13 @@ const (
 // 若编辑 Key 时无条件整行回写，并发累计的配额与限流计数就会被旧快照覆盖。
 // 因此调用方必须显式声明要改的列。
 type APIKeyUpdateFields struct {
+	// Key only permits the administrator-only secret regeneration path to replace the credential.
+	Key       bool
 	Name      bool
 	Status    bool
 	Quota     bool
 	GroupID   bool
 	ExpiresAt bool
-	// Key 仅供 regenerate 路径声明；更新密钥本身。
-	Key bool
 	// QuotaUsed 仅供"重置配额用量"路径声明；常规计费走 IncrementQuotaUsed。
 	QuotaUsed bool
 	// RateLimits 覆盖 rate_limit_5h / _1d / _7d 三个阈值。
@@ -75,6 +75,10 @@ type APIKeyUpdateFields struct {
 	// RateLimitUsage 覆盖 usage_5h/_1d/_7d 与三个窗口起点，
 	// 仅供"重置限流用量"路径声明；常规计费走 IncrementRateLimitUsage。
 	RateLimitUsage bool
+	// Usage7d and Window7dStart support the administrator batch fallback paths
+	// without writing stale 5h/1d counters from a previously loaded snapshot.
+	Usage7d       bool
+	Window7dStart bool
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
 }
@@ -936,6 +940,11 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 		apiKey.Window7dStart = nil
 		fields.RateLimitUsage = true
 	}
+
+	// 上面的自动复活分支可能改了 status，这里统一登记。
+	if apiKey.Status != originalStatus {
+		fields.Status = true
+	}
 	synced7dWindow := false
 	if req.Sync7dWindowAccountID != nil {
 		if !isAdmin {
@@ -954,12 +963,8 @@ func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64
 		}
 		windowStart := resetAt.Add(-RateLimitWindow7d)
 		apiKey.Window7dStart = &windowStart
+		fields.Window7dStart = true
 		synced7dWindow = true
-	}
-
-	// 上面的自动复活分支可能改了 status，这里统一登记。
-	if apiKey.Status != originalStatus {
-		fields.Status = true
 	}
 
 	if err := s.apiKeyRepo.Update(ctx, apiKey, fields); err != nil {

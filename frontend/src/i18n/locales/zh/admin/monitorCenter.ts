@@ -32,11 +32,17 @@ export default {
     },
     upstream: {
       title: 'OpenAI 官方服务', incidentCount: '未解决事故 {count}', lastSync: '最后同步 {time}',
+      componentStatusHint: '关注组件当前可用性；官方事故作为独立风险信号展示',
+      rangeIncidentCount: '最近{range}官方事件 {count}', rangeAvailability: '最近{range}可用率',
       stale: '官方状态本次同步失败，当前展示 {time} 的最后成功数据。', unavailable: '尚无可用的 OpenAI 官方状态数据。',
       notReported: '未报告', oneHourHistory: '最近一小时状态', rangeHistory: '最近{range}状态', coverage: '采样覆盖 {actual}/{expected} 分钟（{percent}%）',
       missingSample: '无采样', unresolvedIncident: '未解决事故', incidentMarker: '{count} 个未解决事故', noIncidents: '当前没有未解决事故',
       noIncidentsHint: 'OpenAI 当前未报告未解决事故',
       incidentMeta: '{status} · 影响 {impact} · 更新于 {time}', officialDetails: '官方详情', openOfficial: '打开 OpenAI Status',
+      sampleWindow: '{count} 个采样', linkedIncidents: '关联 {count} 个官方事件', relatedRisk: '关联官方风险',
+      officialEvents: '官方事件与事故', officialEventsHint: '事故是背景信号，不直接覆盖关注组件的实际采样状态',
+      noIncidentsInRange: '所选时段没有官方事件', startedAt: '开始时间', updatedAt: '最近更新', duration: '持续时长', affected: '影响组件',
+      durationMinutes: '{count} 分钟', durationHours: '{count} 小时',
     },
     gateway: {
       title: 'Sub2API 网关', subtitle: 'SLA、错误率与本地策略', requests: '请求数', errors: '错误数',
@@ -46,13 +52,18 @@ export default {
     probe: {
       title: '真实链路探测', direct: '直连 OpenAI 官方端点', customEndpoint: '已指定的 Sub2API 链路监控', notConfigured: '请将一个非直连 OpenAI 渠道监控的分组设为 monitor-center',
       lastLatency: '最近探测耗时', failures: '连续失败 {count}', model: '探测模型', lastSuccess: '最近成功', latency: '探测耗时', noSamples: '所选时段暂无真实链路探测样本',
+      attribution: '链路归因', suspectedUpstream: '真实链路失败，且对应 API 官方采样异常：疑似上游故障。',
+      localFirst: '真实链路失败，但 API 官方采样正常：优先检查 Sub2API、账号、代理、限流与本地策略。',
+      availableWithRisk: '真实链路当前可用，但存在与 API 相关的未结官方事故：当前可用，保留风险关注。',
+      pathAvailable: '真实链路与 API 官方采样均正常。', insufficientEvidence: '当前样本不足，暂不能可靠归因。',
     },
     latency: {
       title: '服务请求响应时间', subtitle: 'P95、P90、P50、Avg 与 Max；空采样窗口不会被连接', mode: '时延指标', noData: '所选时段暂无时延样本',
     },
     concurrency: {
-      title: '三通道用户并发', subtitle: '普通、重请求与恢复通道独立展示；用户选择只影响本模块',
-      normal: '普通通道', heavy: '重请求通道', recovery: '恢复通道', selectUser: '选择用户曲线', noUsers: '无可选用户',
+      title: '三通道用户并发', subtitle: '默认展示全体用户；选择用户可聚焦其普通、重请求与恢复通道',
+      normal: '普通通道', heavy: '重请求通道', recovery: '恢复通道', selectUser: '查看用户详情', noUsers: '无可选用户',
+      allUsers: '全部用户', backToAll: '返回全部用户', otherUsers: '其他用户最高值（{count}）', allUsersSummary: '全体用户视图：显示活跃度最高的 {shown}/{total} 位用户，剩余用户显示每个时间点的最高单用户需求；可通过图例筛选曲线。',
       partialCoverage: '并发快照仅保留 24 小时，当前图表显示后端可提供的有效覆盖范围。',
       current: '占用 {active} · 排队 {waiting}', demand: '并发需求（请求数）', responseTime: '响应时间',
       systemActive: '系统占用', systemQueue: '系统排队', tooltip: '需求 {demand}，占用 {active}，排队 {waiting}', laneEmpty: '该通道在所选时段暂无并发活动',
@@ -65,9 +76,12 @@ export default {
       ingestionWarning: '性能遥测存在数据损失：丢弃 {dropped} 条，写入失败 {failed} 条。',
     },
     history: {
-      title: '最近三天历史探测', subtitle: 'OpenAI 官方状态、网关请求健康与真实链路分别保存和展示', gateway: '网关', probe: '真实链路',
+      title: '历史探测审计', subtitle: 'OpenAI 官方状态、网关请求健康与真实链路分别保存和展示', rangeSubtitle: '最近{range}的官方组件、网关与真实链路采样', gateway: '网关', probe: '真实链路',
       samples: '采样次数', successRate: '获取成功率', averageLatency: '平均探测延迟', anomalies: '异常次数',
       officialSample: 'OpenAI 状态探测', threeDaysAgo: '3 天前', now: '现在', good: '总体稳定', warn: '存在波动', bad: '存在故障', unknown: '暂无数据',
+      status: '状态', latency: '延迟', relatedIncident: '关联事故', records: '状态探测记录', anomalyOnly: '仅异常',
+      fetchFailed: '状态接口获取失败',
+      sampleCount: '{count} 个样本', missingSampleReason: '该窗口没有采样', noGatewayTraffic: '该窗口没有网关请求',
     },
   },
 }

@@ -37,9 +37,7 @@ func (s *OpsService) GetMonitorCenterOpenAIHistory(
 		return nil, err
 	}
 	if s.monitorCenter == nil {
-		return &MonitorCenterOpenAIHistory{
-			StartTime: start, EndTime: end, Bucket: "minute", Points: []MonitorCenterOpenAIHistoryPoint{},
-		}, nil
+		return emptyMonitorCenterOpenAIHistory(start, end), nil
 	}
 	return s.monitorCenter.GetOpenAIHistory(ctx, start, end)
 }

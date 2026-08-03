@@ -437,9 +437,30 @@
               <p class="truncate text-sm font-semibold text-gray-900 dark:text-white" :title="item.name">
                 {{ item.name }}
               </p>
-              <p class="truncate text-[11px] text-gray-400 dark:text-gray-500" :title="ownerTitle(item)">
-                {{ ownerLabel(item) }}
-              </p>
+              <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
+                <span class="truncate text-[11px] text-gray-400 dark:text-gray-500" :title="ownerTitle(item)">
+                  {{ ownerLabel(item) }}
+                </span>
+                <span
+                  v-if="ownerExpiryStatus(item)"
+                  data-testid="key-expiry-signal"
+                  class="inline-flex flex-shrink-0 items-center gap-1"
+                  :data-expiry-status="ownerExpiryStatus(item)"
+                  :title="ownerExpiryTitle(item)"
+                  :aria-label="ownerExpiryTitle(item)"
+                >
+                  <span class="h-1.5 w-8 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
+                    <span
+                      class="block h-full rounded-full transition-[width,background-color]"
+                      :class="ownerExpiryBarClass(ownerExpiryStatus(item))"
+                      :style="{ width: `${ownerExpiryProgress(item)}%` }"
+                    ></span>
+                  </span>
+                  <span class="tabular-nums" :class="ownerExpiryTextClass(ownerExpiryStatus(item))">
+                    {{ ownerExpiryLabel(item) }}
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
           <div class="flex items-center justify-end">
@@ -511,7 +532,7 @@ import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import keysAPI from '@/api/keys'
 import type { AccountUsageWindowItem } from '@/api/admin/accounts'
-import type { Account, ApiKey } from '@/types'
+import type { Account, ApiKey, PaginatedResponse } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
@@ -522,6 +543,7 @@ import RateLimitGauge from './RateLimitGauge.vue'
 
 type PanelTab = 'accounts' | 'keys'
 type KeyBatchAction = 'sync' | 'reset'
+type OwnerExpiryStatus = 'red' | 'amber' | 'green' | 'never'
 
 interface SyncAccountOption {
   id: number
@@ -537,6 +559,17 @@ interface ApiKeyRateLimitGroup {
   items: ApiKey[]
 }
 
+interface OwnerExpirySummary {
+  status: OwnerExpiryStatus
+  expiresAt: number | null
+  daysLeft: number | null
+}
+
+interface OwnerKeyExpiry {
+  userID: number
+  expiresAt: string | null
+}
+
 const { t } = useI18n()
 const appStore = useAppStore()
 const accountPageSize = 10
@@ -544,6 +577,7 @@ const keyPageSize = 1000
 const activeTab = ref<PanelTab>('keys')
 const accountItems = ref<AccountUsageWindowItem[]>([])
 const keyItems = ref<ApiKey[]>([])
+const keyExpiryItems = ref<OwnerKeyExpiry[]>([])
 const accountTotal = ref(0)
 const keyTotal = ref(0)
 const accountPage = ref(1)
@@ -571,6 +605,7 @@ const batchSubmitting = ref(false)
 const activityNow = ref(Date.now())
 let accountController: AbortController | null = null
 let keyController: AbortController | null = null
+let keyExpiryController: AbortController | null = null
 let activityTimer: ReturnType<typeof setInterval> | null = null
 
 const activeTabClass = 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
@@ -581,6 +616,44 @@ const activePage = computed(() => activeTab.value === 'accounts' ? accountPage.v
 const activePageSize = computed(() => activeTab.value === 'accounts' ? accountPageSize : keyPageSize)
 const activeLoading = computed(() => activeTab.value === 'accounts' ? accountLoading.value : keyLoading.value)
 const activeError = computed(() => activeTab.value === 'accounts' ? accountError.value : keyError.value)
+const ownerExpiryByUserID = computed(() => {
+  const latestExpiryByUserID = new Map<number, number | null>()
+
+  for (const key of keyExpiryItems.value) {
+    if (key.expiresAt === null) {
+      // A key without an expiry is later than any dated key for the same user.
+      latestExpiryByUserID.set(key.userID, null)
+      continue
+    }
+
+    const expiresAt = Date.parse(key.expiresAt)
+    const previousExpiry = latestExpiryByUserID.get(key.userID)
+    if (!Number.isFinite(expiresAt) || previousExpiry === null) continue
+    if (previousExpiry === undefined || expiresAt > previousExpiry) {
+      latestExpiryByUserID.set(key.userID, expiresAt)
+    }
+  }
+
+  const now = activityNow.value
+  const summaries = new Map<number, OwnerExpirySummary>()
+  for (const [userID, expiresAt] of latestExpiryByUserID) {
+    if (expiresAt === null) {
+      summaries.set(userID, { status: 'never', expiresAt: null, daysLeft: null })
+      continue
+    }
+
+    const remainingMs = expiresAt - now
+    const daysLeft = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)))
+    const status: OwnerExpiryStatus = remainingMs <= 3 * 24 * 60 * 60 * 1000
+      ? 'red'
+      : remainingMs <= 7 * 24 * 60 * 60 * 1000
+        ? 'amber'
+        : 'green'
+    summaries.set(userID, { status, expiresAt, daysLeft })
+  }
+
+  return summaries
+})
 const keyGroups = computed<ApiKeyRateLimitGroup[]>(() => {
   const groups = new Map<string, ApiKeyRateLimitGroup>()
 
@@ -725,7 +798,7 @@ async function submitBatchAction(): Promise<void> {
       appStore.showSuccess(t('admin.dashboard.rateLimits.reset7dSuccess', { count }))
     }
     closeBatchAction()
-    await loadKeys()
+    await loadKeys(false)
   } catch (error: any) {
     appStore.showError(error?.message || t('admin.dashboard.rateLimits.batchActionFailed'))
   } finally {
@@ -760,7 +833,7 @@ async function loadAccounts(): Promise<void> {
   }
 }
 
-async function loadKeys(): Promise<void> {
+async function loadKeys(refreshOwnerExpiry = true): Promise<void> {
   keyController?.abort()
   const controller = new AbortController()
   keyController = controller
@@ -777,6 +850,11 @@ async function loadKeys(): Promise<void> {
     keyItems.value = response.items
     keyTotal.value = response.total
     keyLoaded.value = true
+    if (refreshOwnerExpiry) {
+      void loadOwnerExpirySummaries(
+        keyPage.value === 1 && !keySearch.value.trim() ? response : undefined
+      )
+    }
   } catch (error: any) {
     if (keyController !== controller) return
     if (error?.name === 'CanceledError' || error?.name === 'AbortError') return
@@ -784,6 +862,43 @@ async function loadKeys(): Promise<void> {
   } finally {
     if (keyController === controller) keyLoading.value = false
   }
+}
+
+async function loadOwnerExpirySummaries(initialResponse?: PaginatedResponse<ApiKey>): Promise<void> {
+  keyExpiryController?.abort()
+  const controller = new AbortController()
+  keyExpiryController = controller
+
+  try {
+    const firstPage = initialResponse ?? await keysAPI.list(
+      1,
+      keyPageSize,
+      { sort_by: 'id', sort_order: 'asc' },
+      { signal: controller.signal }
+    )
+    if (keyExpiryController !== controller) return
+
+    const allKeys = firstPage.items.map(toOwnerKeyExpiry)
+    for (let page = 2; page <= Math.max(1, firstPage.pages); page += 1) {
+      const response = await keysAPI.list(
+        page,
+        keyPageSize,
+        { sort_by: 'id', sort_order: 'asc' },
+        { signal: controller.signal }
+      )
+      if (keyExpiryController !== controller) return
+      allKeys.push(...response.items.map(toOwnerKeyExpiry))
+    }
+
+    keyExpiryItems.value = allKeys
+  } catch (error: any) {
+    if (keyExpiryController !== controller) return
+    if (error?.name === 'CanceledError' || error?.name === 'AbortError') return
+  }
+}
+
+function toOwnerKeyExpiry(key: ApiKey): OwnerKeyExpiry {
+  return { userID: key.user_id, expiresAt: key.expires_at }
 }
 
 function loadActiveTab(): Promise<void> {
@@ -798,15 +913,23 @@ function selectTab(tab: PanelTab): void {
 }
 
 function handleSearch(): void {
-  if (activeTab.value === 'accounts') accountPage.value = 1
-  else keyPage.value = 1
-  void loadActiveTab()
+  if (activeTab.value === 'accounts') {
+    accountPage.value = 1
+    void loadAccounts()
+    return
+  }
+  keyPage.value = 1
+  void loadKeys(false)
 }
 
 function changePage(page: number): void {
-  if (activeTab.value === 'accounts') accountPage.value = page
-  else keyPage.value = page
-  void loadActiveTab()
+  if (activeTab.value === 'accounts') {
+    accountPage.value = page
+    void loadAccounts()
+    return
+  }
+  keyPage.value = page
+  void loadKeys(false)
 }
 
 async function refreshUpstream(): Promise<void> {
@@ -931,6 +1054,46 @@ function ownerTitle(key: ApiKey): string {
   return [key.user.username, key.user.email].filter(Boolean).join(' / ')
 }
 
+function ownerExpirySummary(key: ApiKey): OwnerExpirySummary | null {
+  return ownerExpiryByUserID.value.get(key.user_id) ?? null
+}
+
+function ownerExpiryStatus(key: ApiKey): OwnerExpiryStatus | null {
+  return ownerExpirySummary(key)?.status ?? null
+}
+
+function ownerExpiryLabel(key: ApiKey): string {
+  const summary = ownerExpirySummary(key)
+  if (!summary || summary.status === 'never') return t('admin.dashboard.rateLimits.keyExpiryNever')
+  if (summary.daysLeft === 0) return t('admin.dashboard.rateLimits.keyExpiryExpired')
+  return t('admin.dashboard.rateLimits.keyExpiryDaysLeft', { days: summary.daysLeft })
+}
+
+function ownerExpiryTitle(key: ApiKey): string {
+  const summary = ownerExpirySummary(key)
+  if (!summary || summary.expiresAt === null) return t('admin.dashboard.rateLimits.keyExpiryNever')
+  return t('admin.dashboard.rateLimits.keyExpiryTitle', { time: formatDateTime(new Date(summary.expiresAt).toISOString()) })
+}
+
+function ownerExpiryProgress(key: ApiKey): number {
+  const status = ownerExpiryStatus(key)
+  if (status === 'red') return 33
+  if (status === 'amber') return 67
+  return 100
+}
+
+function ownerExpiryBarClass(status: OwnerExpiryStatus | null): string {
+  if (status === 'red') return 'bg-red-500'
+  if (status === 'amber') return 'bg-amber-500'
+  return 'bg-emerald-500'
+}
+
+function ownerExpiryTextClass(status: OwnerExpiryStatus | null): string {
+  if (status === 'red') return 'text-red-600 dark:text-red-400'
+  if (status === 'amber') return 'text-amber-600 dark:text-amber-400'
+  return 'text-emerald-600 dark:text-emerald-400'
+}
+
 function statusLabel(status: string): string {
   const key = `admin.dashboard.rateLimits.statuses.${status}`
   const translated = t(key)
@@ -961,6 +1124,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   accountController?.abort()
   keyController?.abort()
+  keyExpiryController?.abort()
   if (activityTimer !== null) clearInterval(activityTimer)
 })
 </script>

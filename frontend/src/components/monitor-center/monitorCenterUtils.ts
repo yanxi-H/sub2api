@@ -3,7 +3,7 @@ import type { MonitorCenterStatus } from '@/api/admin/monitorCenter'
 
 export const STATUS_ORDER: Record<MonitorCenterStatus, number> = {
   operational: 0,
-  unknown: 1,
+  unknown: -1,
   under_maintenance: 2,
   degraded_performance: 3,
   partial_outage: 4,

@@ -30,7 +30,7 @@ func (r *opsRepository) BatchInsertRequestPerformance(ctx context.Context, input
 
 	const columnCount = 27
 	var query strings.Builder
-	query.WriteString(`INSERT INTO ops_request_performance (
+	_, _ = query.WriteString(`INSERT INTO ops_request_performance (
   created_at, request_id, user_id, api_key_id, account_id, group_id,
   platform, model, stream, request_body_lane, request_body_bytes, logical_status_code,
   end_to_end_ms, body_read_ms, user_queue_ms, body_lane_wait_ms,
@@ -45,17 +45,17 @@ func (r *opsRepository) BatchInsertRequestPerformance(ctx context.Context, input
 			continue
 		}
 		if rowCount > 0 {
-			query.WriteByte(',')
+			_ = query.WriteByte(',')
 		}
-		query.WriteByte('(')
+		_ = query.WriteByte('(')
 		for column := 0; column < columnCount; column++ {
 			if column > 0 {
-				query.WriteByte(',')
+				_ = query.WriteByte(',')
 			}
-			query.WriteByte('$')
-			query.WriteString(strconv.Itoa(len(args) + column + 1))
+			_ = query.WriteByte('$')
+			_, _ = query.WriteString(strconv.Itoa(len(args) + column + 1))
 		}
-		query.WriteByte(')')
+		_ = query.WriteByte(')')
 		args = append(args,
 			input.CreatedAt, strings.TrimSpace(input.RequestID), input.UserID, input.APIKeyID, input.AccountID, input.GroupID,
 			input.Platform, input.Model, input.Stream, string(input.RequestBodyLane), input.RequestBodyBytes, input.LogicalStatusCode,
@@ -69,7 +69,7 @@ func (r *opsRepository) BatchInsertRequestPerformance(ctx context.Context, input
 	if rowCount == 0 {
 		return 0, nil
 	}
-	query.WriteString(`
+	_, _ = query.WriteString(`
 ON CONFLICT (request_id, api_key_id) DO UPDATE SET
   created_at = EXCLUDED.created_at,
   user_id = EXCLUDED.user_id,

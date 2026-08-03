@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
@@ -12,6 +12,8 @@ const {
   getAvailableGroups,
   getUserGroupRates,
   listAdminUsers,
+  listAccounts,
+  updateKey,
   regenerateKey,
   showError,
   showSuccess,
@@ -26,6 +28,8 @@ const {
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
   listAdminUsers: vi.fn(),
+  listAccounts: vi.fn(),
+  updateKey: vi.fn(),
   regenerateKey: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -65,7 +69,7 @@ vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
     create: vi.fn(),
-    update: vi.fn(),
+    update: updateKey,
     regenerate: regenerateKey,
     delete: vi.fn(),
     toggleStatus: vi.fn(),
@@ -86,6 +90,9 @@ vi.mock('@/api', () => ({
     },
     users: {
       list: listAdminUsers,
+    },
+    accounts: {
+      list: listAccounts,
     },
   },
 }))
@@ -198,6 +205,9 @@ const DataTableStub = {
         >
           <slot name="cell-last_used_ip" :value="row.last_used_ip" :row="row" />
         </div>
+        <div data-test="key-actions">
+          <slot name="cell-actions" :row="row" />
+        </div>
       </div>
       <slot name="empty" />
     </div>
@@ -290,6 +300,8 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
     listAdminUsers.mockReset()
+    listAccounts.mockReset()
+    updateKey.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
@@ -308,7 +320,13 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
     listAdminUsers.mockResolvedValue({ items: [], pages: 1 })
+    listAccounts.mockResolvedValue({ items: [], pages: 1 })
+    updateKey.mockResolvedValue(createApiKey())
     isCurrentStep.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {
@@ -348,6 +366,45 @@ describe('user KeysView column settings', () => {
         (select.props('options') as Array<{ value: number }>).some((option) => option.value === 42)
       )
     ).toBe(true)
+  })
+
+  it('extends an edited key from its current expiration and keeps preset extensions cumulative', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const key = {
+      ...createApiKey(),
+      group_id: 3,
+      expires_at: '2026-01-20T12:00:00.000Z'
+    }
+    listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await flushPromises()
+
+    const expirationInput = wrapper.get('input[type="datetime-local"]')
+    const initialExpiration = new Date((expirationInput.element as HTMLInputElement).value)
+    const plusSeven = getButtonByText(wrapper, 'keys.extendDays')
+    await plusSeven.trigger('click')
+    const firstExtension = new Date((expirationInput.element as HTMLInputElement).value)
+    const expectedFirstExtension = new Date(initialExpiration)
+    expectedFirstExtension.setDate(expectedFirstExtension.getDate() + 7)
+    expect(firstExtension.getTime()).toBe(expectedFirstExtension.getTime())
+
+    const presetButtons = wrapper.findAll('button').filter((button) => button.text().includes('keys.extendDays'))
+    await presetButtons[1].trigger('click')
+    const secondExtensionValue = (expirationInput.element as HTMLInputElement).value
+    const secondExtension = new Date(secondExtensionValue)
+    const expectedSecondExtension = new Date(firstExtension)
+    expectedSecondExtension.setDate(expectedSecondExtension.getDate() + 30)
+    expect(secondExtension.getTime()).toBe(expectedSecondExtension.getTime())
+
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenCalledWith(key.id, expect.objectContaining({
+      expires_at: new Date(secondExtensionValue).toISOString()
+    }))
   })
 
   it('shows a hidden column when toggled and persists the preference', async () => {

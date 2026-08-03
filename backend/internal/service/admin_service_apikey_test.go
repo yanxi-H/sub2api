@@ -155,7 +155,7 @@ func (s *apiKeyBatchRepoStub) GetByID(_ context.Context, id int64) (*APIKey, err
 	return &clone, nil
 }
 
-func (s *apiKeyBatchRepoStub) Update(_ context.Context, key *APIKey) error {
+func (s *apiKeyBatchRepoStub) Update(_ context.Context, key *APIKey, _ APIKeyUpdateFields) error {
 	if s.updatedAll == nil {
 		s.updatedAll = make(map[int64]*APIKey)
 	}

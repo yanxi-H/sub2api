@@ -4,18 +4,51 @@ import { useI18n } from 'vue-i18n'
 import { Route } from '@lucide/vue'
 import { CategoryScale, Chart as ChartJS, LineElement, LinearScale, PointElement, Tooltip } from 'chart.js'
 import { Line } from 'vue-chartjs'
-import type { MonitorCenterProbeResponse } from '@/api/admin/monitorCenter'
+import type { MonitorCenterOpenAIHistoryResponse, MonitorCenterProbeResponse, MonitorCenterStatus } from '@/api/admin/monitorCenter'
 import { chartPalette, formatAxisTime, formatDateTime, formatMs, statusLabel, statusTone } from './monitorCenterUtils'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip)
 
 const props = defineProps<{
   probe: MonitorCenterProbeResponse | null
+  officialHistory: MonitorCenterOpenAIHistoryResponse | null
   loading: boolean
 }>()
 
 const { t } = useI18n()
 const hasData = computed(() => (props.probe?.points?.length ?? 0) > 0)
+const currentProbePoint = computed(() => {
+  if (!props.probe?.configured || !props.probe.last_checked_at) return null
+  return {
+    timestamp: props.probe.last_checked_at,
+    status: props.probe.status,
+    failure_reason: props.probe.failure_reason,
+  }
+})
+const correspondingOfficialAPIStatus = computed<MonitorCenterStatus>(() => {
+  if (!currentProbePoint.value) return 'unknown'
+  const probeAt = new Date(currentProbePoint.value.timestamp).getTime()
+  const closest = (props.officialHistory?.points ?? [])
+    .filter(point => point.fetch_status === 'success' && Number.isFinite(new Date(point.timestamp).getTime()))
+    .map(point => ({ point, distance: Math.abs(new Date(point.timestamp).getTime() - probeAt) }))
+    .filter(item => item.distance <= 5 * 60_000)
+    .sort((a, b) => a.distance - b.distance)[0]
+  return closest?.point.api_status ?? 'unknown'
+})
+const relatedOfficialRisk = computed(() => (props.officialHistory?.incidents ?? []).some(incident => incident.affected_groups?.includes('api') && incident.status !== 'resolved'))
+const attribution = computed(() => {
+  const point = currentProbePoint.value
+  if (!props.probe?.configured || !point) return { tone: 'unknown', key: 'insufficientEvidence' }
+  const probeFailed = ['partial_outage', 'major_outage'].includes(point.status)
+    || (point.status === 'unknown' && !!point.failure_reason)
+  const officialFailed = !['operational', 'unknown'].includes(correspondingOfficialAPIStatus.value)
+  if (probeFailed && officialFailed) return { tone: 'bad', key: 'suspectedUpstream' }
+  if (probeFailed && correspondingOfficialAPIStatus.value === 'operational') return { tone: 'warn', key: 'localFirst' }
+  if (probeFailed) return { tone: 'unknown', key: 'insufficientEvidence' }
+  if (point.status === 'operational' && relatedOfficialRisk.value) return { tone: 'warn', key: 'availableWithRisk' }
+  if (point.status === 'operational') return { tone: 'good', key: 'pathAvailable' }
+  return { tone: 'unknown', key: 'insufficientEvidence' }
+})
 const chartData = computed(() => ({
   labels: (props.probe?.points ?? []).map((point) => formatAxisTime(point.timestamp)),
   datasets: [{
@@ -73,6 +106,10 @@ const chartOptions = computed(() => {
       <div><span>{{ t('admin.monitorCenter.probe.model') }}</span><strong :title="probe?.model">{{ probe?.model || '-' }}</strong></div>
       <div><span>{{ t('admin.monitorCenter.probe.lastSuccess') }}</span><strong>{{ formatDateTime(probe?.last_success_at) }}</strong></div>
     </div>
+    <div class="mc-attribution" :class="attribution.tone">
+      <strong>{{ t('admin.monitorCenter.probe.attribution') }}</strong>
+      <span>{{ t(`admin.monitorCenter.probe.${attribution.key}`) }}</span>
+    </div>
     <div class="mc-mini-chart">
       <Line v-if="hasData" :data="chartData" :options="chartOptions" />
       <div v-else class="mc-empty">{{ loading ? t('common.loading') : t('admin.monitorCenter.probe.noSamples') }}</div>
@@ -93,4 +130,10 @@ const chartOptions = computed(() => {
 .mc-probe-meta strong { display: block; overflow: hidden; margin-top: 3px; color: var(--mc-muted); font-size: 9px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .mc-mini-chart { min-height: 0; height: 78px; margin-top: auto; padding-top: 9px; }
 .mc-mini-chart .mc-empty { min-height: 70px; }
+.mc-attribution { margin-top:8px; border-left:2px solid var(--mc-subtle); padding:6px 8px; background:var(--mc-soft); }
+.mc-attribution.good { border-left-color:var(--mc-green); }
+.mc-attribution.warn { border-left-color:var(--mc-orange); }
+.mc-attribution.bad { border-left-color:var(--mc-red); }
+.mc-attribution strong,.mc-attribution span { display:block; font-size:8px; }
+.mc-attribution span { margin-top:2px; color:var(--mc-muted); line-height:1.4; }
 </style>

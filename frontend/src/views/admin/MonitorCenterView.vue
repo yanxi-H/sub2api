@@ -35,11 +35,9 @@ const rangeData = ref<MonitorCenterRangeData | null>(null)
 const openAIStatus = ref<MonitorCenterOpenAIStatusResponse | null>(null)
 const openAIRangeHistory = ref<MonitorCenterOpenAIHistoryResponse | null>(null)
 const probeRange = ref<MonitorCenterProbeResponse | null>(null)
-const threeDayData = ref<MonitorCenterThreeDayData | null>(null)
 let requestController: AbortController | null = null
 let requestSequence = 0
 let activeRequest: Promise<void> | null = null
-let refreshTicks = 0
 
 function toLocalInput(date: Date): string {
   const offset = date.getTimezoneOffset() * 60_000
@@ -68,7 +66,7 @@ function isCanceled(error: unknown): boolean {
   )
 }
 
-async function loadData(options: { force?: boolean; includeHistory?: boolean } = {}): Promise<void> {
+async function loadData(options: { force?: boolean } = {}): Promise<void> {
   if (activeRequest && !options.force) return activeRequest
   if (options.force) requestController?.abort()
   const sequence = ++requestSequence
@@ -84,7 +82,6 @@ async function loadData(options: { force?: boolean; includeHistory?: boolean } =
       monitorCenterAPI.getOpenAIStatus(controller.signal),
       monitorCenterAPI.getOpenAIHistory(rangeParams, controller.signal),
       monitorCenterAPI.getProbe(rangeParams, controller.signal),
-      options.includeHistory === false ? Promise.resolve(null) : monitorCenterAPI.getThreeDayData(controller.signal),
     ] as const
     const results = await Promise.allSettled(requests)
     if (sequence !== requestSequence) return
@@ -100,11 +97,6 @@ async function loadData(options: { force?: boolean; includeHistory?: boolean } =
     if (results[2].status === 'fulfilled') openAIRangeHistory.value = results[2].value
     if (results[3].status === 'fulfilled') probeRange.value = results[3].value
     successfulRequests += results.slice(1, 4).filter((result) => result.status === 'fulfilled').length
-    if (results[4].status === 'fulfilled' && results[4].value) {
-      threeDayData.value = { ...(threeDayData.value ?? {}), ...results[4].value.data }
-      nestedFailures += results[4].value.failure_count
-      successfulRequests += results[4].value.success_count
-    }
 
     const topLevelFailures = results.filter((result) => result.status === 'rejected' && !isCanceled(result.reason)).length
     const failureCount = topLevelFailures + nestedFailures
@@ -128,7 +120,7 @@ function selectRange(range: TimeRange) {
   customError.value = ''
   if (range === 'custom') return
   appliedRange.value = range
-  void loadData({ force: true, includeHistory: false })
+  void loadData({ force: true })
 }
 
 function applyCustomRange() {
@@ -154,31 +146,30 @@ function applyCustomRange() {
   appliedCustomStart.value = customStart.value
   appliedCustomEnd.value = customEnd.value
   appliedRange.value = 'custom'
-  void loadData({ force: true, includeHistory: false })
+  void loadData({ force: true })
 }
 
 function refresh() {
-  void loadData({ includeHistory: true })
+  void loadData()
 }
 
 const { pause, resume } = useIntervalFn(() => {
   if (document.hidden) return
-  refreshTicks += 1
-  void loadData({ includeHistory: refreshTicks % 5 === 0 })
+  void loadData()
 }, 60_000, { immediate: false })
 
 function handleVisibilityChange() {
   if (document.hidden) {
     pause()
   } else {
-    void loadData({ includeHistory: refreshTicks % 5 === 0 })
+    void loadData()
     resume()
   }
 }
 
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  void loadData({ includeHistory: true })
+  void loadData()
   if (!document.hidden) resume()
 })
 
@@ -192,6 +183,12 @@ onBeforeUnmount(() => {
 
 const slowPrimaryCause = computed(() => rangeData.value?.performance?.causes?.[0])
 const appliedRangeLabel = computed(() => t(`admin.monitorCenter.ranges.${appliedRange.value}`))
+const historyData = computed<MonitorCenterThreeDayData>(() => ({
+  openai: openAIRangeHistory.value ?? undefined,
+  probe: probeRange.value ?? undefined,
+  errors: rangeData.value?.errors,
+  throughput: rangeData.value?.throughput,
+}))
 function causeLabel(cause?: string): string {
   if (!cause) return t('admin.monitorCenter.slow.noSlowRequests')
   const key = `admin.ops.performance.causes.${cause}`
@@ -236,12 +233,12 @@ function causeLabel(cause?: string): string {
       <section class="mc-section-grid">
         <UpstreamStatusPanel :status="openAIStatus" :history="openAIRangeHistory" :range-label="appliedRangeLabel" :loading="loading" />
         <GatewayStatusPanel :overview="rangeData?.overview ?? null" :errors="rangeData?.errors ?? null" :throughput="rangeData?.throughput ?? null" :loading="loading" />
-        <RealProbePanel :probe="probeRange" :loading="loading" />
+        <RealProbePanel :probe="probeRange" :official-history="openAIRangeHistory" :loading="loading" />
       </section>
 
       <RequestLatencyChart :points="rangeData?.latency?.points ?? []" :overview="rangeData?.overview ?? null" :loading="loading" :range="appliedRange" />
 
-      <ConcurrencyLanesChart :data="rangeData?.concurrency ?? null" :loading="loading" @refresh="loadData({ force: true, includeHistory: false })" />
+      <ConcurrencyLanesChart :data="rangeData?.concurrency ?? null" :loading="loading" @refresh="loadData({ force: true })" />
 
       <section class="mc-panel mc-panel-pad mc-slow-section">
         <div class="mc-panel-head mc-slow-head">
@@ -265,7 +262,7 @@ function causeLabel(cause?: string): string {
         </div>
       </section>
 
-      <ProbeHistoryPanel :data="threeDayData" :loading="loading" />
+      <ProbeHistoryPanel :data="historyData" :range-label="appliedRangeLabel" :loading="loading" />
     </div>
   </AppLayout>
 </template>

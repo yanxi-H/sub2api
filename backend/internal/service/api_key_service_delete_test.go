@@ -33,6 +33,7 @@ type apiKeyRepoStub struct {
 	existsByKey            bool
 	deletedIDs             []int64 // 记录已删除的 API Key ID 列表
 	updatedKeys            []APIKey
+	updatedFields          []APIKeyUpdateFields
 	createdKeys            []APIKey
 	allowListByUserID      bool
 	listByUserIDKeys       []APIKey
@@ -105,10 +106,11 @@ func (s *apiKeyRepoStub) GetByKeyForAuth(ctx context.Context, key string) (*APIK
 	panic("unexpected GetByKeyForAuth call")
 }
 
-func (s *apiKeyRepoStub) Update(ctx context.Context, key *APIKey, _ APIKeyUpdateFields) error {
+func (s *apiKeyRepoStub) Update(ctx context.Context, key *APIKey, fields APIKeyUpdateFields) error {
 	if key != nil {
 		s.updatedKeys = append(s.updatedKeys, *key)
 	}
+	s.updatedFields = append(s.updatedFields, fields)
 	return s.updateErr
 }
 
@@ -230,9 +232,9 @@ func (s *listAllApiKeyRepoStub) ListAll(_ context.Context, params pagination.Pag
 	}, nil
 }
 
-func (s *listAllApiKeyRepoStub) Update(ctx context.Context, key *APIKey) error {
+func (s *listAllApiKeyRepoStub) Update(ctx context.Context, key *APIKey, fields APIKeyUpdateFields) error {
 	s.updateCalls = append(s.updateCalls, key.ID)
-	return nil
+	return s.apiKeyRepoStub.Update(ctx, key, fields)
 }
 
 func (s *apiKeyRepoStub) VerifyOwnership(ctx context.Context, userID int64, apiKeyIDs []int64) ([]int64, error) {
@@ -416,6 +418,7 @@ func TestAPIKeyService_Update_Sync7dWindowFromAccount(t *testing.T) {
 	require.Equal(t, resetAt.Add(-RateLimitWindow7d), updated.Window7dStart.UTC())
 	require.Equal(t, 12.0, updated.Usage7d, "syncing the window should not reset usage")
 	require.Len(t, repo.updatedKeys, 1)
+	require.Equal(t, []APIKeyUpdateFields{{Window7dStart: true}}, repo.updatedFields)
 	require.Equal(t, []int64{42}, invalidator.ids)
 }
 
@@ -866,6 +869,7 @@ func TestAPIKeyService_RegenerateAsAdmin_PreservesUsageAndLimits(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, original.Key, regenerated.Key)
 	require.Len(t, repo.updatedKeys, 1)
+	require.Equal(t, []APIKeyUpdateFields{{Key: true}}, repo.updatedFields)
 	require.Equal(t, original.Quota, regenerated.Quota)
 	require.Equal(t, original.QuotaUsed, regenerated.QuotaUsed)
 	require.Equal(t, original.RateLimit5h, regenerated.RateLimit5h)

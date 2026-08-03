@@ -1967,8 +1967,12 @@ func requestBodyAdmissionMemberHasProcessPrefix(member, activeRequestPrefix stri
 }
 
 func requestBodyAdmissionUserIDFromKey(key, keyPrefix string) (int64, bool) {
-	rawID := strings.TrimPrefix(key, keyPrefix)
-	if rawID == key || rawID == "" || strings.Contains(rawID, ":") {
+	prefixIndex := strings.LastIndex(key, keyPrefix)
+	if prefixIndex < 0 {
+		return 0, false
+	}
+	rawID := key[prefixIndex+len(keyPrefix):]
+	if rawID == "" || strings.Contains(rawID, ":") {
 		return 0, false
 	}
 	userID, err := strconv.ParseInt(rawID, 10, 64)
@@ -2020,7 +2024,8 @@ func (c *concurrencyCache) cleanupStaleRequestBodyAdmissionSlots(ctx context.Con
 			}
 			for _, key := range keys {
 				hasActive := false
-				if item.waitKeys && strings.HasPrefix(key, item.userKeyPrefix) {
+				userID, isUserKey := requestBodyAdmissionUserIDFromKey(key, item.userKeyPrefix)
+				if item.waitKeys && isUserKey {
 					value, getErr := c.rdb.Get(ctx, key).Result()
 					if getErr != nil && !errors.Is(getErr, redis.Nil) {
 						return fmt.Errorf("read request body wait key %s: %w", key, getErr)
@@ -2037,10 +2042,8 @@ func (c *concurrencyCache) cleanupStaleRequestBodyAdmissionSlots(ctx context.Con
 						return fmt.Errorf("clean stale request body admission key %s: %w", key, err)
 					}
 				}
-				if hasActive {
-					if userID, ok := requestBodyAdmissionUserIDFromKey(key, item.userKeyPrefix); ok {
-						activeUsers[userID] = struct{}{}
-					}
+				if hasActive && isUserKey {
+					activeUsers[userID] = struct{}{}
 				}
 			}
 			cursor = next

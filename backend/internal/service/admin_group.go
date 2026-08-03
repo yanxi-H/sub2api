@@ -1201,6 +1201,7 @@ func (s *adminServiceImpl) AdminBatchSyncAPIKey7dWindow(ctx context.Context, key
 	windowStart := resetAt.Add(-RateLimitWindow7d)
 	return s.adminBatchUpdateAPIKeys(ctx, keyIDs, groupID,
 		func(apiKey *APIKey) { apiKey.Window7dStart = &windowStart },
+		APIKeyUpdateFields{Window7dStart: true},
 		func(ctx context.Context, repo adminAPIKey7dBatchRepository, ids []int64, groupID *int64) (int, error) {
 			return repo.BatchSet7dWindowStart(ctx, ids, groupID, windowStart)
 		},
@@ -1216,6 +1217,7 @@ func (s *adminServiceImpl) AdminBatchResetAPIKey7dUsage(ctx context.Context, key
 		func(apiKey *APIKey) {
 			apiKey.Usage7d = 0
 		},
+		APIKeyUpdateFields{Usage7d: true},
 		func(ctx context.Context, repo adminAPIKey7dBatchRepository, ids []int64, groupID *int64) (int, error) {
 			return repo.BatchReset7dUsage(ctx, ids, groupID)
 		},
@@ -1227,6 +1229,7 @@ func (s *adminServiceImpl) adminBatchUpdateAPIKeys(
 	keyIDs []int64,
 	groupID int64,
 	update func(*APIKey),
+	updateFields APIKeyUpdateFields,
 	batchUpdate func(context.Context, adminAPIKey7dBatchRepository, []int64, *int64) (int, error),
 ) ([]*APIKey, error) {
 	ids, err := normalizeAdminAPIKeyBatchIDs(keyIDs)
@@ -1268,7 +1271,7 @@ func (s *adminServiceImpl) adminBatchUpdateAPIKeys(
 	} else {
 		for _, apiKey := range apiKeys {
 			update(apiKey)
-			if updateErr := s.apiKeyRepo.Update(opCtx, apiKey, APIKeyUpdateFields{GroupID: true}); updateErr != nil {
+			if updateErr := s.apiKeyRepo.Update(opCtx, apiKey, updateFields); updateErr != nil {
 				return nil, fmt.Errorf("update api key %d: %w", apiKey.ID, updateErr)
 			}
 		}
