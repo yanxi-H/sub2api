@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import UserDashboardModelRecommendations from '../UserDashboardModelRecommendations.vue'
-import ModelIcon from '@/components/common/ModelIcon.vue'
 import type { CodexRadarDashboardRecommendations } from '@/api/usage'
 
 vi.mock('vue-i18n', async () => {
@@ -47,21 +46,22 @@ describe('UserDashboardModelRecommendations', () => {
   it('groups models, sorts reasoning effort, and marks the best price-time-IQ balance', () => {
     const wrapper = mount(UserDashboardModelRecommendations, { props: { data } })
 
-    const solEfforts = wrapper.findAll('.intelligence-card[data-effort]').slice(0, 3).map((entry) => entry.attributes('data-effort'))
+    const solEfforts = wrapper.findAll('.intelligence-rail-row[data-effort]').slice(0, 3).map((entry) => entry.attributes('data-effort'))
     expect(solEfforts).toEqual(['high', 'medium', 'low'])
     expect(wrapper.find('[data-best-combination="gpt-5.6-sol|medium"]').exists()).toBe(true)
   })
 
-  it('shows recommendation metrics as compact values instead of progress tracks', () => {
+  it('defaults to score rails and keeps the decision metrics aligned', () => {
     const wrapper = mount(UserDashboardModelRecommendations, { props: { data } })
 
-    expect(wrapper.find('.iq-profile-track').exists()).toBe(false)
-    expect(wrapper.find('.signal-track').exists()).toBe(false)
-    expect(wrapper.text()).toContain('dashboard.modelRecommendations.reasoningStrength')
-    expect(wrapper.text()).toContain('dashboard.modelRecommendations.iqScore')
+    expect(wrapper.find('[data-intelligence-mode="rail"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-intelligence-groups]').classes()).toEqual(expect.arrayContaining(['md:grid-cols-2', 'xl:grid-cols-3']))
+    expect(wrapper.find('.intelligence-rail-row').classes()).toContain('sm:grid-cols-[58px_minmax(7rem,15rem)_62px_90px]')
+    expect(wrapper.findAll('.iq-track')).toHaveLength(4)
+    expect(wrapper.findAll('.station-choice')).toHaveLength(2)
   })
 
-  it('keeps reasoning effort names aligned with the full model variant name', () => {
+  it('keeps reasoning effort names visible in their configured order', () => {
     const wrapper = mount(UserDashboardModelRecommendations, {
       props: {
         data: {
@@ -74,16 +74,24 @@ describe('UserDashboardModelRecommendations', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('5.6 Sol Ultra')
-    expect(wrapper.text()).toContain('5.6 Sol Max')
+    expect(wrapper.findAll('.intelligence-rail-row[data-effort]').map((entry) => entry.attributes('data-effort'))).toEqual(['ultra', 'max'])
   })
 
-  it('uses the model provider mark with a color that represents reasoning strength', () => {
+  it('uses distinct low-saturation colors for each model tier', () => {
     const wrapper = mount(UserDashboardModelRecommendations, { props: { data } })
-    const modelIcons = wrapper.findAllComponents(ModelIcon)
 
-    expect(modelIcons.some((icon) => icon.props('model') === 'gpt-5.6-sol' && icon.props('color') === '#14b8a6')).toBe(true)
-    expect(modelIcons.some((icon) => icon.props('model') === 'gpt-5.6-luna' && icon.props('color') === '#f59e0b')).toBe(true)
+    expect(wrapper.find('[data-model="gpt-5.6-sol"]').attributes('style')).toContain('--model-color: #d5ad2d')
+    expect(wrapper.find('[data-model="gpt-5.6-luna"]').attributes('style')).toContain('--model-color: #c4762b')
+  })
+
+  it('switches between score rail and compact matrix layouts', async () => {
+    const wrapper = mount(UserDashboardModelRecommendations, { props: { data } })
+
+    await wrapper.find('[data-intelligence-mode="matrix"]').trigger('click')
+
+    expect(wrapper.find('[data-intelligence-mode="matrix"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.findAll('.intelligence-matrix-cell')).toHaveLength(4)
+    expect(wrapper.find('.intelligence-rail-row').exists()).toBe(false)
   })
 
   it('emits refresh from the icon button', async () => {

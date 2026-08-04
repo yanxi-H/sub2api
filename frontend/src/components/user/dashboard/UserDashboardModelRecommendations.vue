@@ -7,191 +7,84 @@
         </div>
         <div class="min-w-0">
           <div class="flex min-w-0 items-center gap-2">
-            <h2 id="model-recommendations-title" class="truncate text-base font-semibold text-gray-900 dark:text-white">
-              {{ t('dashboard.modelRecommendations.title') }}
-            </h2>
-            <span v-if="hasData" class="hidden shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-medium text-primary-700 sm:inline-flex dark:bg-primary-900/30 dark:text-primary-300">
-              {{ t('dashboard.modelRecommendations.snapshot') }}
-            </span>
+            <h2 id="model-recommendations-title" class="truncate text-base font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelRecommendations.title') }}</h2>
+            <span v-if="hasData" class="hidden shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-medium text-primary-700 sm:inline-flex dark:bg-primary-900/30 dark:text-primary-300">{{ t('dashboard.modelRecommendations.snapshot') }}</span>
           </div>
-          <p v-if="formattedUpdatedAt" class="truncate text-xs text-gray-500 dark:text-gray-400">
-            {{ t('dashboard.modelRecommendations.updatedAt', { time: formattedUpdatedAt }) }}
-          </p>
+          <p v-if="formattedUpdatedAt" class="truncate text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.modelRecommendations.updatedAt', { time: formattedUpdatedAt }) }}</p>
         </div>
       </div>
-      <button
-        type="button"
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors duration-150 hover:bg-gray-100 hover:text-primary-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-primary-400"
-        :aria-label="t('dashboard.modelRecommendations.refresh')"
-        :title="t('dashboard.modelRecommendations.refresh')"
-        :disabled="loading"
-        data-model-recommendations-refresh
-        @click="$emit('refresh')"
-      >
+      <button type="button" class="icon-action" :aria-label="t('dashboard.modelRecommendations.refresh')" :title="t('dashboard.modelRecommendations.refresh')" :disabled="loading" data-model-recommendations-refresh @click="$emit('refresh')">
         <Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />
       </button>
     </header>
 
-    <div v-if="loading && !hasData" class="flex items-center justify-center py-10">
-      <LoadingSpinner size="md" />
-    </div>
-    <div v-else-if="!hasData" class="px-5 py-7 text-sm text-gray-500 dark:text-gray-400">
-      {{ t('dashboard.modelRecommendations.unavailable') }}
-    </div>
+    <div v-if="loading && !hasData" class="flex items-center justify-center py-10"><LoadingSpinner size="md" /></div>
+    <div v-else-if="!hasData" class="px-5 py-7 text-sm text-gray-500 dark:text-gray-400">{{ t('dashboard.modelRecommendations.unavailable') }}</div>
     <div v-else>
       <section v-if="summaryCards.length" class="border-b border-gray-100 bg-gray-50/60 px-4 py-4 dark:border-dark-700 dark:bg-dark-900/20 sm:px-6">
         <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('dashboard.modelRecommendations.summaryTitle') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('dashboard.modelRecommendations.summaryDescription') }}
-            </p>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelRecommendations.summaryTitle') }}</h3>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.modelRecommendations.summaryDescription') }}</p>
           </div>
-          <span class="hidden text-[11px] text-gray-400 sm:inline dark:text-gray-500">
-            {{ t('dashboard.modelRecommendations.summaryHint') }}
-          </span>
+          <span class="hidden text-[11px] text-gray-400 sm:inline dark:text-gray-500">{{ t('dashboard.modelRecommendations.summaryHint') }}</span>
         </div>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <article
-            v-for="summary in summaryCards"
-            :key="summary.key"
-            class="summary-card min-w-0 rounded-xl border border-gray-200/80 bg-white px-3.5 py-3 dark:border-dark-700 dark:bg-dark-800/70"
-          >
-            <div class="flex items-start gap-3">
-              <div class="summary-icon" :data-tone="summary.tone">
-                <Icon :name="summary.icon" size="sm" />
+        <div class="summary-strip grid grid-cols-1 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800/70 sm:grid-cols-3">
+          <article v-for="summary in summaryCards" :key="summary.key" class="summary-cell flex min-w-0 items-center gap-3 px-3.5 py-3" :data-tone="summary.tone">
+            <span class="summary-icon" :data-tone="summary.tone"><Icon :name="summary.icon" size="sm" /></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <span class="truncate text-[10px] font-semibold text-gray-500 dark:text-gray-400">{{ summary.title }}</span>
+                <span class="effort-pill">{{ effortLabel(summary.item.effort) }}</span>
               </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{{ summary.title }}</span>
-                  <span class="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">
-                    {{ effortLabel(summary.item.effort) }}
-                  </span>
-                </div>
-                <p class="mt-1 truncate font-mono text-sm font-semibold text-gray-900 dark:text-white" :title="modelVariantName(summary.item.model, summary.item.effort)">
-                  {{ modelVariantName(summary.item.model, summary.item.effort) }}
-                </p>
-                <div class="mt-2 flex items-baseline gap-1.5">
-                  <strong class="font-mono text-lg leading-none text-gray-900 dark:text-white">{{ summary.value }}</strong>
-                  <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ summary.valueLabel }}</span>
-                </div>
+              <div class="mt-1 flex items-baseline justify-between gap-3">
+                <strong class="truncate font-mono text-base font-bold text-gray-900 dark:text-white" :title="modelVariantName(summary.item.model, summary.item.effort)">{{ modelVariantName(summary.item.model, summary.item.effort) }}</strong>
+                <span class="summary-value shrink-0 font-mono text-base font-black">{{ summary.value }} <small>{{ summary.valueLabel }}</small></span>
               </div>
-            </div>
-            <div class="summary-meta mt-3 border-t border-gray-100 pt-2 dark:border-dark-700">
-              <span class="summary-meta-item summary-meta-price" :title="t('dashboard.modelRecommendations.price')">
-                <Icon name="dollar" size="xs" />
-                <strong>{{ formatPrice(summary.item.average_cost_usd) }}</strong>
-              </span>
-              <span class="summary-meta-item summary-meta-time" :title="t('dashboard.modelRecommendations.time')">
-                <Icon name="clock" size="xs" />
-                <strong>{{ formatDuration(summary.item.average_duration_minutes) }}</strong>
-              </span>
+              <div class="mt-1.5 flex items-center gap-3 font-mono text-[9px] text-gray-400">
+                <span>${{ formatPrice(summary.item.average_cost_usd) }}</span>
+                <span>{{ formatDuration(summary.item.average_duration_minutes) }}</span>
+              </div>
             </div>
           </article>
         </div>
       </section>
 
-      <section v-if="stationGroups.length" class="recommendation-section border-b border-gray-100 px-4 py-5 dark:border-dark-700 sm:px-6">
-        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <section v-if="stationGroups.length" class="border-b border-gray-100 px-4 py-5 dark:border-dark-700 sm:px-6">
+        <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
             <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600 dark:text-primary-400">01 / {{ t('dashboard.modelRecommendations.station') }}</p>
-            <h3 class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('dashboard.modelRecommendations.station') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('dashboard.modelRecommendations.stationDescription') }}
-            </p>
+            <h3 class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelRecommendations.station') }}</h3>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.modelRecommendations.stationDescription') }}</p>
           </div>
-          <span class="section-count">
-            <Icon name="grid" size="xs" />
-            {{ stationGroups.length }} {{ t('dashboard.modelRecommendations.scenes') }}
-          </span>
+          <span class="section-count"><Icon name="grid" size="xs" />{{ stationGroups.length }} {{ t('dashboard.modelRecommendations.scenes') }}</span>
         </div>
 
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
-          <article v-for="(group, index) in stationGroups" :key="group.key" class="station-lane min-w-0 rounded-xl border border-gray-200/80 bg-gray-50/50 p-3.5 dark:border-dark-700 dark:bg-dark-900/20">
-            <header class="flex min-w-0 items-center gap-2.5">
-              <span class="station-index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
-              <div class="min-w-0">
-                <h4 class="truncate text-sm font-semibold text-gray-900 dark:text-white" :title="stationTitle(group)">
-                  {{ stationTitle(group) }}
-                </h4>
-                <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  {{ t('dashboard.modelRecommendations.stationLaneHint') }}
-                </p>
-              </div>
-            </header>
-
-            <div v-if="stationPrimary(group)" class="station-primary mt-3 rounded-lg border border-primary-100 bg-white p-3 dark:border-primary-900/50 dark:bg-dark-800/70">
-              <div class="flex items-start justify-between gap-3">
+        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <article v-for="(group, groupIndex) in stationGroups" :key="group.key" class="station-scene overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800/60">
+            <header class="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/60 px-3.5 py-2.5 dark:border-dark-700 dark:bg-dark-900/20">
+              <div class="flex min-w-0 items-center gap-2.5">
+                <span class="station-index" :data-index="groupIndex + 1">{{ String(groupIndex + 1).padStart(2, '0') }}</span>
                 <div class="min-w-0">
-                  <span class="text-[10px] font-medium uppercase tracking-wide text-primary-700 dark:text-primary-300">
-                    {{ t('dashboard.modelRecommendations.preferred') }}
-                  </span>
-                  <h5 class="mt-1.5 truncate font-mono text-sm font-semibold text-gray-900 dark:text-white" :title="modelVariantName(stationPrimary(group)!.model, stationPrimary(group)!.effort)">
-                    {{ modelVariantName(stationPrimary(group)!.model, stationPrimary(group)!.effort) }}
-                  </h5>
-                </div>
-                <div class="shrink-0 text-right">
-                  <span class="block text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    {{ t('dashboard.modelRecommendations.reasoningStrength') }}
-                  </span>
-                  <span class="effort-pill effort-pill-strong mt-1">{{ effortLabel(stationPrimary(group)!.effort) }}</span>
+                  <h4 class="truncate text-xs font-bold text-gray-900 dark:text-white" :title="stationTitle(group)">{{ stationTitle(group) }}</h4>
+                  <p class="mt-0.5 text-[9px] text-gray-400 dark:text-gray-500">{{ t('dashboard.modelRecommendations.stationLaneHint') }}</p>
                 </div>
               </div>
-              <div class="station-score mt-3 border-t border-primary-50 pt-3 dark:border-primary-900/40">
-                <div>
-                  <span class="block text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    {{ t('dashboard.modelRecommendations.iqScore') }}
-                  </span>
-                  <div class="mt-0.5 flex items-baseline gap-1.5">
-                    <strong class="font-mono text-2xl leading-none text-gray-900 dark:text-white">{{ formatIQ(stationPrimary(group)!.iq) }}</strong>
-                    <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">IQ</span>
-                  </div>
+              <span class="text-[9px] text-gray-400 dark:text-gray-500">{{ group.items.length }} {{ t('dashboard.modelRecommendations.recommendations') }}</span>
+            </header>
+            <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-dark-700">
+              <div v-for="(item, itemIndex) in stationItems(group)" :key="stationItemKey(group.key, item)" class="station-choice min-w-0 px-3.5 py-3" :style="modelStyle(item.model)">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="choice-label" :data-primary="itemIndex === 0 ? '' : undefined">{{ itemIndex === 0 ? t('dashboard.modelRecommendations.preferred') : t('dashboard.modelRecommendations.backup') }}</span>
+                  <span class="effort-pill model-effort">{{ effortLabel(item.effort) }}</span>
                 </div>
-                <span class="recommendation-callout">
-                  <Icon name="star" size="xs" />
-                  {{ t('dashboard.modelRecommendations.primary') }}
-                </span>
-              </div>
-              <dl class="station-metric-grid mt-3 grid-cols-2 border-t border-gray-100 pt-3 text-[11px] dark:border-dark-700">
-                <div class="station-metric-cell station-metric-price">
-                  <dt :aria-label="t('dashboard.modelRecommendations.price')"><Icon name="dollar" size="xs" /></dt>
-                  <dd>{{ formatPrice(stationPrimary(group)!.average_cost_usd) }}</dd>
+                <h5 class="mt-2 truncate font-mono text-sm font-bold text-gray-900 dark:text-white" :title="modelVariantName(item.model, item.effort)">{{ modelVariantName(item.model, item.effort) }}</h5>
+                <div class="mt-2 flex items-end justify-between gap-2">
+                  <div class="flex items-baseline gap-1"><strong class="model-iq font-mono text-xl leading-none">{{ formatIQ(item.iq) }}</strong><span class="text-[8px] font-bold text-gray-400">IQ</span></div>
+                  <span v-if="itemIndex === 0" class="best-mark" :title="t('dashboard.modelRecommendations.primary')"><Icon name="star" size="xs" /></span>
                 </div>
-                <div class="station-metric-cell station-metric-time">
-                  <dt :aria-label="t('dashboard.modelRecommendations.time')"><Icon name="clock" size="xs" /></dt>
-                  <dd>{{ formatDuration(stationPrimary(group)!.average_duration_minutes) }}</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div v-if="group.items.length > 1" class="station-alternatives mt-3 border-t border-gray-200/80 pt-2.5 dark:border-dark-700">
-              <div class="station-alternatives-heading">
-                <span class="station-alternatives-title">
-                  <Icon name="grid" size="xs" />
-                  {{ t('dashboard.modelRecommendations.alternatives') }}
-                </span>
-                <span class="station-alternatives-count">{{ group.items.length - 1 }}</span>
-              </div>
-              <div
-                v-for="(item, alternativeIndex) in stationAlternatives(group)"
-                :key="stationItemKey(group.key, item)"
-                class="station-alternative flex min-w-0 items-center gap-2 py-2"
-              >
-                <span class="station-alt-index">{{ String(alternativeIndex + 2).padStart(2, '0') }}</span>
-                <div class="min-w-0 flex-1">
-                  <p class="truncate font-mono text-xs font-medium text-gray-800 dark:text-gray-100" :title="modelVariantName(item.model, item.effort)">{{ modelVariantName(item.model, item.effort) }}</p>
-                  <p class="station-alternative-meta mt-0.5">
-                    <span>IQ {{ formatIQ(item.iq) }}</span>
-                    <span :title="t('dashboard.modelRecommendations.time')"><Icon name="clock" size="xs" />{{ formatDuration(item.average_duration_minutes) }}</span>
-                  </p>
-                </div>
-                <div class="shrink-0 text-right">
-                  <span class="effort-pill">{{ effortLabel(item.effort) }}</span>
-                  <p class="station-alternative-price mt-1" :title="t('dashboard.modelRecommendations.price')"><Icon name="dollar" size="xs" />{{ formatPrice(item.average_cost_usd) }}</p>
+                <div class="mt-2.5 flex items-center justify-between border-t border-gray-100 pt-2 font-mono text-[9px] text-gray-500 dark:border-dark-700 dark:text-gray-400">
+                  <span>${{ formatPrice(item.average_cost_usd) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span>
                 </div>
               </div>
             </div>
@@ -199,95 +92,46 @@
         </div>
       </section>
 
-      <section v-if="intelligenceGroups.length" class="recommendation-section px-4 py-5 dark:border-dark-700 sm:px-6">
+      <section v-if="intelligenceGroups.length" class="px-4 py-5 sm:px-6">
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600 dark:text-primary-400">02 / {{ t('dashboard.modelRecommendations.intelligence') }}</p>
-            <h3 class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('dashboard.modelRecommendations.intelligence') }}
-            </h3>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('dashboard.modelRecommendations.intelligenceDescription') }}
-            </p>
+            <h3 class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelRecommendations.intelligence') }}</h3>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.modelRecommendations.intelligenceDescription') }}</p>
           </div>
-          <button
-            type="button"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors duration-150 hover:bg-gray-100 hover:text-primary-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-primary-400"
-            :aria-label="t('dashboard.modelRecommendations.refresh')"
-            :title="t('dashboard.modelRecommendations.refresh')"
-            :disabled="loading"
-            data-intelligence-recommendations-refresh
-            @click="$emit('refresh')"
-          >
-            <Icon name="refresh" size="sm" />
-          </button>
+          <div class="flex items-center gap-2">
+            <div class="display-switch" role="group" :aria-label="t('dashboard.modelRecommendations.displayMode')">
+              <button type="button" :class="{ active: intelligenceMode === 'matrix' }" :aria-pressed="intelligenceMode === 'matrix'" data-intelligence-mode="matrix" @click="intelligenceMode = 'matrix'"><Icon name="grid" size="xs" />{{ t('dashboard.modelRecommendations.compactMatrix') }}</button>
+              <button type="button" :class="{ active: intelligenceMode === 'rail' }" :aria-pressed="intelligenceMode === 'rail'" data-intelligence-mode="rail" @click="intelligenceMode = 'rail'"><Icon name="chart" size="xs" />{{ t('dashboard.modelRecommendations.scoreRail') }}</button>
+            </div>
+            <button type="button" class="icon-action" :aria-label="t('dashboard.modelRecommendations.refresh')" :title="t('dashboard.modelRecommendations.refresh')" :disabled="loading" data-intelligence-recommendations-refresh @click="$emit('refresh')"><Icon name="refresh" size="sm" /></button>
+          </div>
         </div>
 
-        <div class="space-y-3">
-          <section
-            v-for="group in intelligenceGroups"
-            :key="group.model"
-            class="intelligence-group"
-          >
-            <header class="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <span class="model-mark" aria-hidden="true">{{ modelInitial(group.model) }}</span>
-                <h4 class="truncate font-mono text-sm font-semibold text-gray-900 dark:text-white" :title="modelDisplayName(group.model)">{{ modelDisplayName(group.model) }}</h4>
-              </div>
-              <span class="text-[11px] text-gray-400 dark:text-gray-500">{{ group.items.length }} {{ t('dashboard.modelRecommendations.levels') }}</span>
+        <div class="intelligence-groups-grid grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-intelligence-groups>
+          <section v-for="group in intelligenceGroups" :key="group.model" class="intelligence-group self-start overflow-hidden rounded-xl border bg-white dark:bg-dark-800/60" :data-model="group.model" :style="modelStyle(group.model)">
+            <header class="flex items-center justify-between border-b border-gray-100 px-3.5 py-2.5 dark:border-dark-700">
+              <div class="flex min-w-0 items-center gap-2"><span class="model-mark">{{ modelInitial(group.model) }}</span><h4 class="truncate font-mono text-sm font-bold text-gray-900 dark:text-white">{{ modelDisplayName(group.model) }}</h4></div>
+              <span class="text-[10px] text-gray-400 dark:text-gray-500">{{ group.items.length }} {{ t('dashboard.modelRecommendations.levels') }}</span>
             </header>
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
-              <article
-                v-for="item in group.items"
-                :key="intelligenceItemKey(item)"
-                class="summary-card intelligence-card min-w-0 rounded-xl border bg-white px-3 py-2.5 dark:bg-dark-800/60"
-                :class="{ 'intelligence-card-best': isBest(group, item) }"
-                :data-effort="item.effort"
-                :style="{ '--reasoning-color': reasoningColor(item.effort), '--model-tier-color': modelTierColor(group.model) }"
-              >
-                <div class="flex items-start gap-3">
-                  <div
-                    class="reasoning-mark"
-                    :data-effort="item.effort.trim().toLowerCase()"
-                    :title="`${t('dashboard.modelRecommendations.reasoningStrength')}: ${effortLabel(item.effort)}`"
-                    :aria-label="`${t('dashboard.modelRecommendations.reasoningStrength')}: ${effortLabel(item.effort)}`"
-                  >
-                    <ModelIcon :model="item.model" size="17px" :color="reasoningColor(item.effort)" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">{{ effortLabel(item.effort) }}</span>
-                      <span class="shrink-0 text-[10px] font-mono text-gray-400 dark:text-gray-500">{{ intelligenceLevelIndex(group, item) }} / {{ group.items.length }}</span>
-                    </div>
-                    <p class="intelligence-model-name mt-1 min-h-5 break-words font-mono text-sm font-semibold leading-5" :title="modelVariantName(group.model, item.effort)">
-                      {{ modelVariantName(group.model, item.effort) }}
-                    </p>
-                    <div class="mt-1.5 flex items-baseline gap-1.5">
-                      <strong class="font-mono text-2xl leading-none text-gray-900 dark:text-white">{{ formatIQ(item.iq) }}</strong>
-                      <span class="text-[11px] text-gray-500 dark:text-gray-400">IQ</span>
-                    </div>
-                  </div>
-                </div>
 
-                <div class="summary-meta mt-2.5 border-t border-gray-100 pt-2 dark:border-dark-700">
-                  <span class="summary-meta-item summary-meta-price" :title="t('dashboard.modelRecommendations.price')">
-                    <Icon name="dollar" size="xs" />
-                    <strong>{{ formatPrice(item.average_cost_usd) }}</strong>
-                  </span>
-                  <span class="summary-meta-item summary-meta-time" :title="t('dashboard.modelRecommendations.time')">
-                    <Icon name="clock" size="xs" />
-                    <strong>{{ formatDuration(item.average_duration_minutes) }}</strong>
-                  </span>
-                  <span
-                    v-if="isBest(group, item)"
-                    class="best-stamp ml-auto flex shrink-0 items-center justify-center"
-                    :title="t('dashboard.modelRecommendations.best')"
-                    :aria-label="t('dashboard.modelRecommendations.best')"
-                    :data-best-combination="intelligenceItemKey(item)"
-                  >
-                    <Icon name="star" size="xs" :stroke-width="2" />
-                  </span>
+            <div v-if="intelligenceMode === 'rail'" class="space-y-1.5 p-3">
+              <article v-for="item in group.items" :key="intelligenceItemKey(item)" class="intelligence-rail-row grid items-center gap-2 rounded-lg px-2 py-1.5 sm:grid-cols-[58px_minmax(7rem,15rem)_62px_90px]" :data-effort="item.effort">
+                <span class="effort-name">{{ effortLabel(item.effort) }}</span>
+                <div class="iq-track" :title="`IQ ${formatIQ(item.iq)}`"><span :style="{ width: iqBarWidth(item.iq) }"></span></div>
+                <div class="flex items-baseline justify-end gap-1"><strong class="model-iq font-mono text-base leading-none">{{ formatIQ(item.iq) }}</strong><span class="text-[8px] font-bold text-gray-400">IQ</span></div>
+                <div class="flex justify-end gap-2 font-mono text-[9px] text-gray-500 dark:text-gray-400">
+                  <span>${{ formatPrice(item.average_cost_usd) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span>
+                  <span v-if="isBest(group, item)" class="best-inline" :title="t('dashboard.modelRecommendations.best')" :data-best-combination="intelligenceItemKey(item)">★</span>
                 </div>
+              </article>
+            </div>
+
+            <div v-else class="intelligence-matrix grid grid-cols-2" :class="group.items.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
+              <article v-for="item in group.items" :key="intelligenceItemKey(item)" class="intelligence-matrix-cell min-w-0 px-3 py-2.5" :data-effort="item.effort">
+                <div class="flex items-center justify-between gap-2"><span class="effort-name effort-name-dot">{{ effortLabel(item.effort) }}</span><span v-if="isBest(group, item)" class="best-mark" :title="t('dashboard.modelRecommendations.best')" :data-best-combination="intelligenceItemKey(item)"><Icon name="star" size="xs" /></span></div>
+                <div class="mt-2 flex items-end gap-1"><strong class="model-iq font-mono text-[22px] leading-none">{{ formatIQ(item.iq) }}</strong><span class="pb-0.5 text-[9px] font-bold text-gray-400">IQ</span></div>
+                <div class="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 font-mono text-[10px] text-gray-500 dark:border-dark-700 dark:text-gray-400"><span>${{ formatPrice(item.average_cost_usd) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span></div>
               </article>
             </div>
           </section>
@@ -298,10 +142,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type {
   CodexRadarDashboardRecommendations,
@@ -341,6 +184,7 @@ defineEmits<{
 }>()
 
 const { t } = useI18n()
+const intelligenceMode = ref<'matrix' | 'rail'>('rail')
 
 const effortOrder: Record<string, number> = {
   ultra: 0,
@@ -441,7 +285,7 @@ const summaryCards = computed<SummaryCard[]>(() => {
       title: String(t('dashboard.modelRecommendations.summary.fastest')),
       item: fastest,
       value: formatDuration(fastest.average_duration_minutes),
-      valueLabel: String(t('dashboard.modelRecommendations.time')),
+      valueLabel: '',
       tone: 'sky',
       icon: 'bolt'
     }
@@ -457,18 +301,6 @@ function effortLabel(effort: string): string {
   return normalized || '-'
 }
 
-function reasoningColor(effort: string): string {
-  switch (effort.trim().toLowerCase()) {
-    case 'low': return '#94a3b8'
-    case 'medium': return '#38bdf8'
-    case 'high': return '#14b8a6'
-    case 'xhigh': return '#8b5cf6'
-    case 'max': return '#f59e0b'
-    case 'ultra': return '#d4a72c'
-    default: return '#64748b'
-  }
-}
-
 function modelDisplayName(model: string): string {
   const normalized = model.trim().toLowerCase()
   return modelDisplayNames[normalized] ?? (model.trim() || '-')
@@ -476,11 +308,30 @@ function modelDisplayName(model: string): string {
 
 function modelTierColor(model: string): string {
   switch (model.trim().toLowerCase()) {
-    case 'gpt-5.6-sol': return '#d4af37'
-    case 'gpt-5.6-terra': return '#9ca3af'
-    case 'gpt-5.6-luna': return '#b87333'
-    case 'gpt-5.5': return '#334155'
-    default: return '#cbd5e1'
+    case 'gpt-5.6-sol': return '#d5ad2d'
+    case 'gpt-5.6-terra': return '#6f8eaa'
+    case 'gpt-5.6-luna': return '#c4762b'
+    case 'gpt-5.5': return '#817ba8'
+    case 'deepseek-v4-flash': return '#5d948c'
+    default: return '#718ca0'
+  }
+}
+
+function modelTierTint(model: string): string {
+  switch (model.trim().toLowerCase()) {
+    case 'gpt-5.6-sol': return '#fffbeb'
+    case 'gpt-5.6-terra': return '#f3f7fa'
+    case 'gpt-5.6-luna': return '#fffaf5'
+    case 'gpt-5.5': return '#f7f5fb'
+    case 'deepseek-v4-flash': return '#f2f9f7'
+    default: return '#f5f8fa'
+  }
+}
+
+function modelStyle(model: string): Record<string, string> {
+  return {
+    '--model-color': modelTierColor(model),
+    '--model-tint': modelTierTint(model)
   }
 }
 
@@ -506,17 +357,12 @@ function stationItemKey(groupKey: string, item: CodexRadarStationRecommendation)
   return `${groupKey}|${item.model}|${item.effort}`
 }
 
-function stationPrimary(group: CodexRadarStationRecommendationSet): CodexRadarStationRecommendation | null {
-  return group.items[0] ?? null
+function stationItems(group: CodexRadarStationRecommendationSet): CodexRadarStationRecommendation[] {
+  return group.items.slice(0, 2)
 }
 
-function stationAlternatives(group: CodexRadarStationRecommendationSet): CodexRadarStationRecommendation[] {
-  return group.items.slice(1)
-}
-
-function intelligenceLevelIndex(group: IntelligenceGroup, item: CodexRadarIntelligenceMetric): string {
-  const index = group.items.findIndex((candidate) => intelligenceItemKey(candidate) === intelligenceItemKey(item))
-  return index >= 0 ? String(index + 1).padStart(2, '0') : '--'
+function iqBarWidth(iq: number): string {
+  return `${Math.min(100, Math.max(8, iq / 1.1))}%`
 }
 
 function formatIQ(value: number | null | undefined): string {
@@ -1196,5 +1042,137 @@ function isBest(group: IntelligenceGroup, item: CodexRadarIntelligenceMetric): b
   .intelligence-card {
     transition: none;
   }
+}
+</style>
+
+<style scoped>
+.icon-action {
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: #64748b;
+  transition: color 150ms ease-out, background-color 150ms ease-out, transform 150ms ease-out;
+}
+
+.icon-action:hover { color: #0d9488; background: #f1f5f9; }
+.icon-action:active { transform: scale(0.95); }
+.icon-action:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.summary-cell + .summary-cell { border-left: 1px solid #e5e7eb; }
+.summary-cell[data-tone='teal'] { --summary-color: #3b9b90; }
+.summary-cell[data-tone='amber'] { --summary-color: #c69228; }
+.summary-cell[data-tone='sky'] { --summary-color: #4f93bd; }
+.summary-value { color: var(--summary-color); }
+.summary-value small { color: #94a3b8; font-size: 0.55rem; font-weight: 700; }
+
+.station-scene,
+.intelligence-group {
+  transition: border-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+
+.intelligence-groups-grid {
+  max-width: 96rem;
+}
+
+.station-scene:hover { border-color: rgba(20, 184, 166, 0.32); box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05); }
+.station-index[data-index='2'] { color: #3b82a5; background: #e8f5fb; }
+.station-index[data-index='3'] { color: #7666a8; background: #f0edfb; }
+.station-index[data-index='4'] { color: #a86f19; background: #fff3d5; }
+.choice-label { color: #667085; font-size: 0.625rem; font-weight: 700; }
+.choice-label[data-primary] { color: #15877c; }
+.model-effort { color: var(--model-color); background: var(--model-tint); }
+.model-iq { color: var(--model-color); font-weight: 900; font-variant-numeric: tabular-nums; }
+.best-mark {
+  display: flex;
+  height: 1.35rem;
+  width: 1.35rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--model-color) 45%, white);
+  border-radius: 9999px;
+  color: var(--model-color);
+}
+
+.display-switch {
+  display: inline-flex;
+  height: 2.25rem;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 0.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.display-switch button {
+  display: inline-flex;
+  height: 1.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 0.375rem;
+  padding: 0 0.625rem;
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  transition: color 150ms ease-out, background-color 150ms ease-out;
+}
+
+.display-switch button:hover { color: #334155; }
+.display-switch button.active { color: #0f766e; background: #f0fdfa; }
+
+.intelligence-group {
+  border-color: color-mix(in srgb, var(--model-color) 62%, #e5e7eb);
+  border-top: 4px solid var(--model-color);
+}
+
+.model-mark {
+  height: 1.4rem;
+  width: 1.4rem;
+  border-radius: 0.375rem;
+  color: var(--model-color);
+  background: var(--model-tint);
+}
+
+.intelligence-rail-row:hover { background: var(--model-tint); }
+.effort-name { color: #475569; font-size: 0.75rem; font-weight: 700; text-transform: lowercase; }
+.effort-name-dot { display: flex; align-items: center; gap: 0.375rem; }
+.effort-name-dot::before { width: 0.375rem; height: 0.375rem; border-radius: 9999px; background: var(--model-color); content: ''; }
+.iq-track { height: 0.375rem; overflow: hidden; border-radius: 9999px; background: #f1f5f9; }
+.iq-track span { display: block; height: 100%; border-radius: inherit; background: var(--model-color); }
+.best-inline { color: var(--model-color); font-weight: 900; }
+.intelligence-matrix-cell { min-height: 6.5rem; border-top: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; }
+
+:global(.dark) .icon-action { color: #94a3b8; }
+:global(.dark) .icon-action:hover { color: #5eead4; background: #1e293b; }
+:global(.dark) .summary-cell + .summary-cell { border-color: #334155; }
+:global(.dark) .display-switch { border-color: #334155; background: #1e293b; }
+:global(.dark) .display-switch button { color: #94a3b8; }
+:global(.dark) .display-switch button:hover { color: #e2e8f0; }
+:global(.dark) .display-switch button.active { color: #5eead4; background: rgba(19, 78, 74, 0.45); }
+:global(.dark) .intelligence-group { border-color: color-mix(in srgb, var(--model-color) 72%, #0f172a); }
+:global(.dark) .model-mark,
+:global(.dark) .model-effort { background: color-mix(in srgb, var(--model-color) 14%, #0f172a); }
+:global(.dark) .effort-name { color: #cbd5e1; }
+:global(.dark) .iq-track { background: #1e293b; }
+:global(.dark) .intelligence-rail-row:hover { background: color-mix(in srgb, var(--model-color) 9%, #0f172a); }
+:global(.dark) .intelligence-matrix-cell { border-color: #334155; }
+:global(.dark) .station-scene:hover { box-shadow: 0 6px 16px rgba(2, 6, 23, 0.24); }
+
+@media (max-width: 639px) {
+  .summary-cell + .summary-cell { border-top: 1px solid #e5e7eb; border-left: 0; }
+  .intelligence-rail-row { grid-template-columns: 3.25rem minmax(0, 15rem) 3.75rem; }
+  .intelligence-rail-row > :last-child { grid-column: 2 / 4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-action,
+  .display-switch button,
+  .station-scene,
+  .intelligence-group { transition: none; }
 }
 </style>

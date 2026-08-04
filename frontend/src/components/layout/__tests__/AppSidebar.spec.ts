@@ -42,6 +42,17 @@ describe('AppSidebar scroll position persistence', () => {
   })
 })
 
+describe('AppSidebar admin personal navigation', () => {
+  it('provides a clearly labelled link to the user dashboard', () => {
+    expect(componentSource).toContain("{ path: '/dashboard', label: t('nav.userDashboard'), icon: DashboardIcon }")
+    expect(componentSource).toContain('...buildSelfNavItems(false)')
+  })
+
+  it('keeps the regular user dashboard in the main user navigation', () => {
+    expect(componentSource).toContain('finalizeNav(buildSelfNavItems(true))')
+  })
+})
+
 describe('AppSidebar header styles', () => {
   it('does not clip the version badge dropdown', () => {
     const sidebarHeaderBlockMatch = styleSource.match(/\.sidebar-header\s*\{[\s\S]*?\n {2}\}/)

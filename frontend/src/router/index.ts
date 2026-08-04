@@ -185,16 +185,6 @@ const routes: RouteRecordRaw[] = [
       titleKey: 'modelPlaza.title'
     }
   },
-  {
-    path: '/model-recommendations-prototype',
-    name: 'ModelRecommendationsPrototype',
-    component: () => import('@/views/ModelRecommendationsPrototypeView.vue'),
-    meta: {
-      requiresAuth: false,
-      title: 'Model Recommendations Prototype'
-    }
-  },
-
   // ==================== User Routes ====================
   {
     path: '/',

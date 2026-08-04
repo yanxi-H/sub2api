@@ -1,59 +1,58 @@
-# Monitor Center Design QA
+# Model Recommendations Responsive Design QA
 
 ## Comparison Target
 
-- Source visual truth: `/Users/yuan/Downloads/sub2api_operations_center_cockpit_apple(1).html`
-- Implementation: `http://127.0.0.1:3000/admin/monitor-center`
-- Primary state: Chinese, light theme, 1-hour range, populated monitoring data, administrator session.
-- Primary CSS viewport: `1440 x 900` at device scale factor 1.
-- Source capture: `/Users/yuan/Desktop/sub2api/design-qa-source-final-1440.png` (`1425 x 891` visible page pixels after scrollbar exclusion).
-- Implementation capture: `/Users/yuan/Desktop/sub2api/design-qa-implementation-final-1440.png` (`1432 x 895` visible page pixels after scrollbar exclusion).
-- Density normalization: browser screenshots were captured at CSS-pixel density; the small pixel-size difference is only each page's scrollbar gutter.
+- Source visual truth: `/var/folders/jn/786z2s3124bc9bm03k75l_r80000gn/T/codex-clipboard-b1205835-47b1-422d-a8bb-2dfaabf1e522.png` (`4490 x 1740` pixels).
+- Implementation screenshot: `/private/tmp/sub2api-intelligence-2048x768.png` (`2040 x 765` pixels).
+- Mobile screenshot: `/private/tmp/sub2api-intelligence-375x812.png` (`375 x 812` pixels).
+- Combined comparison: `/private/tmp/sub2api-intelligence-comparison.png`.
+- Desktop CSS viewport: `2048 x 768`; mobile CSS viewport: `375 x 812`; device scale factor 1.
+- State: light theme, populated recommendation data, score-rail mode selected.
 
 ## Full-View Comparison
 
-- Information architecture matches the source: compact toolbar, cockpit, six resource metrics, separated OpenAI/gateway/real-probe health, latency chart, three concurrency lanes, slow-request diagnostics, and three-day history.
-- The implementation intentionally uses the existing Sub2API admin sidebar, header, theme, permissions, and 8px surface radius instead of recreating the prototype shell. This is the requested product integration, not design drift.
-- Dynamic values and empty/unknown states come from the application API contracts rather than the prototype's static demo values.
-- Desktop hierarchy and density remain faithful: the cockpit and status sections fit above the latency chart at 1440px, and all major charts retain enough height for spike and recovery inspection.
+- The source demonstrates the issue: two wide columns allow the IQ rails to expand across most of an ultra-wide screen.
+- The implementation preserves the existing card hierarchy and styling while switching the intelligence groups to three columns at the `xl` breakpoint.
+- The recommendation grid stops at `96rem`, and each rail track stops at `15rem`, so neither continues growing with an ultra-wide viewport.
+- At `375px`, the layout collapses to one column, the rail track measures `131px`, and document `scrollWidth` equals `clientWidth`.
 
 ## Focused Region Evidence
 
-- Latency and concurrency: `/Users/yuan/Desktop/sub2api/design-qa-source-mid-1440.png` and `/Users/yuan/Desktop/sub2api/design-qa-implementation-mid-1440.png`.
-- Concurrency and slow diagnostics: `/Users/yuan/Desktop/sub2api/design-qa-source-lower-1440.png` and `/Users/yuan/Desktop/sub2api/design-qa-implementation-lower-1440.png`.
-- Slow-impact table and three-day history: `/Users/yuan/Desktop/sub2api/design-qa-source-bottom-1440.png` and `/Users/yuan/Desktop/sub2api/design-qa-implementation-bottom-1440.png`.
-- Tablet: `/Users/yuan/Desktop/sub2api/design-qa-source-tablet-1024.png` (`1009 x 887`) and `/Users/yuan/Desktop/sub2api/design-qa-implementation-tablet-1024.png` (`1015 x 892`) at a `1024 x 900` CSS viewport.
-- Mobile: `/Users/yuan/Desktop/sub2api/design-qa-source-mobile-390.png` (`375 x 812`) and `/Users/yuan/Desktop/sub2api/design-qa-implementation-mobile-390-fixed.png` (`382 x 827`) at a `390 x 844` CSS viewport.
-- Dark theme: `/Users/yuan/Desktop/sub2api/design-qa-implementation-dark-1440.png`.
+- The desktop intelligence section is readable in `/private/tmp/sub2api-intelligence-2048x768.png`; the first row contains three model cards with consistent widths.
+- The mobile intelligence section is readable in `/private/tmp/sub2api-intelligence-375x812.png`; model name, effort, IQ, price, and time remain visible without horizontal overflow.
+- A separate crop was not needed because both screenshots show the affected rail geometry and labels at readable scale.
 
 ## Required Fidelity Surfaces
 
-- Fonts and typography: both use the Apple system stack with PingFang SC fallbacks, zero letter spacing, compact operational labels, tabular numeric metrics, and restrained heading sizes. No clipped or overlapping text was observed.
-- Spacing and layout rhythm: section order and dense dashboard rhythm match the source. The implementation uses existing admin gutters and shell dimensions; tablet grids collapse predictably and mobile modules become single-column without hiding persistent controls.
-- Colors and tokens: neutral white/light-gray surfaces, low-saturation green/orange/red status colors, system blue interactions, and stable chart colors match the source intent. Dark-mode tokens preserve semantic distinctions without glow or gradients.
-- Image and icon fidelity: the source contains no required raster product imagery. The implementation keeps the real Sub2API logo and uses one consistent icon library for UI controls; charts are rendered from real data rather than placeholder artwork.
-- Copy and content: Chinese and English strings are localized. Static copy describes operational meaning; prototype-only demo wording and values are not shipped.
+- Fonts and typography: existing model, effort, IQ, price, and time typography is unchanged; labels remain legible and do not overlap.
+- Spacing and layout rhythm: desktop uses three equal columns with the existing `12px` gaps; tablet uses two columns; mobile uses one column. Card and row padding remain unchanged.
+- Colors and visual tokens: existing low-saturation model colors, borders, IQ bars, and dark-mode tokens are unchanged.
+- Image and asset fidelity: this section contains no raster imagery. Existing icon components and model marks are preserved.
+- Copy and content: recommendation labels, model names, effort levels, IQ values, prices, and durations are unchanged.
 
-## Interaction Checks
+## Interaction And Responsive Checks
 
-- E2E and TTFT tabs switch the five latency series and expose `role=tab` plus `aria-selected`.
-- Concurrency user selection changes only the user series; the internal refresh control remains available.
-- Slow-impact user/account/model tabs update table headers and rows independently.
-- Custom range rejects start-after-end and ranges longer than 30 days, accepts valid input, and refreshes without clearing previous successful data.
-- 1h/6h/24h selection, global refresh, light/dark theme, tablet, and mobile layouts were exercised.
-- Mobile implementation has no document-level horizontal overflow (`scrollWidth = clientWidth = 382px`).
-- Console errors were checked. The only errors came from the temporary mock server's announcement payload and the existing compliance-dialog mock state; no Monitor Center runtime error was observed.
+- Score-rail mode remains the default.
+- Switching to compact matrix mode renders matrix cells and removes rail rows; switching back restores the rail rows.
+- Measured desktop at `2048px`: three columns, `504px` cards, `228px` rails, and a `1536px` capped grid.
+- Measured tablet at `1100px`: two columns, `491px` cards, and `215px` rails.
+- Measured mobile at `375px`: one column, `301px` cards, `131px` rails, and no horizontal overflow.
+- The mobile rail uses `minmax(0, 15rem)` so narrower supported screens can continue shrinking proportionally.
+- Console inspection found only expected public-settings fetch failures from the frontend-only QA harness; no component rendering error was present.
 
 ## Comparison History
 
 ### Iteration 1
 
-- Finding: [P2] three-day history samples used fixed minimum column widths on mobile, producing document width `400px` inside a `390px` viewport.
-- Fix: history bands now receive an explicit repeat column count with `minmax(0, 1fr)` and clip their own contents.
-- Post-fix evidence: `/Users/yuan/Desktop/sub2api/design-qa-implementation-mobile-390-fixed.png`; measured document `scrollWidth` and `clientWidth` are both `382px` after scrollbar exclusion.
-- Finding: [P2] visual tab state was not exposed to assistive technology.
-- Fix: latency and slow-impact tab controls now use tab roles, `aria-selected`, and roving `tabindex`; time-range buttons expose `aria-pressed`.
-- Post-fix evidence: browser accessibility inspection reports E2E selected and TTFT unselected, with user/account/model discoverable as tabs.
+- Finding: [P2] two-column ultra-wide layout produced excessively long score rails.
+- Fix: intelligence groups now use three columns from the `xl` breakpoint, the group grid is capped at `96rem`, and rail tracks are capped at `15rem`.
+- Post-fix evidence: `/private/tmp/sub2api-intelligence-2048x768.png` and `/private/tmp/sub2api-intelligence-comparison.png`.
+
+### Iteration 2
+
+- Finding: [P2] the first mobile implementation retained a `7rem` minimum rail width, which could prevent proportional shrinking below `375px`.
+- Fix: the mobile rail minimum is now `0` while retaining the `15rem` maximum.
+- Post-fix evidence: responsive grid math plus the `375px` browser capture; final automated checks cover the production component.
 
 ## Findings
 
@@ -61,15 +60,15 @@ No actionable P0, P1, or P2 findings remain.
 
 ## Open Questions
 
-None. The implementation intentionally improves the prototype's mobile overflow and follows the current Sub2API admin shell rather than copying the standalone prototype chrome.
+None.
 
 ## Implementation Checklist
 
-- [x] Desktop visual comparison at 1440 x 900.
-- [x] Focused chart, concurrency, slow-request, and history comparisons.
-- [x] Tablet, mobile, and dark-mode checks.
-- [x] Primary controls and validation states exercised.
-- [x] Console inspected and implementation-specific errors ruled out.
+- [x] Three-column desktop layout.
+- [x] Fixed maximum rail and grid widths.
+- [x] Two-column tablet and one-column mobile fallbacks.
+- [x] Proportional rail shrinking on narrow screens.
+- [x] Mode switch and console checks.
 
 ## Follow-up Polish
 
