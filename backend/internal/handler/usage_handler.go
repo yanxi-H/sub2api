@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -44,12 +45,17 @@ type userGroupStat struct {
 	ActualCost  float64 `json:"actual_cost"`
 }
 
+type codexRadarDashboardService interface {
+	GetDashboardRecommendations(context.Context) (*service.CodexRadarDashboardRecommendations, error)
+}
+
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
-	usageService   *service.UsageService
-	apiKeyService  *service.APIKeyService
-	opsService     *service.OpsService
-	settingService *service.SettingService
+	usageService      *service.UsageService
+	apiKeyService     *service.APIKeyService
+	opsService        *service.OpsService
+	settingService    *service.SettingService
+	codexRadarService codexRadarDashboardService
 }
 
 // NewUsageHandler creates a new UsageHandler
@@ -58,12 +64,14 @@ func NewUsageHandler(
 	apiKeyService *service.APIKeyService,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
+	codexRadarService codexRadarDashboardService,
 ) *UsageHandler {
 	return &UsageHandler{
-		usageService:   usageService,
-		apiKeyService:  apiKeyService,
-		opsService:     opsService,
-		settingService: settingService,
+		usageService:      usageService,
+		apiKeyService:     apiKeyService,
+		opsService:        opsService,
+		settingService:    settingService,
+		codexRadarService: codexRadarService,
 	}
 }
 
@@ -478,6 +486,29 @@ func (h *UsageHandler) DashboardStats(c *gin.Context) {
 	}
 
 	response.Success(c, stats)
+}
+
+// DashboardRecommendations returns public CodexRadar recommendation data for
+// the authenticated user dashboard.
+// GET /api/v1/usage/dashboard/recommendations
+func (h *UsageHandler) DashboardRecommendations(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.codexRadarService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Model recommendations are temporarily unavailable")
+		return
+	}
+
+	recommendations, err := h.codexRadarService.GetDashboardRecommendations(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, recommendations)
 }
 
 // DashboardTrend handles getting user usage trend data

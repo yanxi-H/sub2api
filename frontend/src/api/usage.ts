@@ -55,6 +55,37 @@ export interface UserDashboardStats {
   by_platform?: PlatformDashboardStats[]
 }
 
+export interface CodexRadarStationRecommendation {
+  model: string
+  effort: string
+  iq: number | null
+  average_cost_usd: number | null
+  average_duration_minutes: number | null
+}
+
+export interface CodexRadarStationRecommendationSet {
+  key: string
+  title: string
+  items: CodexRadarStationRecommendation[]
+}
+
+export interface CodexRadarIntelligenceMetric {
+  model: string
+  effort: string
+  iq: number
+  samples: number
+  average_cost_usd: number | null
+  average_duration_minutes: number | null
+}
+
+export interface CodexRadarDashboardRecommendations {
+  source_updated_at?: string
+  station_available: boolean
+  intelligence_available: boolean
+  station_recommendations: CodexRadarStationRecommendationSet[]
+  intelligence_recommendations: CodexRadarIntelligenceMetric[]
+}
+
 export interface TrendParams {
   start_date?: string
   end_date?: string
@@ -262,6 +293,14 @@ export async function getDashboardStats(): Promise<UserDashboardStats> {
 }
 
 /**
+ * Get the public model recommendations displayed on the user dashboard.
+ */
+export async function getDashboardRecommendations(): Promise<CodexRadarDashboardRecommendations> {
+  const { data } = await apiClient.get<CodexRadarDashboardRecommendations>('/usage/dashboard/recommendations')
+  return data
+}
+
+/**
  * Get user usage trend data
  * @param params - Query parameters for filtering
  * @returns Usage trend data for current user
@@ -377,6 +416,7 @@ export const usageAPI = {
   getById,
   // Dashboard
   getDashboardStats,
+  getDashboardRecommendations,
   getDashboardTrend,
   getDashboardModels,
   getMyApiKeyDailyUsage,

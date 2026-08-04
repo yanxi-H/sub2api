@@ -56,7 +56,45 @@ export default {
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
-    addBalanceWithCode: 'Add balance with a code'
+    addBalanceWithCode: 'Add balance with a code',
+    modelRecommendations: {
+      title: 'Model Recommendations',
+      updatedAt: 'Updated {time}',
+      refresh: 'Refresh model recommendations',
+      snapshot: 'Data snapshot',
+      summaryTitle: 'Quick takeaways',
+      summaryDescription: 'Start with the conclusion, then choose by task.',
+      summaryHint: 'Blending IQ, price, and average time',
+      summary: {
+        strongest: 'Strongest reasoning',
+        balanced: 'Best balance',
+        fastest: 'Fastest response'
+      },
+      station: "Editor's Picks",
+      stationDescription: 'Curated defaults for common tasks, without the spreadsheet scan.',
+      stationLaneHint: 'Preferred · alternatives',
+      scenes: 'scenes',
+      preferred: 'Preferred model',
+      primary: 'Priority for this task',
+      alternatives: 'Other good options',
+      intelligence: 'Intelligence Picks',
+      intelligenceDescription: 'Compare reasoning levels by IQ, cost, and average response time.',
+      reasoningStrength: 'Reasoning strength',
+      iqScore: 'Intelligence score',
+      levels: 'levels',
+      unavailable: 'Model recommendations are temporarily unavailable.',
+      price: 'Price',
+      time: 'Time',
+      minutes: 'm',
+      best: 'Best balance of intelligence, price, and response time',
+      bestShort: 'Best balance',
+      stationCategories: {
+        dailyDevelopment: 'Daily Development',
+        hardProblems: 'Hard Problems',
+        backgroundAutomation: 'Background Automation',
+        lobsterTasks: 'Lobster Tasks'
+      }
+    }
   },
 
   // Groups (shared)

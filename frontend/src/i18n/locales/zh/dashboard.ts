@@ -56,7 +56,45 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值'
+    addBalanceWithCode: '使用兑换码充值',
+    modelRecommendations: {
+      title: '模型推荐',
+      updatedAt: '更新于 {time}',
+      refresh: '刷新模型推荐',
+      snapshot: '数据快照',
+      summaryTitle: '推荐速览',
+      summaryDescription: '先看结论，再按任务场景细选模型。',
+      summaryHint: '综合 IQ、价格与平均耗时',
+      summary: {
+        strongest: '推理最强',
+        balanced: '综合最优',
+        fastest: '响应最快'
+      },
+      station: '站长推荐',
+      stationDescription: '按常见任务整理好的优先选择，减少逐项比较。',
+      stationLaneHint: '优先选择 · 备选方案',
+      scenes: '个场景',
+      preferred: '首选模型',
+      primary: '该场景优先',
+      alternatives: '还有这些选择',
+      intelligence: '智力推荐',
+      intelligenceDescription: '同一模型的不同推理强度，重点看 IQ、成本和耗时的组合。',
+      reasoningStrength: '推理强度',
+      iqScore: '智力评分',
+      levels: '档强度',
+      unavailable: '模型推荐暂时不可用。',
+      price: '价格',
+      time: '耗时',
+      minutes: '分',
+      best: '智力、价格和响应时间的最佳平衡',
+      bestShort: '最佳平衡',
+      stationCategories: {
+        dailyDevelopment: '日常开发',
+        hardProblems: '难题攻坚',
+        backgroundAutomation: '后台自动化',
+        lobsterTasks: '跑龙虾类任务'
+      }
+    }
   },
 
   // Groups (shared)
