@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,8 +27,9 @@ import (
 // stubQuotaAccountRepo 是多账号 AccountRepository stub，仅实现 GetByID。
 type stubQuotaAccountRepo struct {
 	AccountRepository
-	accounts map[int64]*Account
-	mu       sync.Mutex
+	accounts       map[int64]*Account
+	extraUpdates   map[int64]map[string]any
+	extraUpdateErr error
 }
 
 func (r *stubQuotaAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -50,18 +50,13 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 }
 
 func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	acc, ok := r.accounts[id]
-	if !ok {
-		return fmt.Errorf("account %d not found", id)
+	if r.extraUpdateErr != nil {
+		return r.extraUpdateErr
 	}
-	if acc.Extra == nil {
-		acc.Extra = make(map[string]any)
+	if r.extraUpdates == nil {
+		r.extraUpdates = make(map[int64]map[string]any)
 	}
-	for key, value := range updates {
-		acc.Extra[key] = value
-	}
+	r.extraUpdates[id] = updates
 	return nil
 }
 
@@ -222,10 +217,6 @@ func TestResetCreditAgentIdentityUsesAssertionAndRecoversInvalidTaskOnce(t *test
 			_, _ = w.Write([]byte(`{"task_id":"task-reset-new"}`))
 			return
 		}
-		if r.URL.Path == "/backend-api/wham/rate-limit-reset-credits" {
-			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
-			return
-		}
 		resetCalls++
 		assertions = append(assertions, r.Header.Get("authorization"))
 		require.Equal(t, "account-reset-recovery", r.Header.Get("chatgpt-account-id"))
@@ -285,10 +276,6 @@ func TestResetCreditAgentIdentityReusesConcurrentlyRecoveredTask(t *testing.T) {
 		if strings.Contains(r.URL.Path, "/task/register") {
 			registerCalls++
 			_, _ = w.Write([]byte(`{"task_id":"task-reset-unexpected"}`))
-			return
-		}
-		if r.URL.Path == "/backend-api/wham/rate-limit-reset-credits" {
-			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
 			return
 		}
 		resetCalls++
@@ -561,10 +548,14 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 		{ExpiresAt: "2026-07-03T04:05:06Z"},
 		{ExpiresAt: "2026-07-04T04:05:06Z"},
 	}, usage.RateLimitResetCredits.Credits)
-	snapshot := OpenAIResetCreditSnapshotFromExtra(account.Extra)
-	require.NotNil(t, snapshot)
-	require.Equal(t, 2, snapshot.AvailableCount)
-	require.Equal(t, usage.RateLimitResetCredits.Credits, snapshot.Credits)
+	require.NoError(t, svc.CacheResetCreditsSnapshot(ctx, 100, usage.RateLimitResetCredits))
+	require.Equal(t, &OpenAIRateLimitResetCredits{
+		AvailableCount: 2,
+		Credits: []OpenAIRateLimitResetCreditDetail{
+			{ExpiresAt: "2026-07-03T04:05:06Z"},
+			{ExpiresAt: "2026-07-04T04:05:06Z"},
+		},
+	}, repo.extraUpdates[100][openaiQuotaResetCreditsKey])
 
 	encoded, err := json.Marshal(usage)
 	require.NoError(t, err)
@@ -614,6 +605,67 @@ func TestQueryUsageResetCreditDetails401NonFatal(t *testing.T) {
 	require.Equal(t, 1, usage.RateLimitResetCredits.AvailableCount)
 	require.Equal(t, 1, detailCalls)
 	require.Empty(t, usage.RateLimitResetCredits.Credits)
+
+	// A count without expiration details must not be persisted (the reader could
+	// never age it out), and the previous snapshot must survive untouched.
+	require.Error(t, svc.CacheResetCreditsSnapshot(ctx, 100, usage.RateLimitResetCredits))
+	require.Empty(t, repo.extraUpdates)
+}
+
+func TestCacheResetCreditsSnapshot(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("zero count allows an empty expiration list", func(t *testing.T) {
+		repo := &stubQuotaAccountRepo{}
+		svc := &OpenAIQuotaService{accountRepo: repo}
+		credits := &OpenAIRateLimitResetCredits{AvailableCount: 0}
+
+		require.NoError(t, svc.CacheResetCreditsSnapshot(ctx, 100, credits))
+		require.Equal(t, credits, repo.extraUpdates[100][openaiQuotaResetCreditsKey])
+	})
+
+	t.Run("missing expiration list preserves the cache", func(t *testing.T) {
+		repo := &stubQuotaAccountRepo{}
+		svc := &OpenAIQuotaService{accountRepo: repo}
+
+		err := svc.CacheResetCreditsSnapshot(ctx, 100, &OpenAIRateLimitResetCredits{AvailableCount: 1})
+
+		require.Error(t, err)
+		require.Empty(t, repo.extraUpdates)
+	})
+
+	t.Run("empty expiration list with a positive count preserves the cache", func(t *testing.T) {
+		repo := &stubQuotaAccountRepo{}
+		svc := &OpenAIQuotaService{accountRepo: repo}
+
+		err := svc.CacheResetCreditsSnapshot(ctx, 100, &OpenAIRateLimitResetCredits{
+			AvailableCount: 2,
+			Credits:        []OpenAIRateLimitResetCreditDetail{},
+		})
+
+		require.Error(t, err)
+		require.Empty(t, repo.extraUpdates)
+	})
+
+	t.Run("nil snapshot preserves the cache", func(t *testing.T) {
+		repo := &stubQuotaAccountRepo{}
+		svc := &OpenAIQuotaService{accountRepo: repo}
+
+		require.Error(t, svc.CacheResetCreditsSnapshot(ctx, 100, nil))
+		require.Empty(t, repo.extraUpdates)
+	})
+
+	t.Run("repository errors are returned", func(t *testing.T) {
+		repo := &stubQuotaAccountRepo{extraUpdateErr: errors.New("database unavailable")}
+		svc := &OpenAIQuotaService{accountRepo: repo}
+
+		err := svc.CacheResetCreditsSnapshot(ctx, 100, &OpenAIRateLimitResetCredits{
+			AvailableCount: 1,
+			Credits:        []OpenAIRateLimitResetCreditDetail{{ExpiresAt: "2026-07-03T04:05:06Z"}},
+		})
+
+		require.ErrorContains(t, err, "database unavailable")
+	})
 }
 
 // TestResetCreditGetByIDError_FailsClosed 验证守卫「失败关闭」语义：

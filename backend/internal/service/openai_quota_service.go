@@ -34,6 +34,7 @@ const (
 	openaiQuotaSecFetchSite     = "none"
 	openaiQuotaSecFetchMode     = "no-cors"
 	openaiQuotaSecFetchDest     = "empty"
+	openaiQuotaResetCreditsKey  = "codex_reset_credit_snapshot"
 )
 
 // OpenAIRateLimitWindow describes a single rate-limit window returned by
@@ -213,8 +214,7 @@ func mergeOpenAIResetCreditDetails(credits *OpenAIRateLimitResetCredits, details
 }
 
 // persistResetCreditSnapshot stores only successful, explicit reset-credit
-// results. A missing upstream surface remains "not queried" rather than being
-// silently converted into a zero-card snapshot.
+// results.
 func (s *OpenAIQuotaService) persistResetCreditSnapshot(ctx context.Context, accountID int64, credits *OpenAIRateLimitResetCredits) {
 	if s == nil || s.accountRepo == nil || credits == nil {
 		return
@@ -232,6 +232,28 @@ func (s *OpenAIQuotaService) persistResetCreditSnapshot(ctx context.Context, acc
 	}); err != nil {
 		slog.Warn("openai_quota_reset_credit_snapshot_persist_failed", "account_id", accountID, "error", err)
 	}
+}
+
+// CacheResetCreditsSnapshot persists a complete reset-credit snapshot after an
+// explicit UI refresh. Missing expiration details leave the old cache intact.
+func (s *OpenAIQuotaService) CacheResetCreditsSnapshot(ctx context.Context, accountID int64, credits *OpenAIRateLimitResetCredits) error {
+	if credits == nil || (credits.AvailableCount > 0 && len(credits.Credits) == 0) {
+		return infraerrors.New(
+			http.StatusBadGateway,
+			"OPENAI_QUOTA_RESET_CREDITS_REFRESH_FAILED",
+			"failed to refresh reset-credit expiration details; cached data was preserved",
+		)
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{
+		openaiQuotaResetCreditsKey: credits,
+	}); err != nil {
+		return infraerrors.New(
+			http.StatusInternalServerError,
+			"OPENAI_QUOTA_CACHE_WRITE_FAILED",
+			"failed to cache reset-credit details",
+		).WithCause(err)
+	}
+	return nil
 }
 
 func (s *OpenAIQuotaService) queryResetCreditDetails(ctx context.Context, client *req.Client, accessToken, chatGPTAccountID string, fedRAMP bool, accountID int64) *openAIRateLimitResetCreditDetails {
