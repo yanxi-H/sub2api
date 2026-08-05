@@ -57,6 +57,15 @@ func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates 
 		r.extraUpdates = make(map[int64]map[string]any)
 	}
 	r.extraUpdates[id] = updates
+	// 同步合并到 account.Extra，让测试能直接从 account 读回快照
+	if account, ok := r.accounts[id]; ok {
+		if account.Extra == nil {
+			account.Extra = make(map[string]any)
+		}
+		for k, v := range updates {
+			account.Extra[k] = v
+		}
+	}
 	return nil
 }
 

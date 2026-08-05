@@ -190,7 +190,10 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	payload.FetchedAt = time.Now().Unix()
 	details := s.queryResetCreditDetails(callCtx, client, accessToken, chatGPTAccountID, fedRAMP, accountID)
 	payload.RateLimitResetCredits = mergeOpenAIResetCreditDetails(payload.RateLimitResetCredits, details)
-	s.persistResetCreditSnapshot(ctx, accountID, payload.RateLimitResetCredits)
+	// 401 等 details 获取失败时不写缓存（CacheResetCreditsSnapshot 内部校验）
+	if err := s.CacheResetCreditsSnapshot(ctx, accountID, payload.RateLimitResetCredits); err == nil {
+		s.persistResetCreditSnapshot(ctx, accountID, payload.RateLimitResetCredits)
+	}
 	return &payload, nil
 }
 
