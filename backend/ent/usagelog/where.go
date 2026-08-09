@@ -90,6 +90,26 @@ func UpstreamModel(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamModel, v))
 }
 
+// UpstreamResponseModel applies equality check predicate on the "upstream_response_model" field. It's identical to UpstreamResponseModelEQ.
+func UpstreamResponseModel(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamModelMismatch applies equality check predicate on the "upstream_model_mismatch" field. It's identical to UpstreamModelMismatchEQ.
+func UpstreamModelMismatch(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamModelMismatch, v))
+}
+
+// RequestBodyBytes applies equality check predicate on the "request_body_bytes" field. It's identical to RequestBodyBytesEQ.
+func RequestBodyBytes(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyLane applies equality check predicate on the "request_body_lane" field. It's identical to RequestBodyLaneEQ.
+func RequestBodyLane(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyLane, v))
+}
+
 // ChannelID applies equality check predicate on the "channel_id" field. It's identical to ChannelIDEQ.
 func ChannelID(v int64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldChannelID, v))
@@ -213,16 +233,6 @@ func DurationMs(v int) predicate.UsageLog {
 // FirstTokenMs applies equality check predicate on the "first_token_ms" field. It's identical to FirstTokenMsEQ.
 func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
-}
-
-// RequestBodyBytes applies equality check predicate on the "request_body_bytes" field. It's identical to RequestBodyBytesEQ.
-func RequestBodyBytes(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyLane applies equality check predicate on the "request_body_lane" field. It's identical to RequestBodyLaneEQ.
-func RequestBodyLane(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyLane, v))
 }
 
 // UserAgent applies equality check predicate on the "user_agent" field. It's identical to UserAgentEQ.
@@ -623,6 +633,226 @@ func UpstreamModelEqualFold(v string) predicate.UsageLog {
 // UpstreamModelContainsFold applies the ContainsFold predicate on the "upstream_model" field.
 func UpstreamModelContainsFold(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldContainsFold(FieldUpstreamModel, v))
+}
+
+// UpstreamResponseModelEQ applies the EQ predicate on the "upstream_response_model" field.
+func UpstreamResponseModelEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelNEQ applies the NEQ predicate on the "upstream_response_model" field.
+func UpstreamResponseModelNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelIn applies the In predicate on the "upstream_response_model" field.
+func UpstreamResponseModelIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldUpstreamResponseModel, vs...))
+}
+
+// UpstreamResponseModelNotIn applies the NotIn predicate on the "upstream_response_model" field.
+func UpstreamResponseModelNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldUpstreamResponseModel, vs...))
+}
+
+// UpstreamResponseModelGT applies the GT predicate on the "upstream_response_model" field.
+func UpstreamResponseModelGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelGTE applies the GTE predicate on the "upstream_response_model" field.
+func UpstreamResponseModelGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelLT applies the LT predicate on the "upstream_response_model" field.
+func UpstreamResponseModelLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelLTE applies the LTE predicate on the "upstream_response_model" field.
+func UpstreamResponseModelLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelContains applies the Contains predicate on the "upstream_response_model" field.
+func UpstreamResponseModelContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelHasPrefix applies the HasPrefix predicate on the "upstream_response_model" field.
+func UpstreamResponseModelHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelHasSuffix applies the HasSuffix predicate on the "upstream_response_model" field.
+func UpstreamResponseModelHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelIsNil applies the IsNil predicate on the "upstream_response_model" field.
+func UpstreamResponseModelIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldUpstreamResponseModel))
+}
+
+// UpstreamResponseModelNotNil applies the NotNil predicate on the "upstream_response_model" field.
+func UpstreamResponseModelNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldUpstreamResponseModel))
+}
+
+// UpstreamResponseModelEqualFold applies the EqualFold predicate on the "upstream_response_model" field.
+func UpstreamResponseModelEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamResponseModelContainsFold applies the ContainsFold predicate on the "upstream_response_model" field.
+func UpstreamResponseModelContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldUpstreamResponseModel, v))
+}
+
+// UpstreamModelMismatchEQ applies the EQ predicate on the "upstream_model_mismatch" field.
+func UpstreamModelMismatchEQ(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldUpstreamModelMismatch, v))
+}
+
+// UpstreamModelMismatchNEQ applies the NEQ predicate on the "upstream_model_mismatch" field.
+func UpstreamModelMismatchNEQ(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldUpstreamModelMismatch, v))
+}
+
+// UpstreamModelMismatchIsNil applies the IsNil predicate on the "upstream_model_mismatch" field.
+func UpstreamModelMismatchIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldUpstreamModelMismatch))
+}
+
+// UpstreamModelMismatchNotNil applies the NotNil predicate on the "upstream_model_mismatch" field.
+func UpstreamModelMismatchNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldUpstreamModelMismatch))
+}
+
+// RequestBodyBytesEQ applies the EQ predicate on the "request_body_bytes" field.
+func RequestBodyBytesEQ(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyBytesNEQ applies the NEQ predicate on the "request_body_bytes" field.
+func RequestBodyBytesNEQ(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyBytesIn applies the In predicate on the "request_body_bytes" field.
+func RequestBodyBytesIn(vs ...int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldRequestBodyBytes, vs...))
+}
+
+// RequestBodyBytesNotIn applies the NotIn predicate on the "request_body_bytes" field.
+func RequestBodyBytesNotIn(vs ...int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldRequestBodyBytes, vs...))
+}
+
+// RequestBodyBytesGT applies the GT predicate on the "request_body_bytes" field.
+func RequestBodyBytesGT(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyBytesGTE applies the GTE predicate on the "request_body_bytes" field.
+func RequestBodyBytesGTE(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyBytesLT applies the LT predicate on the "request_body_bytes" field.
+func RequestBodyBytesLT(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyBytesLTE applies the LTE predicate on the "request_body_bytes" field.
+func RequestBodyBytesLTE(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldRequestBodyBytes, v))
+}
+
+// RequestBodyBytesIsNil applies the IsNil predicate on the "request_body_bytes" field.
+func RequestBodyBytesIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldRequestBodyBytes))
+}
+
+// RequestBodyBytesNotNil applies the NotNil predicate on the "request_body_bytes" field.
+func RequestBodyBytesNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldRequestBodyBytes))
+}
+
+// RequestBodyLaneEQ applies the EQ predicate on the "request_body_lane" field.
+func RequestBodyLaneEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneNEQ applies the NEQ predicate on the "request_body_lane" field.
+func RequestBodyLaneNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneIn applies the In predicate on the "request_body_lane" field.
+func RequestBodyLaneIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldRequestBodyLane, vs...))
+}
+
+// RequestBodyLaneNotIn applies the NotIn predicate on the "request_body_lane" field.
+func RequestBodyLaneNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldRequestBodyLane, vs...))
+}
+
+// RequestBodyLaneGT applies the GT predicate on the "request_body_lane" field.
+func RequestBodyLaneGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneGTE applies the GTE predicate on the "request_body_lane" field.
+func RequestBodyLaneGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneLT applies the LT predicate on the "request_body_lane" field.
+func RequestBodyLaneLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneLTE applies the LTE predicate on the "request_body_lane" field.
+func RequestBodyLaneLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneContains applies the Contains predicate on the "request_body_lane" field.
+func RequestBodyLaneContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneHasPrefix applies the HasPrefix predicate on the "request_body_lane" field.
+func RequestBodyLaneHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneHasSuffix applies the HasSuffix predicate on the "request_body_lane" field.
+func RequestBodyLaneHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneIsNil applies the IsNil predicate on the "request_body_lane" field.
+func RequestBodyLaneIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldRequestBodyLane))
+}
+
+// RequestBodyLaneNotNil applies the NotNil predicate on the "request_body_lane" field.
+func RequestBodyLaneNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldRequestBodyLane))
+}
+
+// RequestBodyLaneEqualFold applies the EqualFold predicate on the "request_body_lane" field.
+func RequestBodyLaneEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldRequestBodyLane, v))
+}
+
+// RequestBodyLaneContainsFold applies the ContainsFold predicate on the "request_body_lane" field.
+func RequestBodyLaneContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldRequestBodyLane, v))
 }
 
 // ChannelIDEQ applies the EQ predicate on the "channel_id" field.
@@ -1688,121 +1918,6 @@ func FirstTokenMsIsNil() predicate.UsageLog {
 // FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
 func FirstTokenMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldFirstTokenMs))
-}
-
-// RequestBodyBytesEQ applies the EQ predicate on the "request_body_bytes" field.
-func RequestBodyBytesEQ(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyBytesNEQ applies the NEQ predicate on the "request_body_bytes" field.
-func RequestBodyBytesNEQ(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldNEQ(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyBytesIn applies the In predicate on the "request_body_bytes" field.
-func RequestBodyBytesIn(vs ...int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldIn(FieldRequestBodyBytes, vs...))
-}
-
-// RequestBodyBytesNotIn applies the NotIn predicate on the "request_body_bytes" field.
-func RequestBodyBytesNotIn(vs ...int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldNotIn(FieldRequestBodyBytes, vs...))
-}
-
-// RequestBodyBytesGT applies the GT predicate on the "request_body_bytes" field.
-func RequestBodyBytesGT(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldGT(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyBytesGTE applies the GTE predicate on the "request_body_bytes" field.
-func RequestBodyBytesGTE(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldGTE(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyBytesLT applies the LT predicate on the "request_body_bytes" field.
-func RequestBodyBytesLT(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldLT(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyBytesLTE applies the LTE predicate on the "request_body_bytes" field.
-func RequestBodyBytesLTE(v int64) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldLTE(FieldRequestBodyBytes, v))
-}
-
-// RequestBodyLaneEQ applies the EQ predicate on the "request_body_lane" field.
-func RequestBodyLaneEQ(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldEQ(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneNEQ applies the NEQ predicate on the "request_body_lane" field.
-func RequestBodyLaneNEQ(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldNEQ(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneIn applies the In predicate on the "request_body_lane" field.
-func RequestBodyLaneIn(vs ...string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldIn(FieldRequestBodyLane, vs...))
-}
-
-// RequestBodyLaneNotIn applies the NotIn predicate on the "request_body_lane" field.
-func RequestBodyLaneNotIn(vs ...string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldNotIn(FieldRequestBodyLane, vs...))
-}
-
-// RequestBodyLaneGT applies the GT predicate on the "request_body_lane" field.
-func RequestBodyLaneGT(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldGT(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneGTE applies the GTE predicate on the "request_body_lane" field.
-func RequestBodyLaneGTE(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldGTE(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneLT applies the LT predicate on the "request_body_lane" field.
-func RequestBodyLaneLT(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldLT(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneLTE applies the LTE predicate on the "request_body_lane" field.
-func RequestBodyLaneLTE(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldLTE(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneContains applies the Contains predicate on the "request_body_lane" field.
-func RequestBodyLaneContains(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldContains(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneHasPrefix applies the HasPrefix predicate on the "request_body_lane" field.
-func RequestBodyLaneHasPrefix(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldHasPrefix(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneHasSuffix applies the HasSuffix predicate on the "request_body_lane" field.
-func RequestBodyLaneHasSuffix(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldHasSuffix(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneIsNil applies the IsNil predicate on the "request_body_lane" field.
-func RequestBodyLaneIsNil() predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldIsNull(FieldRequestBodyLane))
-}
-
-// RequestBodyLaneNotNil applies the NotNil predicate on the "request_body_lane" field.
-func RequestBodyLaneNotNil() predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldNotNull(FieldRequestBodyLane))
-}
-
-// RequestBodyLaneEqualFold applies the EqualFold predicate on the "request_body_lane" field.
-func RequestBodyLaneEqualFold(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldEqualFold(FieldRequestBodyLane, v))
-}
-
-// RequestBodyLaneContainsFold applies the ContainsFold predicate on the "request_body_lane" field.
-func RequestBodyLaneContainsFold(v string) predicate.UsageLog {
-	return predicate.UsageLog(sql.FieldContainsFold(FieldRequestBodyLane, v))
 }
 
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.

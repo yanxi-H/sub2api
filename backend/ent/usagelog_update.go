@@ -142,6 +142,93 @@ func (_u *UsageLogUpdate) ClearUpstreamModel() *UsageLogUpdate {
 	return _u
 }
 
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (_u *UsageLogUpdate) SetUpstreamResponseModel(v string) *UsageLogUpdate {
+	_u.mutation.SetUpstreamResponseModel(v)
+	return _u
+}
+
+// SetNillableUpstreamResponseModel sets the "upstream_response_model" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamResponseModel(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamResponseModel(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (_u *UsageLogUpdate) ClearUpstreamResponseModel() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamResponseModel()
+	return _u
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdate) SetUpstreamModelMismatch(v bool) *UsageLogUpdate {
+	_u.mutation.SetUpstreamModelMismatch(v)
+	return _u
+}
+
+// SetNillableUpstreamModelMismatch sets the "upstream_model_mismatch" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamModelMismatch(v *bool) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamModelMismatch(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdate) ClearUpstreamModelMismatch() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamModelMismatch()
+	return _u
+}
+
+// SetRequestBodyBytes sets the "request_body_bytes" field.
+func (_u *UsageLogUpdate) SetRequestBodyBytes(v int64) *UsageLogUpdate {
+	_u.mutation.ResetRequestBodyBytes()
+	_u.mutation.SetRequestBodyBytes(v)
+	return _u
+}
+
+// SetNillableRequestBodyBytes sets the "request_body_bytes" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableRequestBodyBytes(v *int64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetRequestBodyBytes(*v)
+	}
+	return _u
+}
+
+// AddRequestBodyBytes adds value to the "request_body_bytes" field.
+func (_u *UsageLogUpdate) AddRequestBodyBytes(v int64) *UsageLogUpdate {
+	_u.mutation.AddRequestBodyBytes(v)
+	return _u
+}
+
+// ClearRequestBodyBytes clears the value of the "request_body_bytes" field.
+func (_u *UsageLogUpdate) ClearRequestBodyBytes() *UsageLogUpdate {
+	_u.mutation.ClearRequestBodyBytes()
+	return _u
+}
+
+// SetRequestBodyLane sets the "request_body_lane" field.
+func (_u *UsageLogUpdate) SetRequestBodyLane(v string) *UsageLogUpdate {
+	_u.mutation.SetRequestBodyLane(v)
+	return _u
+}
+
+// SetNillableRequestBodyLane sets the "request_body_lane" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableRequestBodyLane(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetRequestBodyLane(*v)
+	}
+	return _u
+}
+
+// ClearRequestBodyLane clears the value of the "request_body_lane" field.
+func (_u *UsageLogUpdate) ClearRequestBodyLane() *UsageLogUpdate {
+	_u.mutation.ClearRequestBodyLane()
+	return _u
+}
+
 // SetChannelID sets the "channel_id" field.
 func (_u *UsageLogUpdate) SetChannelID(v int64) *UsageLogUpdate {
 	_u.mutation.ResetChannelID()
@@ -672,47 +759,6 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
-// SetRequestBodyBytes sets the "request_body_bytes" field.
-func (_u *UsageLogUpdate) SetRequestBodyBytes(v int64) *UsageLogUpdate {
-	_u.mutation.ResetRequestBodyBytes()
-	_u.mutation.SetRequestBodyBytes(v)
-	return _u
-}
-
-// SetNillableRequestBodyBytes sets the "request_body_bytes" field if the given value is not nil.
-func (_u *UsageLogUpdate) SetNillableRequestBodyBytes(v *int64) *UsageLogUpdate {
-	if v != nil {
-		_u.SetRequestBodyBytes(*v)
-	}
-	return _u
-}
-
-// AddRequestBodyBytes adds value to the "request_body_bytes" field.
-func (_u *UsageLogUpdate) AddRequestBodyBytes(v int64) *UsageLogUpdate {
-	_u.mutation.AddRequestBodyBytes(v)
-	return _u
-}
-
-// SetRequestBodyLane sets the "request_body_lane" field.
-func (_u *UsageLogUpdate) SetRequestBodyLane(v string) *UsageLogUpdate {
-	_u.mutation.SetRequestBodyLane(v)
-	return _u
-}
-
-// SetNillableRequestBodyLane sets the "request_body_lane" field if the given value is not nil.
-func (_u *UsageLogUpdate) SetNillableRequestBodyLane(v *string) *UsageLogUpdate {
-	if v != nil {
-		_u.SetRequestBodyLane(*v)
-	}
-	return _u
-}
-
-// ClearRequestBodyLane clears the value of the "request_body_lane" field.
-func (_u *UsageLogUpdate) ClearRequestBodyLane() *UsageLogUpdate {
-	_u.mutation.ClearRequestBodyLane()
-	return _u
-}
-
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdate) SetUserAgent(v string) *UsageLogUpdate {
 	_u.mutation.SetUserAgent(v)
@@ -1057,6 +1103,16 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "upstream_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_model": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamResponseModel(); ok {
+		if err := usagelog.UpstreamResponseModelValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_response_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_response_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RequestBodyLane(); ok {
+		if err := usagelog.RequestBodyLaneValidator(v); err != nil {
+			return &ValidationError{Name: "request_body_lane", err: fmt.Errorf(`ent: validator failed for field "UsageLog.request_body_lane": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ModelMappingChain(); ok {
 		if err := usagelog.ModelMappingChainValidator(v); err != nil {
 			return &ValidationError{Name: "model_mapping_chain", err: fmt.Errorf(`ent: validator failed for field "UsageLog.model_mapping_chain": %w`, err)}
@@ -1070,11 +1126,6 @@ func (_u *UsageLogUpdate) check() error {
 	if v, ok := _u.mutation.BillingMode(); ok {
 		if err := usagelog.BillingModeValidator(v); err != nil {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.RequestBodyLane(); ok {
-		if err := usagelog.RequestBodyLaneValidator(v); err != nil {
-			return &ValidationError{Name: "request_body_lane", err: fmt.Errorf(`ent: validator failed for field "UsageLog.request_body_lane": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.UserAgent(); ok {
@@ -1153,6 +1204,33 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.UpstreamModelCleared() {
 		_spec.ClearField(usagelog.FieldUpstreamModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamResponseModel(); ok {
+		_spec.SetField(usagelog.FieldUpstreamResponseModel, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamResponseModelCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamResponseModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamModelMismatch(); ok {
+		_spec.SetField(usagelog.FieldUpstreamModelMismatch, field.TypeBool, value)
+	}
+	if _u.mutation.UpstreamModelMismatchCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamModelMismatch, field.TypeBool)
+	}
+	if value, ok := _u.mutation.RequestBodyBytes(); ok {
+		_spec.SetField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRequestBodyBytes(); ok {
+		_spec.AddField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
+	}
+	if _u.mutation.RequestBodyBytesCleared() {
+		_spec.ClearField(usagelog.FieldRequestBodyBytes, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.RequestBodyLane(); ok {
+		_spec.SetField(usagelog.FieldRequestBodyLane, field.TypeString, value)
+	}
+	if _u.mutation.RequestBodyLaneCleared() {
+		_spec.ClearField(usagelog.FieldRequestBodyLane, field.TypeString)
 	}
 	if value, ok := _u.mutation.ChannelID(); ok {
 		_spec.SetField(usagelog.FieldChannelID, field.TypeInt64, value)
@@ -1297,18 +1375,6 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
-	}
-	if value, ok := _u.mutation.RequestBodyBytes(); ok {
-		_spec.SetField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedRequestBodyBytes(); ok {
-		_spec.AddField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.RequestBodyLane(); ok {
-		_spec.SetField(usagelog.FieldRequestBodyLane, field.TypeString, value)
-	}
-	if _u.mutation.RequestBodyLaneCleared() {
-		_spec.ClearField(usagelog.FieldRequestBodyLane, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1654,6 +1720,93 @@ func (_u *UsageLogUpdateOne) SetNillableUpstreamModel(v *string) *UsageLogUpdate
 // ClearUpstreamModel clears the value of the "upstream_model" field.
 func (_u *UsageLogUpdateOne) ClearUpstreamModel() *UsageLogUpdateOne {
 	_u.mutation.ClearUpstreamModel()
+	return _u
+}
+
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (_u *UsageLogUpdateOne) SetUpstreamResponseModel(v string) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamResponseModel(v)
+	return _u
+}
+
+// SetNillableUpstreamResponseModel sets the "upstream_response_model" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamResponseModel(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamResponseModel(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamResponseModel() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamResponseModel()
+	return _u
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdateOne) SetUpstreamModelMismatch(v bool) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamModelMismatch(v)
+	return _u
+}
+
+// SetNillableUpstreamModelMismatch sets the "upstream_model_mismatch" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamModelMismatch(v *bool) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamModelMismatch(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamModelMismatch() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamModelMismatch()
+	return _u
+}
+
+// SetRequestBodyBytes sets the "request_body_bytes" field.
+func (_u *UsageLogUpdateOne) SetRequestBodyBytes(v int64) *UsageLogUpdateOne {
+	_u.mutation.ResetRequestBodyBytes()
+	_u.mutation.SetRequestBodyBytes(v)
+	return _u
+}
+
+// SetNillableRequestBodyBytes sets the "request_body_bytes" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableRequestBodyBytes(v *int64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetRequestBodyBytes(*v)
+	}
+	return _u
+}
+
+// AddRequestBodyBytes adds value to the "request_body_bytes" field.
+func (_u *UsageLogUpdateOne) AddRequestBodyBytes(v int64) *UsageLogUpdateOne {
+	_u.mutation.AddRequestBodyBytes(v)
+	return _u
+}
+
+// ClearRequestBodyBytes clears the value of the "request_body_bytes" field.
+func (_u *UsageLogUpdateOne) ClearRequestBodyBytes() *UsageLogUpdateOne {
+	_u.mutation.ClearRequestBodyBytes()
+	return _u
+}
+
+// SetRequestBodyLane sets the "request_body_lane" field.
+func (_u *UsageLogUpdateOne) SetRequestBodyLane(v string) *UsageLogUpdateOne {
+	_u.mutation.SetRequestBodyLane(v)
+	return _u
+}
+
+// SetNillableRequestBodyLane sets the "request_body_lane" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableRequestBodyLane(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetRequestBodyLane(*v)
+	}
+	return _u
+}
+
+// ClearRequestBodyLane clears the value of the "request_body_lane" field.
+func (_u *UsageLogUpdateOne) ClearRequestBodyLane() *UsageLogUpdateOne {
+	_u.mutation.ClearRequestBodyLane()
 	return _u
 }
 
@@ -2187,47 +2340,6 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
-// SetRequestBodyBytes sets the "request_body_bytes" field.
-func (_u *UsageLogUpdateOne) SetRequestBodyBytes(v int64) *UsageLogUpdateOne {
-	_u.mutation.ResetRequestBodyBytes()
-	_u.mutation.SetRequestBodyBytes(v)
-	return _u
-}
-
-// SetNillableRequestBodyBytes sets the "request_body_bytes" field if the given value is not nil.
-func (_u *UsageLogUpdateOne) SetNillableRequestBodyBytes(v *int64) *UsageLogUpdateOne {
-	if v != nil {
-		_u.SetRequestBodyBytes(*v)
-	}
-	return _u
-}
-
-// AddRequestBodyBytes adds value to the "request_body_bytes" field.
-func (_u *UsageLogUpdateOne) AddRequestBodyBytes(v int64) *UsageLogUpdateOne {
-	_u.mutation.AddRequestBodyBytes(v)
-	return _u
-}
-
-// SetRequestBodyLane sets the "request_body_lane" field.
-func (_u *UsageLogUpdateOne) SetRequestBodyLane(v string) *UsageLogUpdateOne {
-	_u.mutation.SetRequestBodyLane(v)
-	return _u
-}
-
-// SetNillableRequestBodyLane sets the "request_body_lane" field if the given value is not nil.
-func (_u *UsageLogUpdateOne) SetNillableRequestBodyLane(v *string) *UsageLogUpdateOne {
-	if v != nil {
-		_u.SetRequestBodyLane(*v)
-	}
-	return _u
-}
-
-// ClearRequestBodyLane clears the value of the "request_body_lane" field.
-func (_u *UsageLogUpdateOne) ClearRequestBodyLane() *UsageLogUpdateOne {
-	_u.mutation.ClearRequestBodyLane()
-	return _u
-}
-
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdateOne) SetUserAgent(v string) *UsageLogUpdateOne {
 	_u.mutation.SetUserAgent(v)
@@ -2585,6 +2697,16 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "upstream_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_model": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamResponseModel(); ok {
+		if err := usagelog.UpstreamResponseModelValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_response_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_response_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RequestBodyLane(); ok {
+		if err := usagelog.RequestBodyLaneValidator(v); err != nil {
+			return &ValidationError{Name: "request_body_lane", err: fmt.Errorf(`ent: validator failed for field "UsageLog.request_body_lane": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ModelMappingChain(); ok {
 		if err := usagelog.ModelMappingChainValidator(v); err != nil {
 			return &ValidationError{Name: "model_mapping_chain", err: fmt.Errorf(`ent: validator failed for field "UsageLog.model_mapping_chain": %w`, err)}
@@ -2598,11 +2720,6 @@ func (_u *UsageLogUpdateOne) check() error {
 	if v, ok := _u.mutation.BillingMode(); ok {
 		if err := usagelog.BillingModeValidator(v); err != nil {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
-		}
-	}
-	if v, ok := _u.mutation.RequestBodyLane(); ok {
-		if err := usagelog.RequestBodyLaneValidator(v); err != nil {
-			return &ValidationError{Name: "request_body_lane", err: fmt.Errorf(`ent: validator failed for field "UsageLog.request_body_lane": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.UserAgent(); ok {
@@ -2698,6 +2815,33 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.UpstreamModelCleared() {
 		_spec.ClearField(usagelog.FieldUpstreamModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamResponseModel(); ok {
+		_spec.SetField(usagelog.FieldUpstreamResponseModel, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamResponseModelCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamResponseModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamModelMismatch(); ok {
+		_spec.SetField(usagelog.FieldUpstreamModelMismatch, field.TypeBool, value)
+	}
+	if _u.mutation.UpstreamModelMismatchCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamModelMismatch, field.TypeBool)
+	}
+	if value, ok := _u.mutation.RequestBodyBytes(); ok {
+		_spec.SetField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRequestBodyBytes(); ok {
+		_spec.AddField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
+	}
+	if _u.mutation.RequestBodyBytesCleared() {
+		_spec.ClearField(usagelog.FieldRequestBodyBytes, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.RequestBodyLane(); ok {
+		_spec.SetField(usagelog.FieldRequestBodyLane, field.TypeString, value)
+	}
+	if _u.mutation.RequestBodyLaneCleared() {
+		_spec.ClearField(usagelog.FieldRequestBodyLane, field.TypeString)
 	}
 	if value, ok := _u.mutation.ChannelID(); ok {
 		_spec.SetField(usagelog.FieldChannelID, field.TypeInt64, value)
@@ -2842,18 +2986,6 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
-	}
-	if value, ok := _u.mutation.RequestBodyBytes(); ok {
-		_spec.SetField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedRequestBodyBytes(); ok {
-		_spec.AddField(usagelog.FieldRequestBodyBytes, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.RequestBodyLane(); ok {
-		_spec.SetField(usagelog.FieldRequestBodyLane, field.TypeString, value)
-	}
-	if _u.mutation.RequestBodyLaneCleared() {
-		_spec.ClearField(usagelog.FieldRequestBodyLane, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
