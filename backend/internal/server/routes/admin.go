@@ -405,7 +405,6 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 	{
 		accounts.GET("", h.Admin.Account.List)
 		accounts.POST("/usage/batch", h.Admin.Account.GetBatchUsage)
-		accounts.POST("/today-stats/batch", h.Admin.Account.GetBatchTodayStats)
 		accounts.GET("/usage-windows", h.Admin.Account.ListUsageWindows)
 		accounts.POST("/usage-windows/refresh", h.Admin.Account.RefreshUsageWindows)
 		accounts.POST("/usage-windows/openai-reset-credits/refresh", h.Admin.Account.RefreshOpenAIResetCredits)
