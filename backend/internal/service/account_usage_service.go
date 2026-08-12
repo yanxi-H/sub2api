@@ -519,6 +519,42 @@ func (s *AccountUsageService) RefreshOpenAIResetCreditSnapshot(ctx context.Conte
 	return snapshot, nil
 }
 
+// GetUsageBatch 批量获取多个账号的用量信息，内部并发调用 GetUsage。
+func (s *AccountUsageService) GetUsageBatch(ctx context.Context, accountIDs []int64, force bool) (map[int64]*UsageInfo, map[int64]string, error) {
+	usageByAccount := make(map[int64]*UsageInfo, len(accountIDs))
+	errorsByAccount := make(map[int64]string)
+	if len(accountIDs) == 0 {
+		return usageByAccount, errorsByAccount, nil
+	}
+
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(6)
+
+	for _, id := range accountIDs {
+		accountID := id
+		if accountID <= 0 {
+			continue
+		}
+		g.Go(func() error {
+			usage, err := s.GetUsage(gctx, accountID, force)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errorsByAccount[accountID] = err.Error()
+				return nil
+			}
+			usageByAccount[accountID] = usage
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, nil, err
+	}
+	return usageByAccount, errorsByAccount, nil
+}
+
 // GetPassiveUsage 从 Account.Extra 中的被动采样数据构建 UsageInfo，不调用外部 API。
 // 仅适用于 Anthropic OAuth / SetupToken 账号。
 func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int64) (*UsageInfo, error) {
