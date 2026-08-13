@@ -33,6 +33,8 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 		{file: "openai_alpha_search.go", function: "AlphaSearch", auditToken: "checkSecurityAudit"},
 		{file: "image_task_handler.go", function: "Submit", auditToken: "checkSecurityAuditBeforeSubmit"},
 		{file: "batch_image_handler.go", function: "Submit", auditToken: "checkSecurityAuditBeforeSubmit"},
+		{file: "grok_audio.go", function: "GrokVoice", auditToken: "checkSecurityAudit"},
+		{file: "gateway_web_search.go", function: "WebSearch", auditToken: "checkSecurityAudit"},
 	}
 	sideEffectTokens := []string{
 		"CheckBillingEligibility(", "SelectAccount", ".Forward", "acquireResponsesUserSlot(",
@@ -54,6 +56,45 @@ func TestPromptAuditGatePrecedesAccountBillingAndUpstreamSideEffects(t *testing.
 				require.Lessf(t, auditIndex, index, "%s must run before %s", tt.auditToken, sideEffect)
 			}
 			require.True(t, foundSideEffect, "coverage case must contain a downstream side effect")
+		})
+	}
+}
+
+func TestGrokRealtimeBlockingGuardPrecedesAccountBillingAndUpstreamSideEffects(t *testing.T) {
+	functionSource := stripGoComments(goFunctionSource(t, "grok_audio.go", "GrokRealtime"))
+	guardIndex := strings.Index(functionSource, "rejectGrokRealtimeWithoutPreRoutingAudit")
+	require.NotEqual(t, -1, guardIndex, "missing pre-routing blocking-audit guard")
+	for _, sideEffect := range []string{"TryAcquireUserSlotForAPIKey", "CheckBillingEligibility(", "SelectAccount", "GetRequestCredential("} {
+		index := strings.Index(functionSource, sideEffect)
+		require.NotEqualf(t, -1, index, "missing expected downstream side effect %s", sideEffect)
+		require.Lessf(t, guardIndex, index, "blocking-audit guard must run before %s", sideEffect)
+	}
+}
+
+func TestGrokRealtimeUpgradeFollowsHTTPHandshakeChecks(t *testing.T) {
+	functionSource := stripGoComments(goFunctionSource(t, "grok_audio.go", "GrokRealtime"))
+	upgradeIndex := strings.Index(functionSource, "coderws.Accept")
+	require.NotEqual(t, -1, upgradeIndex, "missing WebSocket upgrade")
+	for _, handshakeCheck := range []string{"TryAcquireUserSlotForAPIKey", "CheckBillingEligibility(", "SelectAccount", "acquireResponsesAccountSlot", "GetRequestCredential("} {
+		index := strings.Index(functionSource, handshakeCheck)
+		require.NotEqualf(t, -1, index, "missing expected handshake check %s", handshakeCheck)
+		require.Lessf(t, index, upgradeIndex, "%s must complete before WebSocket upgrade", handshakeCheck)
+	}
+	require.Contains(t, functionSource, `acquireResponsesAccountSlot(c, apiKey.GroupID, "", selection, false, &streamStarted`, "pre-upgrade account waits must not emit streaming keepalives")
+}
+
+func TestGrokEntrypointsAcquireUserAndAPIKeyConcurrency(t *testing.T) {
+	tests := []struct {
+		file, function, acquireToken string
+	}{
+		{file: "grok_audio.go", function: "GrokRealtime", acquireToken: "TryAcquireUserSlotForAPIKey"},
+		{file: "grok_audio.go", function: "GrokVoice", acquireToken: "acquireResponsesUserSlot"},
+		{file: "gateway_web_search.go", function: "WebSearch", acquireToken: "AcquireUserSlotWithWait"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.function, func(t *testing.T) {
+			functionSource := stripGoComments(goFunctionSource(t, tt.file, tt.function))
+			require.Contains(t, functionSource, tt.acquireToken)
 		})
 	}
 }

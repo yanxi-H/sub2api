@@ -25,6 +25,7 @@ import (
 type openaiStreamingResult struct {
 	usage            *OpenAIUsage
 	firstTokenMs     *int
+	maxStreamGapMs   *int
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
@@ -103,6 +104,8 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		maxLineSize = s.cfg.Gateway.MaxLineSize
 	}
 	var firstTokenMs *int
+	var maxStreamGapMs *int
+	var lastUpstreamEventAt time.Time
 	firstOutputProgressObserved := false
 	bufferedWriter := bufio.NewWriterSize(w, 4*1024)
 	var firstOutputStage *openAIFirstOutputStage
@@ -320,6 +323,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		return &openaiStreamingResult{
 			usage:            usage,
 			firstTokenMs:     firstTokenMs,
+			maxStreamGapMs:   maxStreamGapMs,
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
@@ -426,7 +430,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		sendErrorEvent("stream_read_error")
 		return resultWithUsage(), fmt.Errorf("stream read error: %w", scanErr), true
 	}
-	processSSELine := func(line string, queueDrained bool) {
+	processSSELine := func(line string, queueDrained bool, readAt time.Time) {
 		if streamEarlyErr != nil {
 			return
 		}
@@ -483,6 +487,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 						return
 					}
 				}
+				markOpenAIStreamFailedEvent(c, dataBytes, failedMessage)
 				forceFlushFailedEvent = true
 				sawFailedEvent = true
 			}
@@ -548,6 +553,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
 			startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
+			if startsVisibleOutput {
+				observeOpenAIStreamSemanticOutput(readAt, &lastUpstreamEventAt, &maxStreamGapMs)
+			} else if openAIStreamEventIsTerminalWithType(data, eventType) {
+				observeOpenAIStreamTerminalGap(readAt, &lastUpstreamEventAt, &maxStreamGapMs)
+			}
 			if guardFirstOutput {
 				eventStartsClientOutput = eventStartsClientOutput || startsClientOutput
 				eventStartsVisibleOutput = eventStartsVisibleOutput || startsVisibleOutput
@@ -587,7 +597,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 
 			// Record first token time
 			if !guardFirstOutput && firstTokenMs == nil && startsVisibleOutput {
-				ms := int(time.Since(startTime).Milliseconds())
+				elapsedMs := readAt.Sub(startTime).Milliseconds()
+				if elapsedMs < 0 {
+					elapsedMs = 0
+				}
+				ms := int(elapsedMs)
 				firstTokenMs = &ms
 				stopFirstOutputTimer()
 			}
@@ -638,7 +652,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	if streamInterval <= 0 && keepaliveInterval <= 0 && firstOutputTimeout <= 0 {
 		defer putSSEScannerBuf64K(scanBuf)
 		for documentScanner.Scan() {
-			processSSELine(documentScanner.Text(), true)
+			processSSELine(documentScanner.Text(), true, time.Now())
 			if streamEarlyErr != nil {
 				return resultWithUsage(), streamEarlyErr
 			}
@@ -652,6 +666,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	type scanEvent struct {
 		line      string
 		err       error
+		readAt    time.Time
 		processed chan struct{}
 	}
 	// 独立 goroutine 读取上游，避免读取阻塞影响 keepalive/超时处理
@@ -690,8 +705,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		defer putSSEScannerBuf64K(scanBuf)
 		defer close(events)
 		for documentScanner.Scan() {
-			atomic.StoreInt64(&lastReadAt, time.Now().UnixNano())
-			if !sendEvent(scanEvent{line: documentScanner.Text()}) {
+			readAt := time.Now()
+			atomic.StoreInt64(&lastReadAt, readAt.UnixNano())
+			if !sendEvent(scanEvent{line: documentScanner.Text(), readAt: readAt}) {
 				return
 			}
 		}
@@ -716,7 +732,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				markEventProcessed(ev)
 				return result, err
 			}
-			processSSELine(ev.line, len(events) == 0)
+			processSSELine(ev.line, len(events) == 0, ev.readAt)
 			markEventProcessed(ev)
 			if streamEarlyErr != nil {
 				return resultWithUsage(), streamEarlyErr

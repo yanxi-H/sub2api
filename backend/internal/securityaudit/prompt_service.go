@@ -198,6 +198,20 @@ func (s *PromptService) EffectiveMode() Mode {
 	return s.config.EffectiveMode()
 }
 
+func (s *PromptService) RequiresPreRoutingBody(groupID *int64) bool {
+	if s == nil || s.config == nil {
+		return false
+	}
+	if s.config.BlockingActivationDegraded() {
+		return true
+	}
+	cfg, ok := s.config.Active()
+	if !ok {
+		return s.config.EffectiveMode() == ModeBlocking
+	}
+	return cfg.EffectiveMode() == ModeBlocking && cfg.IncludesGroup(groupID)
+}
+
 func (s *PromptService) Enqueue(_ context.Context, req Request) error {
 	if s == nil || s.enqueuer == nil || s.EffectiveMode() != ModeAsync {
 		return nil

@@ -768,6 +768,30 @@ func TestContentModerationCheck_ModelFilterUsesRequestedModelNotBodyModel(t *tes
 	require.Equal(t, "gpt-5.5", logs[0].Model)
 }
 
+func TestContentModerationRequiresPreRoutingBodyHonorsScope(t *testing.T) {
+	groupID := int64(41)
+	otherGroupID := int64(42)
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.AllGroups = false
+	cfg.GroupIDs = []int64{groupID}
+	cfg.ModelFilter = ContentModerationModelFilter{Type: ContentModerationModelFilterInclude, Models: []string{"grok-voice-latest"}}
+	service := &ContentModerationService{settingRepo: &contentModerationTestSettingRepo{}}
+	service.runtimeSnapshot.Store(&contentModerationRuntimeSnapshot{
+		riskControlEnabled: true,
+		config:             cfg,
+		loadedAt:           time.Now(),
+	})
+
+	require.True(t, service.RequiresPreRoutingBody(context.Background(), &groupID, "grok-voice-latest"))
+	require.False(t, service.RequiresPreRoutingBody(context.Background(), &otherGroupID, "grok-voice-latest"))
+	require.False(t, service.RequiresPreRoutingBody(context.Background(), &groupID, "grok-4.5"))
+
+	cfg.Mode = ContentModerationModeObserve
+	require.False(t, service.RequiresPreRoutingBody(context.Background(), &groupID, "grok-voice-latest"))
+}
+
 func defaultContentModerationModelFilterTestConfig() *ContentModerationConfig {
 	cfg := defaultContentModerationConfig()
 	cfg.Enabled = true

@@ -83,6 +83,20 @@ func TestCoordinatorDoesNotMutateRequestBody(t *testing.T) {
 	require.Equal(t, original, body)
 }
 
+func TestCoordinatorRequiresPreRoutingBody(t *testing.T) {
+	t.Run("blocking fallback", func(t *testing.T) {
+		coordinator := NewCoordinator(nil, &fakePromptEngine{mode: ModeBlocking})
+		require.True(t, coordinator.RequiresPreRoutingBody(nil))
+	})
+
+	t.Run("non blocking modes", func(t *testing.T) {
+		for _, mode := range []Mode{ModeOff, ModeAsync} {
+			coordinator := NewCoordinator(nil, &fakePromptEngine{mode: mode})
+			require.False(t, coordinator.RequiresPreRoutingBody(nil))
+		}
+	})
+}
+
 func TestCoordinatorBlockingPriorityCoversBothEngineDecisionMatrix(t *testing.T) {
 	legacyCases := []struct {
 		name     string

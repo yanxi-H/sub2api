@@ -26,6 +26,20 @@ func NewCoordinator(legacy LegacyEngine, prompt PromptEngine) *Coordinator {
 	return &Coordinator{legacy: legacy, prompt: prompt}
 }
 
+// RequiresPreRoutingBody reports whether a request for this group must be
+// synchronously evaluated before any account selection or upstream side
+// effect. Protocols that reveal their prompt only after an upstream session is
+// created must fail closed while this is true.
+func (c *Coordinator) RequiresPreRoutingBody(groupID *int64) bool {
+	if c == nil || c.prompt == nil {
+		return false
+	}
+	if scoped, ok := c.prompt.(interface{ RequiresPreRoutingBody(*int64) bool }); ok {
+		return scoped.RequiresPreRoutingBody(groupID)
+	}
+	return c.prompt.EffectiveMode() == ModeBlocking
+}
+
 func (c *Coordinator) Check(ctx context.Context, req Request) Decision {
 	if c == nil {
 		return allowDecision(nil, nil)

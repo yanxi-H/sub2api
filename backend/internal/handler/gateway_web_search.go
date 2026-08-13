@@ -60,18 +60,11 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		return
 	}
 
-	// Billing eligibility (same as other requests)
-	subscription, _ := middleware2.GetSubscriptionFromContext(c)
-	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
-		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
-		c.JSON(status, gin.H{"error": gin.H{"type": code, "message": message}})
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "api_error", "message": "User context not found"}})
 		return
 	}
-
-	subject, _ := middleware2.GetAuthSubjectFromContext(c)
 	reqLog := requestLogger(c, "handler.gateway.web_search")
 	// Audit user search query before upstream Grok web_search traffic.
 	auditBody, _ := json.Marshal(map[string]any{
@@ -93,6 +86,27 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 			msg = "Request blocked by content policy"
 		}
 		c.JSON(status, gin.H{"error": gin.H{"type": code, "message": msg}})
+		return
+	}
+	var streamStarted bool
+	userRelease, concurrencyErr := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, false, &streamStarted)
+	if concurrencyErr != nil {
+		h.handleConcurrencyError(c, concurrencyErr, "user", false)
+		return
+	}
+	userRelease = wrapReleaseOnDone(c.Request.Context(), userRelease)
+	if userRelease != nil {
+		defer userRelease()
+	}
+
+	// Billing eligibility (same as other requests)
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		c.JSON(status, gin.H{"error": gin.H{"type": code, "message": message}})
 		return
 	}
 

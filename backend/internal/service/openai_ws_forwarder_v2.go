@@ -350,6 +350,8 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
+	var maxStreamGapMs *int
+	var lastUpstreamEventAt time.Time
 	responseID := ""
 	var finalResponse []byte
 	wroteDownstream := false
@@ -538,10 +540,14 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 		isTokenEvent := isOpenAIWSTokenEvent(eventType)
 		if isTokenEvent {
+			observeOpenAIStreamSemanticOutput(time.Now(), &lastUpstreamEventAt, &maxStreamGapMs)
 			tokenEventCount++
 		}
 		isTerminalEvent := isOpenAIWSTerminalEvent(eventType)
 		if isTerminalEvent {
+			if !isTokenEvent {
+				observeOpenAIStreamTerminalGap(time.Now(), &lastUpstreamEventAt, &maxStreamGapMs)
+			}
 			terminalEventCount++
 		}
 		if firstTokenMs == nil && isTokenEvent {
@@ -578,6 +584,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		imageCounter.AddSSEData(message)
 
 		if eventType == "response.failed" {
+			markOpenAIStreamFailedEvent(c, message, extractOpenAISSEErrorMessage(message))
 			if hit, code, msg := detectOpenAICyberPolicy(message); hit {
 				MarkOpsCyberPolicy(c, CyberPolicyMark{
 					Code:           code,
@@ -778,6 +785,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		ResponseHeaders:               lease.HandshakeHeaders(),
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		MaxStreamGapMs:                maxStreamGapMs,
 	}, nil
 }
 

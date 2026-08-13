@@ -96,6 +96,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 			return
 		}
 	}
+	requestBodyBytes := int64(len(body))
 
 	contentType := c.GetHeader("Content-Type")
 	requestInfo := service.ParseGrokMediaRequest(contentType, body)
@@ -455,10 +456,10 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		if endpoint == service.GrokMediaEndpointVideoStatus || endpoint == service.GrokMediaEndpointVideoContent {
 			taskID := strings.TrimSpace(requestID)
 			if billResult := prepareGrokVideoCompletionBilling(requestCtx, h, reqLog, apiKey, subject, taskID, result); billResult != nil {
-				recordGrokMediaUsage(c, h, reqLog, apiKey, subject, subscription, account, billResult, billResult.Model, body, taskID)
+				recordGrokMediaUsage(c, h, reqLog, apiKey, subject, subscription, account, billResult, billResult.Model, body, requestBodyBytes, taskID)
 			}
 		} else if shouldRecordGrokMediaUsage(endpoint, requestModel, result) {
-			recordGrokMediaUsage(c, h, reqLog, apiKey, subject, subscription, account, result, requestModel, body, requestID)
+			recordGrokMediaUsage(c, h, reqLog, apiKey, subject, subscription, account, result, requestModel, body, requestBodyBytes, requestID)
 		}
 		reqLog.Debug("grok_media.request_completed",
 			zap.Int64("account_id", account.ID),
@@ -653,6 +654,7 @@ func recordGrokMediaUsage(
 	result *service.OpenAIForwardResult,
 	requestModel string,
 	body []byte,
+	requestBodyBytes int64,
 	requestID string,
 ) {
 	userAgent := c.GetHeader("User-Agent")
@@ -695,6 +697,7 @@ func recordGrokMediaUsage(
 			UpstreamEndpoint:   upstreamEndpoint,
 			UserAgent:          userAgent,
 			IPAddress:          clientIP,
+			RequestBodyBytes:   requestBodyBytes,
 			RequestPayloadHash: service.HashUsageRequestPayload(payloadForHash),
 			APIKeyService:      h.apiKeyService,
 			QuotaPlatform:      quotaPlatform,

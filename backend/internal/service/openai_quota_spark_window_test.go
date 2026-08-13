@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ type stubQuotaAccountRepo struct {
 	accounts       map[int64]*Account
 	extraUpdates   map[int64]map[string]any
 	extraUpdateErr error
+	mu             sync.Mutex
 }
 
 func (r *stubQuotaAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -50,6 +52,8 @@ func (r *stubQuotaAccountRepo) UpdateCredentials(_ context.Context, id int64, cr
 }
 
 func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.extraUpdateErr != nil {
 		return r.extraUpdateErr
 	}
@@ -57,13 +61,16 @@ func (r *stubQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates 
 		r.extraUpdates = make(map[int64]map[string]any)
 	}
 	r.extraUpdates[id] = updates
-	// 同步合并到 account.Extra，让测试能直接从 account 读回快照
-	if account, ok := r.accounts[id]; ok {
-		if account.Extra == nil {
-			account.Extra = make(map[string]any)
-		}
-		for k, v := range updates {
-			account.Extra[k] = v
+	acc, ok := r.accounts[id]
+	if len(r.accounts) > 0 && !ok {
+		return fmt.Errorf("account %d not found", id)
+	}
+	if acc != nil && acc.Extra == nil {
+		acc.Extra = make(map[string]any)
+	}
+	if acc != nil {
+		for key, value := range updates {
+			acc.Extra[key] = value
 		}
 	}
 	return nil
@@ -226,6 +233,10 @@ func TestResetCreditAgentIdentityUsesAssertionAndRecoversInvalidTaskOnce(t *test
 			_, _ = w.Write([]byte(`{"task_id":"task-reset-new"}`))
 			return
 		}
+		if r.URL.Path == "/backend-api/wham/rate-limit-reset-credits" {
+			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
+			return
+		}
 		resetCalls++
 		assertions = append(assertions, r.Header.Get("authorization"))
 		require.Equal(t, "account-reset-recovery", r.Header.Get("chatgpt-account-id"))
@@ -285,6 +296,10 @@ func TestResetCreditAgentIdentityReusesConcurrentlyRecoveredTask(t *testing.T) {
 		if strings.Contains(r.URL.Path, "/task/register") {
 			registerCalls++
 			_, _ = w.Write([]byte(`{"task_id":"task-reset-unexpected"}`))
+			return
+		}
+		if r.URL.Path == "/backend-api/wham/rate-limit-reset-credits" {
+			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
 			return
 		}
 		resetCalls++
@@ -558,6 +573,10 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 		{ExpiresAt: "2026-07-04T04:05:06Z"},
 	}, usage.RateLimitResetCredits.Credits)
 	require.NoError(t, svc.CacheResetCreditsSnapshot(ctx, 100, usage.RateLimitResetCredits))
+	snapshot := OpenAIResetCreditSnapshotFromExtra(account.Extra)
+	require.NotNil(t, snapshot)
+	require.Equal(t, 2, snapshot.AvailableCount)
+	require.Equal(t, usage.RateLimitResetCredits.Credits, snapshot.Credits)
 	require.Equal(t, &OpenAIRateLimitResetCredits{
 		AvailableCount: 2,
 		Credits: []OpenAIRateLimitResetCreditDetail{

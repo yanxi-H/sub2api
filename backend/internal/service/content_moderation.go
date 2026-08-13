@@ -1044,6 +1044,20 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	return s.checkSync(ctx, input, cfg, content, hashText, nil, true), nil
 }
 
+// RequiresPreRoutingBody reports whether this request must complete legacy
+// moderation before account selection and upstream side effects.
+func (s *ContentModerationService) RequiresPreRoutingBody(ctx context.Context, groupID *int64, model string) bool {
+	if s == nil {
+		return false
+	}
+	snapshot, err := s.loadRuntimeSnapshot(ctx)
+	if err != nil || snapshot == nil || snapshot.config == nil || !snapshot.riskControlEnabled {
+		return false
+	}
+	cfg := snapshot.config
+	return cfg.Enabled && cfg.Mode == ContentModerationModePreBlock && cfg.includesGroup(groupID) && cfg.includesModel(model)
+}
+
 func (s *ContentModerationService) checkSync(ctx context.Context, input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string, queueDelay *int, allowBlock bool) *ContentModerationDecision {
 	allow := &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
 	trackPreBlock := queueDelay == nil && allowBlock && cfg != nil && cfg.Mode == ContentModerationModePreBlock

@@ -87,6 +87,21 @@ func TestPromptServiceBlockingLatestTurnOnlyUsesNarrowSnapshot(t *testing.T) {
 	require.Equal(t, []string{"latest user input", "previous output"}, seen)
 }
 
+func TestPromptServiceRequiresPreRoutingBodyHonorsGroupScope(t *testing.T) {
+	groupID := int64(41)
+	otherGroupID := int64(42)
+	service := &PromptService{config: &fakeConfigStore{active: true, cfg: ActiveConfig{
+		RiskControlEnabled: true,
+		Enabled:            true,
+		BlockingEnabled:    true,
+		GroupIDs:           []int64{groupID},
+	}}}
+
+	require.True(t, service.RequiresPreRoutingBody(&groupID))
+	require.False(t, service.RequiresPreRoutingBody(&otherGroupID))
+	require.False(t, service.RequiresPreRoutingBody(nil))
+}
+
 func TestPromptServiceRejectsInvalidDeleteConfirmationClaims(t *testing.T) {
 	now := time.Date(2026, 7, 16, 10, 0, 0, 0, time.UTC)
 	start, end := now.Add(-time.Hour), now.Add(time.Hour)

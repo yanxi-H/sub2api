@@ -64,7 +64,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Bool("upstream_model_mismatch").
 			Optional().
 			Nillable(),
-		// 三通道功能：请求体大小与通道分类
+		// 三通道功能
 		field.Int64("request_body_bytes").Optional().Default(0).Comment("请求体字节大小"),
 		field.String("request_body_lane").MaxLen(16).Optional().Comment("三通道分类: normal/heavy/recovery"),
 		field.Int64("channel_id").Optional().Nillable().Comment("渠道 ID"),

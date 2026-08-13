@@ -22,24 +22,26 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 
 	createdAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	log := &service.UsageLog{
-		UserID:         1,
-		APIKeyID:       2,
-		AccountID:      3,
-		RequestID:      "req-1",
-		Model:          "gpt-5",
-		RequestedModel: "gpt-5",
-		InputTokens:    10,
-		OutputTokens:   20,
-		TotalCost:      1,
-		ActualCost:     1,
-		BillingType:    service.BillingTypeBalance,
-		RequestType:    service.RequestTypeWSV2,
-		Stream:         false,
-		OpenAIWSMode:   false,
-		CreatedAt:      createdAt,
+		UserID:           1,
+		APIKeyID:         2,
+		AccountID:        3,
+		RequestID:        "req-1",
+		Model:            "gpt-5",
+		RequestedModel:   "gpt-5",
+		InputTokens:      10,
+		OutputTokens:     20,
+		TotalCost:        1,
+		ActualCost:       1,
+		BillingType:      service.BillingTypeBalance,
+		RequestType:      service.RequestTypeWSV2,
+		RequestBodyBytes: 4096,
+		RequestBodyLane:  service.RequestBodyLaneHeavy,
+		Stream:           false,
+		OpenAIWSMode:     false,
+		CreatedAt:        createdAt,
 	}
 
-	mock.ExpectQuery("INSERT INTO usage_logs").
+	mock.ExpectQuery(`(?s)INSERT INTO usage_logs.*\$58`).
 		WithArgs(
 			log.UserID,
 			log.APIKeyID,
@@ -76,6 +78,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			true,
 			sqlmock.AnyArg(), // duration_ms
 			sqlmock.AnyArg(), // first_token_ms
+			log.RequestBodyBytes,
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
@@ -98,6 +101,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sql.NullString{String: string(service.RequestBodyLaneHeavy), Valid: true},
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -168,6 +172,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			false,
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // request_body_bytes
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			log.ImageCount,
@@ -190,6 +195,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // request_body_lane
 			sqlmock.AnyArg(), // session_id
 			createdAt,
 		).
@@ -277,11 +283,11 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[38])
-	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[39])
-	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[40])
-	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[41])
-	breakdownJSON, ok := prepared.args[42].(string)
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[39])
+	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[40])
+	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[41])
+	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[42])
+	breakdownJSON, ok := prepared.args[43].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -829,6 +835,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false,
 			sql.NullInt64{},
 			sql.NullInt64{},
+			int64(2048),
 			sql.NullString{},
 			sql.NullString{},
 			2,
@@ -851,10 +858,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullFloat64{},
-			sql.NullString{},
+			sql.NullString{}, // request_body_lane
+			sql.NullString{}, // session_id
 			now,
 		}})
 		require.NoError(t, err)
+		require.Equal(t, int64(2048), log.RequestBodyBytes)
 		require.Equal(t, 2, log.ImageCount)
 		require.NotNil(t, log.ImageSize)
 		require.Equal(t, "4K", *log.ImageSize)
@@ -906,6 +915,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false, // legacy openai ws
 			sql.NullInt64{},
 			sql.NullInt64{},
+			int64(0),
 			sql.NullString{},
 			sql.NullString{},
 			0,
@@ -928,6 +938,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // session_id
 			now,
 		}})
@@ -966,6 +977,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false,
 			sql.NullInt64{},
 			sql.NullInt64{},
+			int64(0),
 			sql.NullString{},
 			sql.NullString{},
 			0,
@@ -988,6 +1000,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // session_id
 			now,
 		}})
@@ -1026,6 +1039,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			false,
 			sql.NullInt64{},
 			sql.NullInt64{},
+			int64(0),
 			sql.NullString{},
 			sql.NullString{},
 			0,
@@ -1048,6 +1062,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // session_id
 			now,
 		}})

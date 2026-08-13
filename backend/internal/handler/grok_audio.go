@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -31,9 +30,36 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Realtime API is not supported for this platform")
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
 	if !h.ensureResponsesDependencies(c, nil) {
 		return
 	}
+	reqLog := requestLogger(c, "handler.openai_gateway.grok_realtime")
+	model := c.Query("model")
+	if strings.TrimSpace(model) == "" {
+		model = "grok-voice-latest"
+	}
+	if h.rejectGrokRealtimeWithoutPreRoutingAudit(c, apiKey, model) {
+		return
+	}
+	userRelease, acquired, err := h.concurrencyHelper.TryAcquireUserSlotForAPIKey(
+		c.Request.Context(), subject.UserID, subject.Concurrency, apiKey.ID,
+	)
+	if err != nil {
+		h.handleConcurrencyError(c, err, "user", false)
+		return
+	}
+	if !acquired {
+		h.handleConcurrencyError(c, &ConcurrencyError{SlotType: "user"}, "user", false)
+		return
+	}
+	userRelease = wrapReleaseOnDone(c.Request.Context(), userRelease)
+	defer userRelease()
+
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -65,12 +91,14 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	}
 
 	var streamStarted bool
-	reqLog := requestLogger(c, "handler.openai_gateway.grok_realtime")
-	release, slotStatus := h.acquireResponsesAccountSlot(c, apiKey.GroupID, "", selection, true, &streamStarted, reqLog)
+	// The WebSocket handshake has not happened yet. Account-slot waits must not
+	// emit SSE keepalives, otherwise the HTTP response is committed before the
+	// Upgrade can succeed.
+	accountRelease, slotStatus := h.acquireResponsesAccountSlot(c, apiKey.GroupID, "", selection, false, &streamStarted, reqLog)
 	if slotStatus != openAISlotAcquireOK {
 		return
 	}
-	defer release()
+	defer accountRelease()
 
 	token, _, err := h.gatewayService.GetRequestCredential(c.Request.Context(), c, selection.Account)
 	if err != nil {
@@ -84,31 +112,47 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	}
 	defer func() { _ = conn.CloseNow() }()
 
-	model := c.Query("model")
-	if strings.TrimSpace(model) == "" {
-		model = "grok-voice-latest"
+	turn := 0
+	sessionDuration, proxyErr := h.gatewayService.ProxyGrokRealtime(
+		c.Request.Context(), c, conn, selection.Account, token, model,
+		func(event []byte) error {
+			turn++
+			stage := "subsequent_turn"
+			if turn == 1 {
+				stage = "first_turn"
+			}
+			return h.auditGrokRealtimeEvent(c, reqLog, apiKey, subject, model, event, stage, turn)
+		},
+	)
+	// Once the upstream session starts, every exit path is billable. In
+	// particular, malformed or policy-blocked later events must not turn already
+	// consumed audio time into a free session.
+	if sessionDuration > 0 {
+		result := &service.OpenAIForwardResult{
+			RequestID:  service.StableGrokRealtimeBillingRequestID(""),
+			Model:      model,
+			Duration:   sessionDuration,
+			AudioUsage: &service.AudioUsage{Mode: "realtime", DurationOrUnits: sessionDuration.Minutes()},
+		}
+		h.recordGrokVoiceUsage(c, apiKey, selection.Account, subscription, "realtime", nil, result)
 	}
-	started := time.Now()
-	proxyErr := h.gatewayService.ProxyGrokRealtime(c.Request.Context(), c, conn, selection.Account, token, model)
-	elapsed := time.Since(started)
 	if proxyErr != nil {
 		reqLog.Info("grok_realtime.proxy_failed", zap.Error(proxyErr))
+		var auditErr *grokRealtimeAuditError
+		if errors.As(proxyErr, &auditErr) {
+			writeSecurityAuditWSError(c.Request.Context(), conn, auditErr.decision)
+			_ = conn.Close(securityAuditWSCloseStatus(auditErr.decision), securityAuditWSCloseReason(auditErr.decision))
+			return
+		}
+		var clientClose *service.OpenAIWSClientCloseError
+		if errors.As(proxyErr, &clientClose) {
+			_ = conn.Close(clientClose.StatusCode(), clientClose.Reason())
+			return
+		}
 		if !isExpectedGrokRealtimeClose(proxyErr) {
 			_ = conn.Close(coderws.StatusInternalError, "upstream realtime websocket failed")
 			return
 		}
-	}
-	// A relay normally returns a close error when either side closes normally.
-	// Those sessions still consumed upstream audio time and must be billed.
-	if elapsed > 0 {
-		result := &service.OpenAIForwardResult{
-			// One durable id per WS session so retries cannot collapse or double under client ids.
-			RequestID:  service.StableGrokRealtimeBillingRequestID(""),
-			Model:      model,
-			Duration:   elapsed,
-			AudioUsage: &service.AudioUsage{Mode: "realtime", DurationOrUnits: elapsed.Minutes()},
-		}
-		h.recordGrokVoiceUsage(c, apiKey, selection.Account, subscription, "realtime", nil, result)
 	}
 }
 
@@ -135,23 +179,17 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 	if !h.ensureResponsesDependencies(c, nil) {
 		return
 	}
-	subscription, _ := middleware2.GetSubscriptionFromContext(c)
-	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
-		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
-		h.errorResponse(c, status, code, message)
-		return
-	}
-
 	body, err := readGrokVoiceGatewayBody(c)
 	if err != nil {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
 	if endpoint == "tts" {
-		subject, _ := middleware2.GetAuthSubjectFromContext(c)
 		reqLog := requestLogger(c, "handler.openai_gateway.grok_voice", zap.String("endpoint", endpoint))
 		// TTS bodies use {"input":"..."} (and variants). Normalize to chat messages so
 		// content moderation extractors see the spoken text.
@@ -167,6 +205,24 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 			h.openAISecurityAuditError(c, decision)
 			return
 		}
+	}
+	var streamStarted bool
+	userRelease, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &streamStarted, requestLogger(c, "handler.openai_gateway.grok_voice"))
+	if !acquired {
+		return
+	}
+	if userRelease != nil {
+		defer userRelease()
+	}
+
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.errorResponse(c, status, code, message)
+		return
 	}
 	contentType := c.GetHeader("Content-Type")
 	if strings.TrimSpace(contentType) == "" {
@@ -275,6 +331,7 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
 	if model == "" {
 		model = endpoint
 	}
+	channelUsageFields := clientRequestedUsageFields(c, service.ChannelMappingResult{}, model, result.UpstreamModel)
 
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -291,7 +348,7 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
 			APIKeyService:      h.apiKeyService,
 			QuotaPlatform:      quotaPlatform,
 			SessionID:          sessionID,
-			ChannelUsageFields: clientRequestedUsageFields(c, service.ChannelMappingResult{}, model, result.UpstreamModel),
+			ChannelUsageFields: channelUsageFields,
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.openai_gateway.grok_voice"),
