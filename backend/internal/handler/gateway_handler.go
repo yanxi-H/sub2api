@@ -1252,7 +1252,7 @@ func writeGrokModelsList(c *gin.Context, modelIDs []string) {
 
 func grokModelSupportsConfigurableReasoning(modelID string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelID)) {
-	case "grok-4.5", "grok-4.5-latest", "grok", "grok-latest", "grok-build", "grok-build-latest", "grok-build-0.1":
+	case "grok-4.6", "grok-4.6-latest", "grok-4.5", "grok-4.5-latest", "grok", "grok-latest", "grok-build", "grok-build-latest", "grok-build-0.1":
 		return true
 	default:
 		return false
@@ -1846,7 +1846,7 @@ func (h *GatewayHandler) handleStreamingAwareError(c *gin.Context, status int, e
 		// response.completed/failed/incomplete/cancelled 集合。
 		// Anthropic-backed Responses 路径同样会因为通用 error 帧被拒。
 		if inboundIsResponses(c) {
-			if writeResponsesFailedSSE(c, errType, "", message) {
+			if writeResponsesFailedSSE(c, errType, message) {
 				return
 			}
 		}

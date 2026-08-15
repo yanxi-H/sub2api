@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	coderws "github.com/coder/websocket"
@@ -115,28 +116,22 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 }
 
 // ProxyGrokRealtime relays JSON Realtime events to xAI's native Voice WS.
-// The callback gates every client event before it reaches the upstream.
-func (s *OpenAIGatewayService) ProxyGrokRealtime(
-	ctx context.Context,
-	c *gin.Context,
-	client *coderws.Conn,
-	account *Account,
-	token, model string,
-	beforeClientEvent func([]byte) error,
-) (time.Duration, error) {
+// Audio is carried as base64 inside JSON events, so preserving the JSON bytes
+// is sufficient and avoids translating protocol event types.
+func (s *OpenAIGatewayService) ProxyGrokRealtime(ctx context.Context, c *gin.Context, client *coderws.Conn, account *Account, token, model string) (bool, error) {
 	if s == nil || client == nil || account == nil {
-		return 0, fmt.Errorf("realtime service, client, and account are required")
+		return false, fmt.Errorf("realtime service, client, and account are required")
 	}
 	if account.Platform != PlatformGrok {
-		return 0, fmt.Errorf("account platform %s is not supported for grok realtime", account.Platform)
+		return false, fmt.Errorf("account platform %s is not supported for grok realtime", account.Platform)
 	}
 	base, err := buildGrokVoiceURL(account, s.cfg, "realtime")
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 	u, err := url.Parse(base)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 	u.Scheme = "wss"
 	u.RawQuery = "model=" + url.QueryEscape(firstNonEmpty(model, "grok-voice-latest"))
@@ -156,14 +151,14 @@ func (s *OpenAIGatewayService) ProxyGrokRealtime(
 	}
 	upstream, _, _, err := dialer.Dial(ctx, u.String(), headers, proxyURL)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 	defer func() { _ = upstream.Close() }()
-	sessionStartedAt := time.Now()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	errCh := make(chan error, 2)
+	var audioObserved atomic.Bool
 
 	// Upstream → client
 	go func() {
@@ -172,6 +167,9 @@ func (s *OpenAIGatewayService) ProxyGrokRealtime(
 			if readErr != nil {
 				errCh <- readErr
 				return
+			}
+			if grokRealtimeEventHasAudio(msg) {
+				audioObserved.Store(true)
 			}
 			if writeErr := client.Write(ctx, coderws.MessageText, msg); writeErr != nil {
 				errCh <- writeErr
@@ -191,16 +189,13 @@ func (s *OpenAIGatewayService) ProxyGrokRealtime(
 			if kind != coderws.MessageText && kind != coderws.MessageBinary {
 				continue
 			}
+			if grokRealtimeEventHasAudio(msg) {
+				audioObserved.Store(true)
+			}
 			var raw json.RawMessage
 			if unmarshalErr := json.Unmarshal(msg, &raw); unmarshalErr != nil {
-				errCh <- NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid realtime event", unmarshalErr)
+				errCh <- fmt.Errorf("invalid realtime event: %w", unmarshalErr)
 				return
-			}
-			if beforeClientEvent != nil {
-				if gateErr := beforeClientEvent(msg); gateErr != nil {
-					errCh <- gateErr
-					return
-				}
 			}
 			if writeErr := upstream.WriteJSON(ctx, raw); writeErr != nil {
 				errCh <- writeErr
@@ -209,7 +204,32 @@ func (s *OpenAIGatewayService) ProxyGrokRealtime(
 		}
 	}()
 
-	return time.Since(sessionStartedAt), <-errCh
+	return awaitGrokRealtimeAudioObserved(errCh, &audioObserved)
+}
+
+func awaitGrokRealtimeAudioObserved(errCh <-chan error, audioObserved *atomic.Bool) (bool, error) {
+	err := <-errCh
+	if audioObserved == nil {
+		return false, err
+	}
+	return audioObserved.Load(), err
+}
+
+func grokRealtimeEventHasAudio(msg []byte) bool {
+	if !gjson.ValidBytes(msg) {
+		return false
+	}
+	eventType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(msg, "type").String()))
+	if !strings.Contains(eventType, "audio") || strings.Contains(eventType, "transcript") {
+		return false
+	}
+	for _, path := range []string{"audio", "delta", "data"} {
+		value := gjson.GetBytes(msg, path)
+		if value.Type == gjson.String && strings.TrimSpace(value.String()) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // estimateGrokVoiceAudioUsage derives billing units from the request/response.
