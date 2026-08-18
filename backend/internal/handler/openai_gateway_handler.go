@@ -186,7 +186,10 @@ func allowOpenAICompatibleMessagesDispatch(apiKey *service.APIKey) bool {
 	if apiKey == nil || apiKey.Group == nil {
 		return true
 	}
-	if apiKey.Group.Platform == service.PlatformGrok {
+	// Grok 及国内 CN 供应商（Kimi/智谱/DeepSeek）原生支持 /v1/messages 直通，
+	// 豁免 allow_messages_dispatch 闸门。
+	switch apiKey.Group.Platform {
+	case service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek:
 		return true
 	}
 	return apiKey.Group.AllowMessagesDispatch
@@ -1609,6 +1612,16 @@ func (p *openAIWSTurnPricing) freeze(at time.Time) {
 func (p *openAIWSTurnPricing) current() time.Time {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.at
+}
+
+// currentOr 返回冻结的定价时刻；零值（BeforeTurn 从未调用）时回退 fallback。
+func (p *openAIWSTurnPricing) currentOr(fallback time.Time) time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.at.IsZero() {
+		return fallback
+	}
 	return p.at
 }
 
