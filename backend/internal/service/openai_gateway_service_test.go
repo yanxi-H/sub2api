@@ -665,6 +665,14 @@ type stubGatewayCache struct {
 	deletedSessions map[string]int
 }
 
+func (c *stubGatewayCache) GetReasoningContent(ctx context.Context, itemID string) (string, error) {
+	return "", ErrReasoningContentNotFound
+}
+
+func (c *stubGatewayCache) SetReasoningContent(ctx context.Context, itemID string, content string, ttl time.Duration) error {
+	return nil
+}
+
 func (c *stubGatewayCache) GetSessionAccountID(ctx context.Context, groupID int64, sessionHash string) (int64, error) {
 	if id, ok := c.sessionBindings[sessionHash]; ok {
 		return id, nil

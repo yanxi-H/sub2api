@@ -1165,6 +1165,7 @@ func (s *GatewayService) calculateTokenCost(
 			RequestCount:   1,
 			RateMultiplier: multiplier,
 			PricingAt:      pricingAt,
+			ServiceTier:    optionalStringValue(result.ServiceTier),
 			Resolver:       s.resolver,
 			Resolved:       resolved,
 		})
@@ -1175,7 +1176,8 @@ func (s *GatewayService) calculateTokenCost(
 		gid := apiKey.Group.ID
 		cost, err = s.billingService.CalculateCostUnified(CostInput{
 			Ctx: ctx, Model: billingModel, GroupID: &gid, Group: apiKey.Group,
-			Tokens: tokens, RequestCount: 1, RateMultiplier: multiplier, PricingAt: pricingAt, Resolver: s.resolver,
+			Tokens: tokens, RequestCount: 1, RateMultiplier: multiplier, PricingAt: pricingAt,
+			ServiceTier: optionalStringValue(result.ServiceTier), Resolver: s.resolver,
 		})
 	} else {
 		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
@@ -1227,6 +1229,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		UpstreamModel:         optionalTrimmedStringPtr(result.UpstreamModel),
 		UpstreamResponseModel: optionalTrimmedStringPtr(result.UpstreamResponseModel),
 		UpstreamModelMismatch: upstreamModelMismatch(sentModel, result.UpstreamResponseModel),
+		ServiceTier:           result.ServiceTier,
 		ReasoningEffort:       result.ReasoningEffort,
 		InboundEndpoint:       optionalTrimmedStringPtr(input.InboundEndpoint),
 		UpstreamEndpoint:      optionalTrimmedStringPtr(input.UpstreamEndpoint),

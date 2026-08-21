@@ -1873,3 +1873,37 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 		dst.Add(turnStateKey, v)
 	}
 }
+
+const openAIStreamKeepaliveBytesKey = "openai_stream_keepalive_bytes"
+
+func recordOpenAIStreamKeepaliveBytes(c *gin.Context, written int) {
+	if c == nil || written <= 0 {
+		return
+	}
+	current := 0
+	if value, ok := c.Get(openAIStreamKeepaliveBytesKey); ok {
+		current, _ = value.(int)
+	}
+	c.Set(openAIStreamKeepaliveBytesKey, current+written)
+}
+
+func logOpenAICapacityFailoverSuppressed(
+	ctx context.Context,
+	account *Account,
+	path string,
+	upstreamRequestID string,
+	eventType string,
+) {
+	fields := []zap.Field{
+		zap.String("path", path),
+		zap.String("event_type", strings.TrimSpace(eventType)),
+		zap.String("upstream_request_id", strings.TrimSpace(upstreamRequestID)),
+	}
+	if account != nil {
+		fields = append(fields,
+			zap.Int64("account_id", account.ID),
+			zap.String("platform", account.Platform),
+		)
+	}
+	logger.FromContext(ctx).Warn("gateway.failover_suppressed_after_semantic_output", fields...)
+}
