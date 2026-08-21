@@ -1232,6 +1232,7 @@ import type { Account, AdminUser, ApiKey, Group, PublicSettings, SubscriptionTyp
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
+import { account7dResetSourceI18nKey, getAccount7dReset } from '@/utils/account7dWindow'
 import { maskApiKey } from '@/utils/maskApiKey'
 import {
   buildCcSwitchImportDeeplink,
@@ -1551,45 +1552,14 @@ const filteredGroupOptions = computed(() => {
   })
 })
 
-const parseResetAtValue = (value: unknown): string | null => {
-  if (typeof value === 'string' && value.trim()) {
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? null : date.toISOString()
-  }
-  if (typeof value === 'number' && value > 0) {
-    return new Date(value * 1000).toISOString()
-  }
-  return null
-}
-
-const getAccount7dResetAt = (account: Account): string | null => {
-  const extra = account.extra || {}
-  const candidates = [
-    parseResetAtValue(extra.codex_7d_reset_at),
-    parseResetAtValue(extra.passive_usage_7d_reset),
-    parseResetAtValue(extra.quota_weekly_reset_at)
-  ]
-  const nowMs = Date.now()
-  return candidates.find((value) => value !== null && new Date(value).getTime() > nowMs) || null
-}
-
-const getAccount7dResetSource = (account: Account, resetAt: string | null) => {
-  const extra = account.extra || {}
-  if (resetAt === parseResetAtValue(extra.codex_7d_reset_at)) return t('keys.sync7dWindowSourceCodex')
-  if (resetAt === parseResetAtValue(extra.passive_usage_7d_reset)) return t('keys.sync7dWindowSourcePassive')
-  if (resetAt === parseResetAtValue(extra.quota_weekly_reset_at)) return t('keys.sync7dWindowSourceWeeklyQuota')
-  return t('common.unknown')
-}
-
 const sync7dAccountOptions = computed(() =>
   upstreamAccounts.value
     .map((account) => {
-      const resetAt = getAccount7dResetAt(account)
-      const source = getAccount7dResetSource(account, resetAt)
+      const reset = getAccount7dReset(account)
       return {
         id: account.id,
-        label: `#${account.id} ${account.name} · ${account.platform}/${account.type} · ${source} · ${formatDateTime(resetAt || '')}`,
-        resetAt
+        label: `#${account.id} ${account.name} · ${account.platform}/${account.type} · ${reset ? t(account7dResetSourceI18nKey(reset.source)) : t('common.unknown')} · ${formatDateTime(reset?.resetAt || '')}`,
+        resetAt: reset?.resetAt ?? null
       }
     })
     .filter((account) => account.resetAt !== null)

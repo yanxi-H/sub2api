@@ -158,14 +158,14 @@
             </div>
             <div class="grid grid-cols-2 gap-3 px-3.5 py-3">
               <div class="min-w-0">
-                <p class="mb-1.5 text-[11px] font-medium text-gray-400">{{ t('admin.dashboard.rateLimits.fiveHour') }}</p>
+                <p class="mb-1.5 text-[11px] font-medium text-gray-400">{{ windowLabel(item.platform, 'fiveHour') }}</p>
                 <RateLimitGauge
                   :utilization="item.five_hour?.utilization"
                   :resets-at="item.five_hour?.resets_at"
                 />
               </div>
               <div class="min-w-0">
-                <p class="mb-1.5 text-[11px] font-medium text-gray-400">{{ t('admin.dashboard.rateLimits.sevenDay') }}</p>
+                <p class="mb-1.5 text-[11px] font-medium text-gray-400">{{ windowLabel(item.platform, 'sevenDay') }}</p>
                 <RateLimitGauge
                   :utilization="item.seven_day?.utilization"
                   :resets-at="item.seven_day?.resets_at"
@@ -535,6 +535,7 @@ import type { AccountUsageWindowItem } from '@/api/admin/accounts'
 import type { Account, ApiKey, PaginatedResponse } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
+import { getAccount7dResetAt } from '@/utils/account7dWindow'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -752,7 +753,7 @@ async function loadSyncAccounts(group: ApiKeyRateLimitGroup): Promise<void> {
 }
 
 function toSyncAccountOption(account: Account): SyncAccountOption | null {
-  const resetAt = account7dResetAt(account)
+  const resetAt = getAccount7dResetAt(account)
   if (!resetAt) return null
   return {
     id: account.id,
@@ -760,15 +761,11 @@ function toSyncAccountOption(account: Account): SyncAccountOption | null {
   }
 }
 
-function account7dResetAt(account: Account): string | null {
-  const extra = account.extra || {}
-  const candidates = [extra.codex_7d_reset_at, extra.passive_usage_7d_reset, extra.quota_weekly_reset_at]
-  const now = Date.now()
-  for (const value of candidates) {
-    const timestamp = typeof value === 'number' ? value * 1000 : typeof value === 'string' ? Date.parse(value) : Number.NaN
-    if (Number.isFinite(timestamp) && timestamp > now) return new Date(timestamp).toISOString()
+function windowLabel(platform: string, window: 'fiveHour' | 'sevenDay'): string {
+  if (platform === 'grok') {
+    return t(`admin.dashboard.rateLimits.${window}Grok`)
   }
-  return null
+  return t(`admin.dashboard.rateLimits.${window}`)
 }
 
 function toggleBatchKey(keyID: number): void {

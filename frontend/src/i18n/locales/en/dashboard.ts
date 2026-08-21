@@ -303,6 +303,7 @@ export default {
     sync7dWindowSourceCodex: 'Codex window',
     sync7dWindowSourcePassive: 'Passive sample',
     sync7dWindowSourceWeeklyQuota: 'Weekly quota',
+    sync7dWindowSourceGrok: 'Grok weekly window',
     resetRateLimitTitle: 'Confirm Reset Rate Limit',
     resetRateLimitConfirmMessage: 'Are you sure you want to reset the rate limit usage for key "{name}"? All time window usage will be reset to zero. This action cannot be undone.',
     rateLimitResetSuccess: 'Rate limit usage reset successfully',

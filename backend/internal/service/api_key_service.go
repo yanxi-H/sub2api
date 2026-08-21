@@ -993,6 +993,7 @@ func accountSevenDayResetAt(account *Account, now time.Time) (time.Time, bool) {
 		parseExtraTime(account.Extra["codex_7d_reset_at"]),
 		parseUnixSecondsTime(account.Extra["passive_usage_7d_reset"]),
 		parseExtraTime(account.Extra["quota_weekly_reset_at"]),
+		grokBillingSevenDayResetAt(account.Extra),
 	}
 	for _, resetAt := range candidates {
 		if !resetAt.IsZero() && resetAt.After(now) {
@@ -1000,6 +1001,20 @@ func accountSevenDayResetAt(account *Account, now time.Time) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+func grokBillingSevenDayResetAt(extra map[string]any) time.Time {
+	billing, err := grokBillingSnapshotFromExtra(extra)
+	if err != nil || billing == nil {
+		return time.Time{}
+	}
+	periodType := strings.ToLower(strings.TrimSpace(billing.PeriodType))
+	// Weekly billing PeriodEnd is the official 7-day window. UsagePercent is the
+	// weekly credit gauge even when period_type is omitted or unknown.
+	if periodType != "weekly" && billing.UsagePercent == nil {
+		return time.Time{}
+	}
+	return parseExtraTime(billing.PeriodEnd)
 }
 
 func parseUnixSecondsTime(value any) time.Time {

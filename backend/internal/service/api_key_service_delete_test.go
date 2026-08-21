@@ -883,3 +883,47 @@ func TestAPIKeyService_RegenerateAsAdmin_PreservesUsageAndLimits(t *testing.T) {
 	require.Equal(t, original.Window7dStart, regenerated.Window7dStart)
 	require.Equal(t, []string{svc.authCacheKey(original.Key)}, cache.deleteAuthKeys)
 }
+
+func TestAPIKeyService_Update_Sync7dWindowFromGrokAccount(t *testing.T) {
+	resetAt := time.Now().Add(3*24*time.Hour + 90*time.Minute).UTC().Truncate(time.Second)
+	usagePercent := 36.0
+	account := &Account{
+		ID:       202,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			grokBillingExtraKey: map[string]any{
+				"period_type":   "weekly",
+				"usage_percent": usagePercent,
+				"period_end":    resetAt.Format(time.RFC3339),
+			},
+		},
+	}
+	previousWindowStart := time.Now().Add(-2 * 24 * time.Hour)
+	repo := &apiKeyRepoStub{
+		apiKey: &APIKey{
+			ID:            42,
+			UserID:        7,
+			Key:           "sk-test",
+			Name:          "key",
+			Status:        StatusAPIKeyActive,
+			RateLimit7d:   100,
+			Usage7d:       18,
+			Window7dStart: &previousWindowStart,
+		},
+	}
+	invalidator := &rateLimitInvalidatorStub{}
+	svc := &APIKeyService{
+		apiKeyRepo:            repo,
+		accountRepo:           &apiKeyAccountRepoStub{account: account},
+		rateLimitCacheInvalid: invalidator,
+	}
+
+	updated, err := svc.UpdateAsAdmin(context.Background(), 42, 1, UpdateAPIKeyRequest{
+		Sync7dWindowAccountID: &account.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Window7dStart)
+	require.Equal(t, resetAt.Add(-RateLimitWindow7d), updated.Window7dStart.UTC())
+	require.Equal(t, 18.0, updated.Usage7d, "syncing the window should not reset usage")
+}

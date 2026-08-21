@@ -379,6 +379,75 @@ describe('RateLimitOverviewPanel', () => {
     expect(showSuccess).toHaveBeenCalled()
   })
 
+
+  it('shows grok account windows with grok-specific labels', async () => {
+    listUsageWindows.mockResolvedValue({
+      items: [{
+        id: 91,
+        name: 'Grok Primary',
+        platform: 'grok',
+        type: 'oauth',
+        status: 'active',
+        five_hour: { utilization: 20, resets_at: null, remaining_seconds: 0 },
+        seven_day: { utilization: 55, resets_at: '2026-08-22T00:00:00.000Z', remaining_seconds: 0 },
+        updated_at: null,
+        supports_live_refresh: true
+      }],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      pages: 1
+    })
+
+    const wrapper = mount(RateLimitOverviewPanel)
+    await flushPromises()
+    await wrapper.get('[data-testid="accounts-tab"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Grok Primary')
+    expect(wrapper.text()).toContain('admin.dashboard.rateLimits.fiveHourGrok')
+    expect(wrapper.text()).toContain('admin.dashboard.rateLimits.sevenDayGrok')
+    expect(wrapper.text()).toContain('20%')
+    expect(wrapper.text()).toContain('55%')
+  })
+
+  it('includes grok weekly billing accounts in the 7-day sync dropdown', async () => {
+    listAccounts.mockResolvedValue({
+      items: [{
+        id: 41,
+        name: 'Grok Upstream',
+        platform: 'grok',
+        extra: {
+          grok_billing_snapshot: {
+            period_type: 'weekly',
+            usage_percent: 33,
+            period_end: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+          }
+        }
+      }],
+      total: 1,
+      page: 1,
+      page_size: 1000,
+      pages: 1
+    })
+
+    const wrapper = mount(RateLimitOverviewPanel)
+    await flushPromises()
+
+    const group = wrapper.findAll('[data-testid="key-group"]')[0]
+    await group.get('[data-testid="sync-7d-window-button"]').trigger('click')
+    await flushPromises()
+
+    const options = group.get('[data-testid="sync-account-select"]').findAll('option')
+    expect(options.some((option) => option.text().includes('Grok Upstream'))).toBe(true)
+    await group.get('[data-testid="sync-account-select"]').setValue('41')
+    await group.findAll('[data-testid="batch-key-checkbox"]')[0].setValue(true)
+    await group.get('[data-testid="confirm-batch-action"]').trigger('click')
+    await flushPromises()
+
+    expect(batchSync7dWindow).toHaveBeenCalledWith([23], 3, 41)
+  })
+
   it('resets only the selected API key 7-day usage', async () => {
     const wrapper = mount(RateLimitOverviewPanel)
     await flushPromises()

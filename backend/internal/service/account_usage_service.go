@@ -1856,6 +1856,17 @@ func BuildStoredAccountUsage(account *Account, now time.Time) *UsageInfo {
 		info.Source = "stored"
 		info.SevenDay = buildPassiveUsageWindowAt(account.Extra, "passive_usage_7d_utilization", "passive_usage_7d_reset", now)
 		info.UpdatedAt = parseUsageSnapshotTime(account.Extra, "passive_usage_sampled_at")
+	case account.IsGrok():
+		info = NewGrokQuotaFetcher().BuildUsageInfo(account)
+		if info == nil {
+			info = &UsageInfo{}
+		}
+		info.Source = "stored"
+		if info.FiveHour == nil {
+			info.FiveHour = grokRequestQuotaAsProgress(info.GrokRequestQuota, now)
+		}
+		alignUsageProgressTo(info.FiveHour, now)
+		alignUsageProgressTo(info.SevenDay, now)
 	}
 
 	return info
@@ -1885,7 +1896,21 @@ func SupportsLiveAccountUsageRefresh(account *Account) bool {
 	if account.Platform == PlatformOpenAI {
 		return account.Type == AccountTypeOAuth
 	}
+	if account.IsGrokOAuth() {
+		return true
+	}
 	return account.Platform == PlatformAnthropic && account.Type == AccountTypeOAuth
+}
+
+func alignUsageProgressTo(progress *UsageProgress, now time.Time) {
+	if progress == nil || progress.ResetsAt == nil {
+		return
+	}
+	remainingSeconds := int(progress.ResetsAt.Sub(now).Seconds())
+	if remainingSeconds < 0 {
+		remainingSeconds = 0
+	}
+	progress.RemainingSeconds = remainingSeconds
 }
 
 func buildGeminiUsageProgress(used, limit int64, resetAt time.Time, tokens int64, cost float64, now time.Time) *UsageProgress {

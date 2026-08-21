@@ -346,3 +346,37 @@ func applyGrokBillingProgressWindows(usage *UsageInfo, billing *xai.BillingSumma
 		usage.ThirtyDay = thirty
 	}
 }
+
+func grokRequestQuotaAsProgress(window *xai.QuotaWindow, now time.Time) *UsageProgress {
+	if window == nil || window.Limit == nil || *window.Limit <= 0 {
+		return nil
+	}
+	limit := *window.Limit
+	remaining := int64(0)
+	if window.Remaining != nil {
+		remaining = *window.Remaining
+		if remaining < 0 {
+			remaining = 0
+		}
+	}
+	used := limit - remaining
+	if used < 0 {
+		used = 0
+	}
+	progress := &UsageProgress{
+		Utilization:   (float64(used) / float64(limit)) * 100,
+		UsedRequests:  used,
+		LimitRequests: limit,
+	}
+	resetAt := parseExtraTime(window.ResetAt)
+	if resetAt.IsZero() && window.ResetUnix != nil && *window.ResetUnix > 0 {
+		resetAt = time.Unix(*window.ResetUnix, 0)
+	}
+	if !resetAt.IsZero() {
+		progress.ResetsAt = &resetAt
+		if sec := int(resetAt.Sub(now).Seconds()); sec > 0 {
+			progress.RemainingSeconds = sec
+		}
+	}
+	return progress
+}

@@ -504,3 +504,42 @@ func TestAccountHandlerListSchedulerScoreIgnoresPagination(t *testing.T) {
 	require.Less(t, payload.Data.Items[0].SchedulerScore.BaseScore, 3.75)
 	require.Empty(t, payload.Data.Items[0].SchedulerScores)
 }
+
+func TestAccountHandlerListUsageWindowsIncludesGrok(t *testing.T) {
+	router, adminSvc := setupAccountListRouter()
+	now := time.Now().UTC()
+	usagePercent := 48.0
+	adminSvc.accounts = []service.Account{{
+		ID:       91,
+		Name:     "grok-primary",
+		Platform: service.PlatformGrok,
+		Type:     service.AccountTypeOAuth,
+		Status:   service.StatusActive,
+		Extra: map[string]any{
+			"grok_billing_snapshot": map[string]any{
+				"period_type":   "weekly",
+				"usage_percent": usagePercent,
+				"period_end":    now.Add(24 * time.Hour).Format(time.RFC3339),
+			},
+		},
+	}}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/usage-windows?page=1&page_size=10", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var payload struct {
+		Data struct {
+			Items []AccountUsageWindowItem `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Len(t, payload.Data.Items, 1)
+	require.Equal(t, "grok-primary", payload.Data.Items[0].Name)
+	require.Equal(t, service.PlatformGrok, payload.Data.Items[0].Platform)
+	require.NotNil(t, payload.Data.Items[0].SevenDay)
+	require.InDelta(t, 48.0, payload.Data.Items[0].SevenDay.Utilization, 1e-9)
+	require.True(t, payload.Data.Items[0].SupportsLiveRefresh)
+	require.False(t, payload.Data.Items[0].SupportsOpenAIResetCredits)
+}
