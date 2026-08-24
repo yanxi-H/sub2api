@@ -576,6 +576,13 @@ func (h *UsageHandler) DashboardTrend(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	// 非管理员隐藏实际成本（防止用户看到真实费率）
+	if role, hasRole := middleware2.GetUserRoleFromContext(c); !hasRole || role != service.RoleAdmin {
+		for i := range trend {
+			trend[i].Cost = 0
+			trend[i].ActualCost = 0
+		}
+	}
 
 	response.Success(c, gin.H{
 		"trend":       trend,
@@ -646,6 +653,12 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 		return
 	}
 
+	// 非管理员隐藏实际成本（防止用户看到真实费率）
+	hideCost := true
+	if role, hasRole := middleware2.GetUserRoleFromContext(c); hasRole && role == service.RoleAdmin {
+		hideCost = false
+	}
+
 	resp := gin.H{
 		"generated_at": time.Now().UTC().Format(time.RFC3339),
 		"start_date":   parsed.StartTime.Format("2006-01-02"),
@@ -659,6 +672,12 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 			response.ErrorFrom(c, err)
 			return
 		}
+		if hideCost {
+			for i := range trend {
+				trend[i].Cost = 0
+				trend[i].ActualCost = 0
+			}
+		}
 		resp["trend"] = trend
 	}
 	if includeModels {
@@ -667,7 +686,14 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 			response.ErrorFrom(c, err)
 			return
 		}
-		resp["models"] = userModelStatsFromUsageStats(models)
+		userModels := userModelStatsFromUsageStats(models)
+		if hideCost {
+			for i := range userModels {
+				userModels[i].Cost = 0
+				userModels[i].ActualCost = 0
+			}
+		}
+		resp["models"] = userModels
 	}
 	if includeGroups {
 		groups, err := h.usageService.GetGroupStatsWithFilters(c.Request.Context(), parsed.StartTime, parsed.EndTime, parsed.Filters)
@@ -675,7 +701,14 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 			response.ErrorFrom(c, err)
 			return
 		}
-		resp["groups"] = userGroupStatsFromUsageStats(groups)
+		userGroups := userGroupStatsFromUsageStats(groups)
+		if hideCost {
+			for i := range userGroups {
+				userGroups[i].Cost = 0
+				userGroups[i].ActualCost = 0
+			}
+		}
+		resp["groups"] = userGroups
 	}
 
 	response.Success(c, resp)
