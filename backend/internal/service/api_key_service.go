@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -449,8 +450,41 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 	return user.CanBindGroup(group.ID, group.IsExclusive)
 }
 
+func validateAPIKeyLimit(v float64) error {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+		return infraerrors.BadRequest("API_KEY_LIMIT_INVALID", "API key limits must be finite and non-negative")
+	}
+	return nil
+}
+
+func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
+	for _, v := range []float64{req.Quota, req.RateLimit5h, req.RateLimit1d, req.RateLimit7d} {
+		if err := validateAPIKeyLimit(v); err != nil {
+			return err
+		}
+	}
+	if req.ExpiresInDays != nil && *req.ExpiresInDays <= 0 {
+		return infraerrors.BadRequest("API_KEY_EXPIRY_INVALID", "expires_in_days must be greater than zero")
+	}
+	return nil
+}
+
+func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
+	for _, v := range []*float64{req.Quota, req.RateLimit5h, req.RateLimit1d, req.RateLimit7d} {
+		if v != nil {
+			if err := validateAPIKeyLimit(*v); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
+	if err := validateCreateAPIKeyRequest(req); err != nil {
+		return nil, err
+	}
 	targetUserID := userID
 	if req.UserID != nil && *req.UserID > 0 {
 		targetUserID = *req.UserID
@@ -806,6 +840,9 @@ func (s *APIKeyService) RegenerateAsAdmin(ctx context.Context, id int64) (*APIKe
 }
 
 func (s *APIKeyService) updateAPIKey(ctx context.Context, id int64, userID int64, req UpdateAPIKeyRequest, isAdmin bool) (*APIKey, error) {
+	if err := validateUpdateAPIKeyRequest(req); err != nil {
+		return nil, err
+	}
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get api key: %w", err)

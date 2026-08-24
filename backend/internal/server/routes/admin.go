@@ -533,9 +533,12 @@ func registerAntigravityOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers)
 func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	grok := admin.Group("/grok")
 	{
+		grok.GET("/oauth/capabilities", h.Admin.GrokOAuth.GetCapabilities)
 		grok.POST("/oauth/auth-url", h.Admin.GrokOAuth.GenerateAuthURL)
 		grok.POST("/oauth/exchange-code", h.Admin.GrokOAuth.ExchangeCode)
 		grok.POST("/oauth/refresh-token", h.Admin.GrokOAuth.RefreshToken)
+		grok.POST("/oauth/sso-token", h.Admin.GrokOAuth.ValidateSSOToken)
+		grok.POST("/oauth/password", h.Admin.GrokOAuth.AuthorizePassword)
 		grok.POST("/oauth/create-from-oauth", h.Admin.GrokOAuth.CreateAccountFromOAuth)
 		grok.POST("/sso-to-oauth", h.Admin.GrokOAuth.CreateAccountsFromSSO)
 		grok.POST("/oauth/reconcile", h.Admin.GrokOAuth.ReconcileOAuthAccounts)
