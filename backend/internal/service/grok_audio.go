@@ -120,21 +120,27 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
 }
 
 // ProxyGrokRealtime relays JSON Realtime events to xAI's native Voice WS.
-// Audio is carried as base64 inside JSON events, so preserving the JSON bytes
-// is sufficient and avoids translating protocol event types.
-func (s *OpenAIGatewayService) ProxyGrokRealtime(ctx context.Context, c *gin.Context, client *coderws.Conn, account *Account, token, model string) (bool, error) {
+// The callback gates every client event before it reaches the upstream.
+func (s *OpenAIGatewayService) ProxyGrokRealtime(
+	ctx context.Context,
+	c *gin.Context,
+	client *coderws.Conn,
+	account *Account,
+	token, model string,
+	beforeClientEvent func([]byte) error,
+) (time.Duration, bool, error) {
 	if s == nil || client == nil || account == nil {
-		return false, fmt.Errorf("realtime service, client, and account are required")
+		return 0, false, fmt.Errorf("realtime service, client, and account are required")
 	}
 	if account.Platform != PlatformGrok {
-		return false, fmt.Errorf("account platform %s is not supported for grok realtime", account.Platform)
+		return 0, false, fmt.Errorf("account platform %s is not supported for grok realtime", account.Platform)
 	}
 	upstream, err := s.OpenGrokRealtime(ctx, account, token, model)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	defer func() { _ = upstream.Close() }()
-	return s.ProxyGrokRealtimeConn(ctx, c, client, upstream)
+	return s.ProxyGrokRealtimeConn(ctx, c, client, upstream, beforeClientEvent)
 }
 
 type GrokRealtimeUpstream struct{ conn openAIWSClientConn }
@@ -197,11 +203,18 @@ func (s *OpenAIGatewayService) HandleGrokRealtimeUpstreamError(ctx context.Conte
 	s.handleGrokAccountUpstreamError(ctx, account, statusCode, nil, body)
 }
 
-func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(ctx context.Context, c *gin.Context, client *coderws.Conn, upstream *GrokRealtimeUpstream) (bool, error) {
+func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(
+	ctx context.Context,
+	c *gin.Context,
+	client *coderws.Conn,
+	upstream *GrokRealtimeUpstream,
+	beforeClientEvent func([]byte) error,
+) (time.Duration, bool, error) {
 	if s == nil || client == nil || upstream == nil || upstream.conn == nil {
-		return false, fmt.Errorf("realtime connection is required")
+		return 0, false, fmt.Errorf("realtime connection is required")
 	}
 	conn := upstream.conn
+	sessionStartedAt := time.Now()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -237,22 +250,29 @@ func (s *OpenAIGatewayService) ProxyGrokRealtimeConn(ctx context.Context, c *gin
 			if kind != coderws.MessageText && kind != coderws.MessageBinary {
 				continue
 			}
-			if grokRealtimeEventHasAudio(msg) {
-				audioObserved.Store(true)
-			}
 			var raw json.RawMessage
 			if unmarshalErr := json.Unmarshal(msg, &raw); unmarshalErr != nil {
-				errCh <- fmt.Errorf("invalid realtime event: %w", unmarshalErr)
+				errCh <- NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid realtime event", unmarshalErr)
 				return
+			}
+			if beforeClientEvent != nil {
+				if gateErr := beforeClientEvent(msg); gateErr != nil {
+					errCh <- gateErr
+					return
+				}
 			}
 			if writeErr := conn.WriteJSON(ctx, raw); writeErr != nil {
 				errCh <- writeErr
 				return
 			}
+			if grokRealtimeEventHasAudio(msg) {
+				audioObserved.Store(true)
+			}
 		}
 	}()
 
-	return awaitGrokRealtimeAudioObserved(errCh, &audioObserved)
+	audioObservedResult, relayErr := awaitGrokRealtimeAudioObserved(errCh, &audioObserved)
+	return time.Since(sessionStartedAt), audioObservedResult, relayErr
 }
 
 // ProbeGrokRealtime performs the upstream WebSocket handshake without sending

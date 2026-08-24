@@ -207,6 +207,34 @@ describe('user UsageView', () => {
     expect(getAvailable).toHaveBeenCalled()
   })
 
+  it('queries an exact minute range and clears it when a date range is selected', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    query.mockClear()
+
+    ;(wrapper.vm as any).selectRecentRange(5)
+    await flushPromises()
+
+    const exactParams = query.mock.calls.at(-1)?.[0]
+    expect(exactParams.start_time).toMatch(/Z$/)
+    expect(exactParams.end_time).toMatch(/Z$/)
+    expect(Date.parse(exactParams.end_time) - Date.parse(exactParams.start_time)).toBe(5 * 60_000)
+
+    ;(wrapper.vm as any).onDateRangeChange({
+      startDate: '2026-03-01',
+      endDate: '2026-03-08',
+      preset: null,
+    })
+    await flushPromises()
+
+    expect(query.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      start_date: '2026-03-01',
+      end_date: '2026-03-08',
+      start_time: undefined,
+      end_time: undefined,
+    }))
+  })
+
   it('exports csv with current filters and without admin-only fields', async () => {
     const wrapper = mountUsageView()
     await flushPromises()

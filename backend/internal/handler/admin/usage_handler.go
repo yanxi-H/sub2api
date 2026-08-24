@@ -153,27 +153,34 @@ func (h *UsageHandler) List(c *gin.Context) {
 		upstreamModelMismatch = &value
 	}
 
-	// Parse date range
+	// Parse time range. Exact RFC3339 values take precedence over date filters.
 	var startTime, endTime *time.Time
-	userTZ := c.Query("timezone") // Get user's timezone from request
-	if startDateStr := c.Query("start_date"); startDateStr != "" {
-		t, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
-		if err != nil {
-			response.BadRequest(c, "Invalid start_date format, use YYYY-MM-DD")
-			return
-		}
-		startTime = &t
+	startTime, endTime, hasExactRange, err := parseExactTimeRange(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
 	}
-
-	if endDateStr := c.Query("end_date"); endDateStr != "" {
-		t, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
-		if err != nil {
-			response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD")
-			return
+	userTZ := c.Query("timezone") // Get user's timezone from request
+	if !hasExactRange {
+		if startDateStr := c.Query("start_date"); startDateStr != "" {
+			t, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
+			if err != nil {
+				response.BadRequest(c, "Invalid start_date format, use YYYY-MM-DD")
+				return
+			}
+			startTime = &t
 		}
-		// Use half-open range [start, end), move to next calendar day start (DST-safe).
-		t = t.AddDate(0, 0, 1)
-		endTime = &t
+
+		if endDateStr := c.Query("end_date"); endDateStr != "" {
+			t, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
+			if err != nil {
+				response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD")
+				return
+			}
+			// Use half-open range [start, end), move to next calendar day start (DST-safe).
+			t = t.AddDate(0, 0, 1)
+			endTime = &t
+		}
 	}
 
 	params := pagination.PaginationParams{
@@ -297,15 +304,22 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		upstreamModelMismatch = &value
 	}
 
-	// Parse date range
+	// Parse time range. Exact RFC3339 values take precedence over date filters.
 	userTZ := c.Query("timezone")
 	now := timezone.NowInUserLocation(userTZ)
 	var startTime, endTime time.Time
+	exactStart, exactEnd, hasExactRange, err := parseExactTimeRange(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 
 	startDateStr := c.Query("start_date")
 	endDateStr := c.Query("end_date")
 
-	if startDateStr != "" && endDateStr != "" {
+	if hasExactRange {
+		startTime, endTime = *exactStart, *exactEnd
+	} else if startDateStr != "" && endDateStr != "" {
 		var err error
 		startTime, err = timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
 		if err != nil {

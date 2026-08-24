@@ -89,6 +89,8 @@ export interface CodexRadarDashboardRecommendations {
 export interface TrendParams {
   start_date?: string
   end_date?: string
+  start_time?: string
+  end_time?: string
   granularity?: 'day' | 'hour'
   api_key_id?: number
   model?: string
@@ -318,6 +320,8 @@ export async function getDashboardTrend(params?: TrendParams): Promise<TrendResp
 export async function getDashboardModels(params?: {
   start_date?: string
   end_date?: string
+  start_time?: string
+  end_time?: string
   api_key_id?: number
   model?: string
   model_source?: 'requested'

@@ -812,6 +812,50 @@ func TestOpenAIResponses_MissingDependencies_ReturnsServiceUnavailable(t *testin
 	assert.Equal(t, "Service temporarily unavailable", errorObj["message"])
 }
 
+type readTrackingBody struct {
+	read bool
+}
+
+func (b *readTrackingBody) Read([]byte) (int, error) {
+	b.read = true
+	return 0, io.EOF
+}
+
+func (b *readTrackingBody) Close() error { return nil }
+
+func TestOpenAIResponses_UserQueueRejectsBeforeReadingBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) {
+			return false, nil
+		},
+		incrementUserWaitFn: func(context.Context, int64, int) (bool, error) {
+			return false, nil
+		},
+	}
+	h := &OpenAIGatewayHandler{
+		gatewayService:      &service.OpenAIGatewayService{},
+		billingCacheService: &service.BillingCacheService{},
+		apiKeyService:       &service.APIKeyService{},
+		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+	}
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", http.NoBody)
+	body := &readTrackingBody{}
+	c.Request.Body = body
+	groupID := int64(2)
+	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 10, GroupID: &groupID})
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
+
+	h.Responses(c)
+
+	require.False(t, body.read, "queued requests must not materialize their body before user admission")
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+}
+
 func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -855,7 +899,7 @@ func TestOpenAIResponses_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
 	require.Contains(t, w.Body.String(), "previous_response_id must be a response.id")
 }
 
-func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T) {
+func TestOpenAIResponses_AcceptsHTTPContinuationPreviousResponseIDBeforeRouting(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
@@ -877,11 +921,59 @@ func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T)
 	})
 
 	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
+	require.NoError(t, h.gatewayService.BindOpenAIHTTPResponseOwner(context.Background(), groupID, "resp_123456", 1, 101))
+	h.Responses(c)
+
+	require.NotEqual(t, http.StatusBadRequest, w.Code)
+	require.NotContains(t, w.Body.String(), "Responses WebSocket v2")
+}
+
+func TestOpenAIResponses_RejectsHTTPContinuationOwnedByAnotherUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(
+		`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_other_tenant","input":"hello"}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	groupID := int64(2)
+	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{
+		ID:      202,
+		UserID:  2,
+		GroupID: &groupID,
+		User:    &service.User{ID: 2},
+	})
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 2, Concurrency: 1})
+
+	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
+	require.NoError(t, h.gatewayService.BindOpenAIHTTPResponseOwner(context.Background(), groupID, "resp_other_tenant", 1, 101))
 	h.Responses(c)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
-	require.Contains(t, w.Body.String(), "previous_response_id")
+	require.Contains(t, w.Body.String(), "previous_response_id is not available for this user")
+}
+
+func TestOpenAIResponses_RejectsUnownedHTTPContinuation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(
+		`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_unknown","input":"hello"}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	groupID := int64(2)
+	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, UserID: 1, GroupID: &groupID, User: &service.User{ID: 1}})
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
+
+	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
+	h.Responses(c)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "previous_response_id is not available for this user")
 }
 
 func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousResponseReuse(t *testing.T) {
@@ -1395,7 +1487,251 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissi
 	require.Equal(t, "medium", *got.log.ReasoningEffort)
 }
 
+func TestOpenAIResponsesWebSocket_PassthroughTracksModelPerTurn(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:  `{"type":"response.create","model":"sol","stream":false}`,
+		secondPayload: `{"type":"response.create","model":"terra","stream":false}`,
+		channelMapping: map[string]string{
+			"sol":   "sol-channel",
+			"terra": "terra-channel",
+		},
+		accountModelMapping: map[string]any{
+			"sol":           "gpt-5.6-sol",
+			"terra":         "gpt-5.6-terra",
+			"sol-channel":   "gpt-5.6-sol",
+			"terra-channel": "gpt-5.6-terra",
+		},
+	})
 
+	require.Len(t, got.upstreamPayloads, 2)
+	require.Equal(t, "sol-channel", gjson.GetBytes(got.upstreamPayloads[0], "model").String())
+	require.Equal(t, "terra-channel", gjson.GetBytes(got.upstreamPayloads[1], "model").String())
+	require.Len(t, got.clientEvents, 2)
+	require.Equal(t, "sol", gjson.GetBytes(got.clientEvents[0], "response.model").String())
+	require.Equal(t, "terra", gjson.GetBytes(got.clientEvents[1], "response.model").String())
+
+	require.Len(t, got.logs, 2)
+	require.Equal(t, "sol", got.logs[0].Model)
+	require.Equal(t, "sol", got.logs[0].RequestedModel)
+	require.NotNil(t, got.logs[0].UpstreamModel)
+	require.Equal(t, "sol-channel", *got.logs[0].UpstreamModel)
+	require.NotNil(t, got.logs[0].ModelMappingChain)
+	require.Equal(t, "sol→sol-channel", *got.logs[0].ModelMappingChain)
+
+	require.Equal(t, "terra", got.logs[1].Model)
+	require.Equal(t, "terra", got.logs[1].RequestedModel)
+	require.NotNil(t, got.logs[1].UpstreamModel)
+	require.Equal(t, "terra-channel", *got.logs[1].UpstreamModel)
+	require.NotNil(t, got.logs[1].ModelMappingChain)
+	require.Equal(t, "terra→terra-channel", *got.logs[1].ModelMappingChain)
+	require.InDelta(t, got.logs[1].TotalCost*2.5, got.logs[0].TotalCost, 1e-12,
+		"each turn must be billed with its own channel-mapped model")
+}
+
+func TestOpenAIResponsesWebSocket_UnchangedChannelTargetOutsideAccountMappingKeysRemainsValid(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:  `{"type":"response.create","model":"public-alias","stream":false}`,
+		secondPayload: `{"type":"response.create","stream":false}`,
+		channelMapping: map[string]string{
+			"public-alias": "gpt-5.6-sol",
+		},
+		accountModelMapping: map[string]any{
+			"public-alias": "gpt-5.6-terra",
+		},
+	})
+
+	require.Len(t, got.upstreamPayloads, 2)
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.upstreamPayloads[0], "model").String())
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.upstreamPayloads[1], "model").String())
+	require.Len(t, got.clientEvents, 2)
+	require.Equal(t, "public-alias", gjson.GetBytes(got.clientEvents[0], "response.model").String())
+	require.Equal(t, "public-alias", gjson.GetBytes(got.clientEvents[1], "response.model").String())
+	require.Len(t, got.logs, 2)
+	for _, usageLog := range got.logs {
+		require.Equal(t, "public-alias", usageLog.RequestedModel)
+		require.NotNil(t, usageLog.UpstreamModel)
+		require.Equal(t, "gpt-5.6-sol", *usageLog.UpstreamModel)
+		require.NotNil(t, usageLog.ModelMappingChain)
+		require.Equal(t, "public-alias→gpt-5.6-sol", *usageLog.ModelMappingChain)
+	}
+}
+
+func TestOpenAIResponsesWebSocket_PassthroughKeepsTurnMappingSnapshot(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:  `{"type":"response.create","model":"sol","stream":false}`,
+		secondPayload: `{"type":"response.create","model":"sol","stream":false}`,
+		channelMapping: map[string]string{
+			"sol": "gpt-5.6-sol",
+		},
+		afterFirstUpstreamRequest: func(channelSvc *service.ChannelService) error {
+			if channelSvc == nil {
+				return errors.New("channel service is nil")
+			}
+			_, err := channelSvc.Update(context.Background(), 7701, &service.UpdateChannelInput{
+				ModelMapping: map[string]map[string]string{
+					service.PlatformOpenAI: {"sol": "gpt-5.6-terra"},
+				},
+			})
+			return err
+		},
+	})
+
+	require.Len(t, got.upstreamPayloads, 2)
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.upstreamPayloads[0], "model").String())
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(got.upstreamPayloads[1], "model").String())
+
+	require.Len(t, got.logs, 2)
+	require.Equal(t, "sol", got.logs[0].Model)
+	require.NotNil(t, got.logs[0].UpstreamModel)
+	require.Equal(t, "gpt-5.6-sol", *got.logs[0].UpstreamModel)
+	require.NotNil(t, got.logs[0].ModelMappingChain)
+	require.Equal(t, "sol→gpt-5.6-sol", *got.logs[0].ModelMappingChain)
+	require.InDelta(t, 40e-6, got.logs[0].TotalCost, 1e-12,
+		"the in-flight turn must retain the channel-mapped billing model used when it was sent")
+
+	require.Equal(t, "sol", got.logs[1].Model)
+	require.NotNil(t, got.logs[1].UpstreamModel)
+	require.Equal(t, "gpt-5.6-terra", *got.logs[1].UpstreamModel)
+	require.NotNil(t, got.logs[1].ModelMappingChain)
+	require.Equal(t, "sol→gpt-5.6-terra", *got.logs[1].ModelMappingChain)
+	require.InDelta(t, got.logs[1].TotalCost*2.5, got.logs[0].TotalCost, 1e-12,
+		"the next turn must use the updated channel mapping")
+}
+
+func TestOpenAIResponsesWebSocket_CtxPoolAppliesPerTurnMappingAndPreservesRequestedModel(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:       `{"type":"response.create","model":"gpt-5.6-sol","stream":false}`,
+		secondPayload:      `{"type":"response.create","model":"gpt-5.6-terra","stream":false}`,
+		ingressMode:        service.OpenAIWSIngressModeCtxPool,
+		billingModelSource: service.BillingModelSourceRequested,
+		channelMapping: map[string]string{
+			"gpt-5.6-terra": "gpt-5.6-sol",
+		},
+	})
+
+	require.Len(t, got.upstreamPayloads, 2)
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.upstreamPayloads[0], "model").String())
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.upstreamPayloads[1], "model").String())
+	require.Len(t, got.clientEvents, 2)
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.clientEvents[0], "response.model").String())
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(got.clientEvents[1], "response.model").String())
+
+	require.Len(t, got.logs, 2)
+	require.Equal(t, "gpt-5.6-sol", got.logs[0].RequestedModel)
+	require.Nil(t, got.logs[0].ModelMappingChain)
+	require.InDelta(t, 40e-6, got.logs[0].TotalCost, 1e-12)
+	require.Equal(t, "gpt-5.6-terra", got.logs[1].RequestedModel)
+	require.NotNil(t, got.logs[1].ModelMappingChain)
+	require.Equal(t, "gpt-5.6-terra→gpt-5.6-sol", *got.logs[1].ModelMappingChain)
+	require.InDelta(t, 16e-6, got.logs[1].TotalCost, 1e-12,
+		"BillingModelSourceRequested must use the client model before channel mapping")
+}
+
+func TestOpenAIWSTurnBillingModelPreservesImagePricingModel(t *testing.T) {
+	tests := []struct {
+		name             string
+		resultModel      string
+		mapping          service.ChannelMappingResult
+		requestedModel   string
+		upstreamModel    string
+		wantBillingModel string
+	}{
+		{
+			name:             "upstream billing preserves image model",
+			resultModel:      "gpt-image-2",
+			mapping:          service.ChannelMappingResult{BillingModelSource: service.BillingModelSourceUpstream},
+			requestedModel:   "gpt-5.6-sol",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "gpt-image-2",
+		},
+		{
+			name:             "unmapped channel preserves image model",
+			resultModel:      "gpt-image-2",
+			mapping:          service.ChannelMappingResult{MappedModel: "gpt-5.6-sol", BillingModelSource: service.BillingModelSourceChannelMapped},
+			requestedModel:   "gpt-5.6-sol",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "gpt-image-2",
+		},
+		{
+			name:             "requested source overrides image model",
+			resultModel:      "gpt-image-2",
+			mapping:          service.ChannelMappingResult{BillingModelSource: service.BillingModelSourceRequested},
+			requestedModel:   "public-image-alias",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "public-image-alias",
+		},
+		{
+			name:             "mapped channel source overrides image model",
+			resultModel:      "gpt-image-2",
+			mapping:          service.ChannelMappingResult{MappedModel: "priced-channel-model", BillingModelSource: service.BillingModelSourceChannelMapped},
+			requestedModel:   "public-image-alias",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "priced-channel-model",
+		},
+		{
+			name:             "text turn falls back to upstream model",
+			mapping:          service.ChannelMappingResult{BillingModelSource: service.BillingModelSourceUpstream},
+			requestedModel:   "public-alias",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "gpt-5.6-sol",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := &service.OpenAIForwardResult{BillingModel: tt.resultModel}
+			require.Equal(t, tt.wantBillingModel, openAIWSTurnBillingModel(result, tt.mapping, tt.requestedModel, tt.upstreamModel))
+		})
+	}
+}
+
+func TestOpenAIAccountScheduleModelUsesActualOrSharedResolver(t *testing.T) {
+	account := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"model_mapping":         map[string]any{"public": "billing"},
+			"compact_model_mapping": map[string]any{"public": "compact-actual"},
+		},
+	}
+
+	reported := &service.OpenAIForwardResult{UpstreamModel: "observed-actual"}
+	require.Equal(t, "observed-actual", openAIAccountScheduleModel(nil, account, "public", true, reported))
+	require.Equal(t, "compact-actual", openAIAccountScheduleModel(nil, account, "public", true, nil))
+	require.Equal(t, "billing", openAIAccountScheduleModel(nil, account, "public", false, nil))
+
+	c, _ := gin.CreateTestContext(nil)
+	service.SetOpsUpstreamModel(c, "attempt-actual")
+	require.Equal(t, "attempt-actual", openAIAccountScheduleModel(c, account, "public", true, nil))
+
+	setOpsSelectedAccount(c, account.ID, account.Platform)
+	require.Equal(t, "attempt-actual", openAIAccountScheduleModel(c, account, "public", true, nil))
+}
+
+func TestShouldReportOpenAIWSProxyAccountFailure(t *testing.T) {
+	t.Run("unsupported client model switch does not penalize account", func(t *testing.T) {
+		err := fmt.Errorf("wrapped ingress turn: %w", newOpenAIWSUnsupportedModelSwitchError("gpt-unsupported"))
+		require.False(t, shouldReportOpenAIWSProxyAccountFailure(err))
+
+		var closeErr *service.OpenAIWSClientCloseError
+		require.ErrorAs(t, err, &closeErr)
+		require.Equal(t, coderws.StatusPolicyViolation, closeErr.StatusCode())
+		require.Equal(t, "model switch requires reconnect", closeErr.Reason())
+	})
+
+	t.Run("upstream policy violation still penalizes account", func(t *testing.T) {
+		err := service.NewOpenAIWSClientCloseError(
+			coderws.StatusPolicyViolation,
+			"upstream websocket authentication failed",
+			errors.New("upstream rejected credentials"),
+		)
+		require.True(t, shouldReportOpenAIWSProxyAccountFailure(err))
+	})
+
+	t.Run("generic proxy failure still penalizes account", func(t *testing.T) {
+		require.True(t, shouldReportOpenAIWSProxyAccountFailure(errors.New("upstream websocket read failed")))
+	})
+}
 
 func TestSetOpenAIClientTransportHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -14,6 +14,12 @@
                 @change="onDateRangeChange"
               />
             </div>
+            <RecentTimeRange
+              :active-minutes="activeRecentMinutes"
+              :start-time="filters.start_time"
+              :end-time="filters.end_time"
+              @select="selectRecentRange"
+            />
             <div class="ml-auto flex items-center gap-2">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.granularity') }}:</span>
               <div class="w-28">
@@ -191,6 +197,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import RecentTimeRange from '@/components/common/RecentTimeRange.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
@@ -295,6 +302,7 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
 }
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
+const activeRecentMinutes = ref<number | null>(null)
 const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, billing_type: null, start_date: startDate.value, end_date: endDate.value })
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
 const sortState = reactive({
@@ -361,9 +369,29 @@ const onDateRangeChange = (range: { startDate: string; endDate: string; preset: 
   filters.value = {
     ...filters.value,
     start_date: range.startDate,
-    end_date: range.endDate
+    end_date: range.endDate,
+    start_time: undefined,
+    end_time: undefined
   }
+  activeRecentMinutes.value = null
   granularity.value = getGranularityForRange(range.startDate, range.endDate)
+  applyFilters()
+}
+
+const selectRecentRange = (minutes: number) => {
+  const end = new Date()
+  const start = new Date(end.getTime() - minutes * 60_000)
+  startDate.value = formatLD(start)
+  endDate.value = formatLD(end)
+  activeRecentMinutes.value = minutes
+  filters.value = {
+    ...filters.value,
+    start_date: startDate.value,
+    end_date: endDate.value,
+    start_time: start.toISOString(),
+    end_time: end.toISOString()
+  }
+  granularity.value = 'hour'
   applyFilters()
 }
 
@@ -442,6 +470,8 @@ const loadModelStats = async (source: ModelDistributionSource, force = false) =>
     const baseParams = {
       start_date: filters.value.start_date || startDate.value,
       end_date: filters.value.end_date || endDate.value,
+      start_time: filters.value.start_time,
+      end_time: filters.value.end_time,
       user_id: filters.value.user_id,
       model: filters.value.model,
       api_key_id: filters.value.api_key_id,
@@ -491,6 +521,8 @@ const loadChartData = async () => {
     const snapshot = await adminAPI.dashboard.getSnapshotV2({
       start_date: filters.value.start_date || startDate.value,
       end_date: filters.value.end_date || endDate.value,
+      start_time: filters.value.start_time,
+      end_time: filters.value.end_time,
       granularity: granularity.value,
       user_id: filters.value.user_id,
       model: filters.value.model,
@@ -540,6 +572,7 @@ const resetFilters = () => {
   startDate.value = range.start
   endDate.value = range.end
   filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null, billing_mode: undefined }
+  activeRecentMinutes.value = null
   granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
 }
@@ -811,8 +844,8 @@ const loadAdminErrors = async () => {
       page: errPage.value,
       page_size: errPageSize.value,
       view: 'all',
-      start_time: toRFC3339(filters.value.start_date),
-      end_time: toRFC3339(filters.value.end_date, true),
+      start_time: filters.value.start_time || toRFC3339(filters.value.start_date),
+      end_time: filters.value.end_time || toRFC3339(filters.value.end_date, true),
       user_id: filters.value.user_id ?? undefined,
       api_key_id: filters.value.api_key_id ?? undefined,
       account_id: filters.value.account_id ?? undefined,

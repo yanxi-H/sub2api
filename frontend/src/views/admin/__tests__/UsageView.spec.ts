@@ -199,6 +199,25 @@ describe('admin UsageView route filters', () => {
     vi.useRealTimers()
   })
 
+  it('forwards an exact recent range to usage APIs', async () => {
+    vi.setSystemTime(new Date('2026-08-24T10:00:00.000Z'))
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    list.mockClear()
+
+    ;(wrapper.vm as any).selectRecentRange(10)
+    await flushPromises()
+
+    expect(list.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      start_time: '2026-08-24T09:50:00.000Z',
+      end_time: '2026-08-24T10:00:00.000Z',
+    }))
+    expect(getSnapshotV2).toHaveBeenLastCalledWith(expect.objectContaining({
+      start_time: '2026-08-24T09:50:00.000Z',
+      end_time: '2026-08-24T10:00:00.000Z',
+    }))
+  })
+
   it('shows the routed user while applying user_id to usage requests', async () => {
     routeQuery.user_id = '42'
     getById.mockResolvedValue({ id: 42, email: 'route-user@test.com' })

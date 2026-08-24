@@ -14,6 +14,12 @@
                 @change="onDateRangeChange"
               />
             </div>
+            <RecentTimeRange
+              :active-minutes="activeRecentMinutes"
+              :start-time="filters.start_time"
+              :end-time="filters.end_time"
+              @select="selectRecentRange"
+            />
             <div class="ml-auto flex items-center gap-2">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.granularity') }}:</span>
               <div class="w-28">
@@ -222,6 +228,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import RecentTimeRange from '@/components/common/RecentTimeRange.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
@@ -343,6 +350,7 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start)
 const endDate = ref(defaultRange.end)
+const activeRecentMinutes = ref<number | null>(null)
 const granularity = ref<'day' | 'hour'>(getGranularityForRange(startDate.value, endDate.value))
 
 const modelDistributionMetric = ref<DistributionMetric>('tokens')
@@ -556,6 +564,7 @@ const resetFilters = () => {
     billing_mode: null,
   }
   granularity.value = getGranularityForRange(range.start, range.end)
+  activeRecentMinutes.value = null
   applyFilters()
   if (activeTab.value === 'errors') {
     errorFilter.value = { model: '', category: '', api_key_id: null, status_code: null }
@@ -568,7 +577,24 @@ const onDateRangeChange = (range: { startDate: string; endDate: string; preset: 
   endDate.value = range.endDate
   filters.value.start_date = range.startDate
   filters.value.end_date = range.endDate
+  filters.value.start_time = undefined
+  filters.value.end_time = undefined
+  activeRecentMinutes.value = null
   granularity.value = getGranularityForRange(range.startDate, range.endDate)
+  applyFilters()
+}
+
+const selectRecentRange = (minutes: number) => {
+  const end = new Date()
+  const start = new Date(end.getTime() - minutes * 60_000)
+  startDate.value = formatLocalDate(start)
+  endDate.value = formatLocalDate(end)
+  filters.value.start_date = startDate.value
+  filters.value.end_date = endDate.value
+  filters.value.start_time = start.toISOString()
+  filters.value.end_time = end.toISOString()
+  activeRecentMinutes.value = minutes
+  granularity.value = 'hour'
   applyFilters()
 }
 
@@ -830,6 +856,8 @@ const loadErrors = async () => {
       page_size: errorPageSize.value,
       start_date: startDate.value,
       end_date: endDate.value,
+      start_time: filters.value.start_time,
+      end_time: filters.value.end_time,
       model: (errorFilter.value.model ?? '').trim() || undefined,
       category: errorFilter.value.category || undefined,
       api_key_id: errorFilter.value.api_key_id ?? undefined,

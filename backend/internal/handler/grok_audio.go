@@ -31,9 +31,36 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Realtime API is not supported for this platform")
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
 	if !h.ensureResponsesDependencies(c, nil) {
 		return
 	}
+	reqLog := requestLogger(c, "handler.openai_gateway.grok_realtime")
+	model := c.Query("model")
+	if strings.TrimSpace(model) == "" {
+		model = "grok-voice-latest"
+	}
+	if h.rejectGrokRealtimeWithoutPreRoutingAudit(c, apiKey, model) {
+		return
+	}
+	userRelease, acquired, err := h.concurrencyHelper.TryAcquireUserSlotForAPIKey(
+		c.Request.Context(), subject.UserID, subject.Concurrency, apiKey.ID,
+	)
+	if err != nil {
+		h.handleConcurrencyError(c, err, "user", false)
+		return
+	}
+	if !acquired {
+		h.handleConcurrencyError(c, &ConcurrencyError{SlotType: "user"}, "user", false)
+		return
+	}
+	userRelease = wrapReleaseOnDone(c.Request.Context(), userRelease)
+	defer userRelease()
+
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -44,11 +71,6 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 		return
 	}
 
-	reqLog := requestLogger(c, "handler.openai_gateway.grok_realtime")
-	model := c.Query("model")
-	if strings.TrimSpace(model) == "" {
-		model = "grok-voice-latest"
-	}
 	// Keep the HTTP response uncommitted while selecting and probing an account.
 	// Realtime is not an HTTP streaming response; using reqStream=true here would
 	// let the wait queue flush an SSE ping before the WebSocket handshake succeeds.
@@ -129,18 +151,39 @@ func (h *OpenAIGatewayHandler) GrokRealtime(c *gin.Context) {
 	}
 	defer func() { _ = conn.CloseNow() }()
 
-	started := time.Now()
-	audioObserved, proxyErr := h.gatewayService.ProxyGrokRealtimeConn(c.Request.Context(), c, conn, upstream)
-	elapsed := time.Since(started)
+	turn := 0
+	sessionDuration, audioObserved, proxyErr := h.gatewayService.ProxyGrokRealtimeConn(
+		c.Request.Context(), c, conn, upstream,
+		func(event []byte) error {
+			turn++
+			stage := "subsequent_turn"
+			if turn == 1 {
+				stage = "first_turn"
+			}
+			return h.auditGrokRealtimeEvent(c, reqLog, apiKey, subject, model, event, stage, turn)
+		},
+	)
+	// Bill observed audio even when a later event is malformed or audit-blocked.
+	if result := grokRealtimeBillingResult(model, sessionDuration, audioObserved); result != nil {
+		h.recordGrokVoiceUsage(c, apiKey, selection.Account, subscription, "realtime", nil, result)
+	}
 	if proxyErr != nil {
 		reqLog.Info("grok_realtime.proxy_failed", zap.Error(proxyErr))
+		var auditErr *grokRealtimeAuditError
+		if errors.As(proxyErr, &auditErr) {
+			writeSecurityAuditWSError(c.Request.Context(), conn, auditErr.decision)
+			_ = conn.Close(securityAuditWSCloseStatus(auditErr.decision), securityAuditWSCloseReason(auditErr.decision))
+			return
+		}
+		var clientClose *service.OpenAIWSClientCloseError
+		if errors.As(proxyErr, &clientClose) {
+			_ = conn.Close(clientClose.StatusCode(), clientClose.Reason())
+			return
+		}
 		if !isExpectedGrokRealtimeClose(proxyErr) {
 			_ = conn.Close(coderws.StatusInternalError, "upstream realtime websocket failed")
 			return
 		}
-	}
-	if result := grokRealtimeBillingResult(model, elapsed, audioObserved); result != nil {
-		h.recordGrokVoiceUsage(c, apiKey, selection.Account, subscription, "realtime", nil, result)
 	}
 }
 
@@ -179,23 +222,17 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 	if !h.ensureResponsesDependencies(c, nil) {
 		return
 	}
-	subscription, _ := middleware2.GetSubscriptionFromContext(c)
-	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
-		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
-		h.errorResponse(c, status, code, message)
-		return
-	}
-
 	body, err := readGrokVoiceGatewayBody(c)
 	if err != nil {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
 	if endpoint == "tts" {
-		subject, _ := middleware2.GetAuthSubjectFromContext(c)
 		reqLog := requestLogger(c, "handler.openai_gateway.grok_voice", zap.String("endpoint", endpoint))
 		// TTS bodies use {"input":"..."} (and variants). Normalize to chat messages so
 		// content moderation extractors see the spoken text.
@@ -211,6 +248,24 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
 			h.openAISecurityAuditError(c, decision)
 			return
 		}
+	}
+	var streamStarted bool
+	userRelease, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &streamStarted, requestLogger(c, "handler.openai_gateway.grok_voice"))
+	if !acquired {
+		return
+	}
+	if userRelease != nil {
+		defer userRelease()
+	}
+
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.errorResponse(c, status, code, message)
+		return
 	}
 	contentType := c.GetHeader("Content-Type")
 	if strings.TrimSpace(contentType) == "" {
@@ -319,6 +374,7 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
 	if model == "" {
 		model = endpoint
 	}
+	channelUsageFields := clientRequestedUsageFields(c, service.ChannelMappingResult{}, model, result.UpstreamModel)
 
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -335,7 +391,7 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
 			APIKeyService:      h.apiKeyService,
 			QuotaPlatform:      quotaPlatform,
 			SessionID:          sessionID,
-			ChannelUsageFields: clientRequestedUsageFields(c, service.ChannelMappingResult{}, model, result.UpstreamModel),
+			ChannelUsageFields: channelUsageFields,
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.openai_gateway.grok_voice"),

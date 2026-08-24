@@ -106,6 +106,32 @@ func TestResponsesWebSocketHasFirstAndSubsequentTurnPromptGates(t *testing.T) {
 	)
 }
 
+func TestGrokRealtimeWebSocketIsCoveredByPromptAudit(t *testing.T) {
+	routeSource, err := os.ReadFile("gateway.go")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, strings.Count(string(routeSource), `.GET("/realtime"`), 2)
+
+	handlerSource, err := os.ReadFile(filepath.Join("..", "..", "handler", "grok_audio.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(handlerSource), "rejectGrokRealtimeWithoutPreRoutingAudit")
+	require.Contains(t, string(handlerSource), "auditGrokRealtimeEvent")
+
+	serviceSource, err := os.ReadFile(filepath.Join("..", "..", "service", "grok_audio.go"))
+	require.NoError(t, err)
+	proxyStart := strings.Index(string(serviceSource), "func (s *OpenAIGatewayService) ProxyGrokRealtime")
+	require.NotEqual(t, -1, proxyStart)
+	proxySource := string(serviceSource)[proxyStart:]
+	auditIndex := strings.Index(proxySource, "beforeClientEvent(msg)")
+	upstreamWriteIndex := strings.Index(proxySource, "conn.WriteJSON(ctx, raw)")
+	require.NotEqual(t, -1, auditIndex, "missing per-event prompt audit callback")
+	require.NotEqual(t, -1, upstreamWriteIndex, "missing upstream event write")
+	require.Less(t,
+		auditIndex,
+		upstreamWriteIndex,
+		"each client event must pass prompt audit before upstream write",
+	)
+}
+
 func TestPromptAuditAdminRoutesRejectUnauthenticatedAndNonAdminRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -142,4 +168,23 @@ func TestPromptAuditAdminRoutesRejectUnauthenticatedAndNonAdminRequests(t *testi
 			require.Equal(t, tc.wantStatus, recorder.Code)
 		})
 	}
+}
+
+func TestPromptAuditEventDetailRequiresStepUp(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handlers := &handler.Handlers{Admin: &handler.AdminHandlers{
+		PromptAudit: securityaudit.NewPromptAdminHandler(nil),
+	}}
+	stepUpCalled := false
+	stepUp := servermiddleware.AlwaysStepUpAuthMiddleware(func(c *gin.Context) {
+		stepUpCalled = true
+		c.AbortWithStatus(http.StatusForbidden)
+	})
+	registerPromptAuditRoutes(router.Group("/api/v1/admin"), handlers, stepUp)
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/admin/prompt-audit/events/7", nil))
+	require.True(t, stepUpCalled)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 }

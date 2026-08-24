@@ -157,24 +157,50 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 	var startPtr, endPtr *time.Time
 	startDateStr := strings.TrimSpace(c.Query("start_date"))
 	endDateStr := strings.TrimSpace(c.Query("end_date"))
+	startTimeStr := strings.TrimSpace(c.Query("start_time"))
+	endTimeStr := strings.TrimSpace(c.Query("end_time"))
 
-	if startDateStr != "" {
-		t, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
-		if err != nil {
-			response.BadRequest(c, "Invalid start_date format, use YYYY-MM-DD")
+	if startTimeStr != "" || endTimeStr != "" {
+		if startTimeStr == "" || endTimeStr == "" {
+			response.BadRequest(c, "start_time and end_time must be provided together")
 			return nil, false
 		}
-		startTime = t
-		startPtr = &startTime
-	}
-	if endDateStr != "" {
-		t, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
+		parsedStart, err := time.Parse(time.RFC3339, startTimeStr)
 		if err != nil {
-			response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD")
+			response.BadRequest(c, "Invalid start_time format, use RFC3339")
 			return nil, false
 		}
-		endTime = t.AddDate(0, 0, 1)
-		endPtr = &endTime
+		parsedEnd, err := time.Parse(time.RFC3339, endTimeStr)
+		if err != nil {
+			response.BadRequest(c, "Invalid end_time format, use RFC3339")
+			return nil, false
+		}
+		if !parsedEnd.After(parsedStart) {
+			response.BadRequest(c, "end_time must be after start_time")
+			return nil, false
+		}
+		startTime, endTime = parsedStart, parsedEnd
+		startPtr, endPtr = &startTime, &endTime
+	} else {
+
+		if startDateStr != "" {
+			t, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
+			if err != nil {
+				response.BadRequest(c, "Invalid start_date format, use YYYY-MM-DD")
+				return nil, false
+			}
+			startTime = t
+			startPtr = &startTime
+		}
+		if endDateStr != "" {
+			t, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
+			if err != nil {
+				response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD")
+				return nil, false
+			}
+			endTime = t.AddDate(0, 0, 1)
+			endPtr = &endTime
+		}
 	}
 
 	if requireRange {
@@ -295,9 +321,32 @@ func (h *UsageHandler) ListErrors(c *gin.Context) {
 
 	filter := &service.OpsErrorLogFilter{Page: page, PageSize: pageSize}
 
-	// Date range (half-open [start, end)), reuse usage-list semantics.
+	// Time range (half-open [start, end)), reuse usage-list semantics.
 	userTZ := c.Query("timezone")
-	if startDateStr := c.Query("start_date"); startDateStr != "" {
+	startTimeStr := strings.TrimSpace(c.Query("start_time"))
+	endTimeStr := strings.TrimSpace(c.Query("end_time"))
+	if startTimeStr != "" || endTimeStr != "" {
+		if startTimeStr == "" || endTimeStr == "" {
+			response.BadRequest(c, "start_time and end_time must be provided together")
+			return
+		}
+		startTime, err := time.Parse(time.RFC3339, startTimeStr)
+		if err != nil {
+			response.BadRequest(c, "Invalid start_time format, use RFC3339")
+			return
+		}
+		endTime, err := time.Parse(time.RFC3339, endTimeStr)
+		if err != nil {
+			response.BadRequest(c, "Invalid end_time format, use RFC3339")
+			return
+		}
+		if !endTime.After(startTime) {
+			response.BadRequest(c, "end_time must be after start_time")
+			return
+		}
+		filter.StartTime = &startTime
+		filter.EndTime = &endTime
+	} else if startDateStr := c.Query("start_date"); startDateStr != "" {
 		t, err := timezone.ParseInUserLocation("2006-01-02", startDateStr, userTZ)
 		if err != nil {
 			response.BadRequest(c, "Invalid start_date format, use YYYY-MM-DD")
@@ -305,14 +354,16 @@ func (h *UsageHandler) ListErrors(c *gin.Context) {
 		}
 		filter.StartTime = &t
 	}
-	if endDateStr := c.Query("end_date"); endDateStr != "" {
-		t, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
-		if err != nil {
-			response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD")
-			return
+	if startTimeStr == "" && endTimeStr == "" {
+		if endDateStr := c.Query("end_date"); endDateStr != "" {
+			t, err := timezone.ParseInUserLocation("2006-01-02", endDateStr, userTZ)
+			if err != nil {
+				response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD")
+				return
+			}
+			t = t.AddDate(0, 0, 1)
+			filter.EndTime = &t
 		}
-		t = t.AddDate(0, 0, 1)
-		filter.EndTime = &t
 	}
 
 	filter.Model = strings.TrimSpace(c.Query("model"))
