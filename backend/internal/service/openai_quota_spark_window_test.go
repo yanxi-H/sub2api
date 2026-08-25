@@ -214,11 +214,22 @@ func TestResetCreditTargetedSendsStableCreditAndRedeemIDs(t *testing.T) {
 	tokenCache := &stubQuotaTokenCache{tokens: map[string]string{OpenAITokenCacheKey(account): "fake-token"}}
 	tokenProvider := NewOpenAITokenProvider(repo, tokenCache, nil)
 	var body map[string]string
+	var consumeCalls, detailsCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/backend-api/wham/rate-limit-reset-credits/consume", r.URL.Path)
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		w.Header().Set("content-type", "application/json")
-		_, _ = w.Write([]byte(`{"code":"ok","windows_reset":1}`))
+		switch r.URL.Path {
+		case "/backend-api/wham/rate-limit-reset-credits/consume":
+			consumeCalls++
+			require.Equal(t, http.MethodPost, r.Method)
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			_, _ = w.Write([]byte(`{"code":"ok","windows_reset":1}`))
+		case "/backend-api/wham/rate-limit-reset-credits":
+			detailsCalls++
+			require.Equal(t, http.MethodGet, r.Method)
+			_, _ = w.Write([]byte(`{"available_count":0,"credits":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -229,6 +240,8 @@ func TestResetCreditTargetedSendsStableCreditAndRedeemIDs(t *testing.T) {
 	require.Equal(t, map[string]string{
 		"credit_id": "credit-123", "redeem_request_id": "redeem-456",
 	}, body)
+	require.Equal(t, 1, consumeCalls)
+	require.Equal(t, 1, detailsCalls)
 }
 
 func TestResetCreditAgentIdentityUsesAssertionAndRecoversInvalidTaskOnce(t *testing.T) {

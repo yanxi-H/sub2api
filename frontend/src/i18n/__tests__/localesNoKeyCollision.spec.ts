@@ -80,3 +80,17 @@ describe.each(Object.keys(roots))('locale %s spread assembly', (locale) => {
     expect(collisions(admins[locale])).toEqual([])
   })
 })
+
+describe.each([
+  ['zh', zhDashboard],
+  ['en', enDashboard]
+] as const)('locale %s usage shortcuts', (_locale, messages) => {
+  it('registers recent time labels in the usage namespace', () => {
+    expect(messages.usage).toMatchObject({
+      recentRange: expect.any(String),
+      recentMinutes: expect.stringContaining('{count}'),
+      recentHalfHour: expect.any(String),
+      recentHours: expect.stringContaining('{count}')
+    })
+  })
+})
