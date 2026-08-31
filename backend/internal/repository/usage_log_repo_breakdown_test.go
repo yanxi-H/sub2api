@@ -78,25 +78,25 @@ func TestGetUserBreakdownStatsRequestTypeIncludesLegacyFallback(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetUserBreakdownStatsFiltersNativeCompactionV2(t *testing.T) {
+func TestGetUserRequestBodyTrend_SelectsTopUsersBeforeTimeBuckets(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}
 	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(24 * time.Hour)
-	nativeCompactionV2 := true
 
-	mock.ExpectQuery(regexp.QuoteMeta("AND ul.native_compaction_v2 = $3")).
-		WithArgs(start, end, true).
+	queryPattern := `(?s)WITH top_users AS \(.*ORDER BY SUM\(request_body_bytes\) DESC.*LIMIT \$3.*date_trunc\('hour', u\.created_at\).*INTERVAL '5 minutes'.*EXTRACT\(MINUTE FROM u\.created_at\) / 5.*u\.user_id IN \(SELECT user_id FROM top_users\).*u\.created_at >= \$4.*u\.created_at < \$5`
+	mock.ExpectQuery(queryPattern).
+		WithArgs(start, end, 12, start, end).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"user_id", "email", "requests", "input_tokens", "output_tokens",
-			"cache_tokens", "total_tokens", "cost", "actual_cost", "account_cost",
-		}))
+			"date", "user_id", "email", "username", "requests",
+			"total_request_body_bytes", "avg_request_body_bytes", "max_request_body_bytes",
+		}).AddRow("2026-07-01 00:00", int64(7), "user@example.com", "user", 3, int64(900), int64(300), int64(500)))
 
-	rows, err := repo.GetUserBreakdownStats(context.Background(), start, end, usagestats.UserBreakdownDimension{
-		NativeCompactionV2: &nativeCompactionV2,
-	}, 0)
+	rows, err := repo.GetUserRequestBodyTrend(context.Background(), start, end, "5minute", 12)
 
 	require.NoError(t, err)
-	require.Empty(t, rows)
+	require.Len(t, rows, 1)
+	require.Equal(t, int64(7), rows[0].UserID)
+	require.Equal(t, float64(300), rows[0].AvgRequestBodyBytes)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

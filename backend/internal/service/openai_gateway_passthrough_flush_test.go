@@ -172,6 +172,9 @@ func TestOpenAIStreamingPassthroughKeepsPreamblePendingUntilFirstOutputBoundary(
 }
 
 func TestOpenAIStreamingPassthroughFlushesTerminalEventAtEOFWithoutBlankLine(t *testing.T) {
+	// visible 口径：终端生命周期事件不记 TTFT；semantic 口径会记，需显式固定模式。
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{openAITTFTMode: OpenAITTFTModeVisible})
+	defer gatewayForwardingCache.Store((*cachedGatewayForwardingSettings)(nil))
 	upstream := "event: response.completed\n" +
 		`data: {"type":"response.completed","response":{"id":"resp_eof","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`
 	wantBody := upstream + "\n"
@@ -318,6 +321,10 @@ func TestOpenAIStreamingPassthroughGapIgnoresHeartbeatAndLifecycleEvents(t *test
 }
 
 func TestOpenAIStreamingPassthroughTTFTIgnoresLifecycleEvents(t *testing.T) {
+	// visible 口径：TTFT 等待真实 token 事件；semantic 口径（上游默认）会把
+	// output_item.added 这类语义事件记为 TTFT，本测试仅约束 visible 模式。
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{openAITTFTMode: OpenAITTFTModeVisible})
+	defer gatewayForwardingCache.Store((*cachedGatewayForwardingSettings)(nil))
 	lifecycle := `data: {"type":"response.output_item.added","item":{"type":"function_call"}}` + "\n\n"
 	firstToken := `data: {"type":"response.function_call_arguments.delta","delta":"{}"}` + "\n\n"
 	completed := `data: {"type":"response.completed","response":{"id":"resp_ttft","usage":{"input_tokens":2,"output_tokens":1}}}` + "\n\n"
