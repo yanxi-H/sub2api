@@ -31,18 +31,11 @@ func NewDashboardHandler(dashboardService *service.DashboardService, aggregation
 	}
 }
 
-// parseTimeRange parses an exact RFC3339 range or falls back to date parameters.
+// parseTimeRange parses start_date, end_date query parameters
 // Uses user's timezone if provided, otherwise falls back to server timezone
-func parseTimeRange(c *gin.Context) (time.Time, time.Time, error) {
+func parseTimeRange(c *gin.Context) (time.Time, time.Time) {
 	userTZ := c.Query("timezone") // Get user's timezone from request
 	now := timezone.NowInUserLocation(userTZ)
-	exactStart, exactEnd, hasExactRange, err := parseExactTimeRange(c)
-	if err != nil {
-		return time.Time{}, time.Time{}, err
-	}
-	if hasExactRange {
-		return *exactStart, *exactEnd, nil
-	}
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 
@@ -68,30 +61,7 @@ func parseTimeRange(c *gin.Context) (time.Time, time.Time, error) {
 		endTime = timezone.StartOfDayInUserLocation(now.AddDate(0, 0, 1), userTZ)
 	}
 
-	return startTime, endTime, nil
-}
-
-func parseExactTimeRange(c *gin.Context) (*time.Time, *time.Time, bool, error) {
-	startRaw := strings.TrimSpace(c.Query("start_time"))
-	endRaw := strings.TrimSpace(c.Query("end_time"))
-	if startRaw == "" && endRaw == "" {
-		return nil, nil, false, nil
-	}
-	if startRaw == "" || endRaw == "" {
-		return nil, nil, true, errors.New("start_time and end_time must be provided together")
-	}
-	startTime, err := time.Parse(time.RFC3339, startRaw)
-	if err != nil {
-		return nil, nil, true, errors.New("invalid start_time format, use RFC3339")
-	}
-	endTime, err := time.Parse(time.RFC3339, endRaw)
-	if err != nil {
-		return nil, nil, true, errors.New("invalid end_time format, use RFC3339")
-	}
-	if !endTime.After(startTime) {
-		return nil, nil, true, errors.New("end_time must be after start_time")
-	}
-	return &startTime, &endTime, true, nil
+	return startTime, endTime
 }
 
 func parseOptionalBoolDashboardFilter(c *gin.Context, name string) (*bool, error) {
@@ -233,11 +203,7 @@ func (h *DashboardHandler) GetRealtimeMetrics(c *gin.Context) {
 // GET /api/v1/admin/dashboard/trend
 // Query params: start_date, end_date (YYYY-MM-DD), granularity (day/hour), user_id, api_key_id, model, account_id, group_id, request_type, stream, billing_type
 func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 	granularity := c.DefaultQuery("granularity", "day")
 
 	// Parse optional filter params
@@ -296,13 +262,18 @@ func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
 			return
 		}
 	}
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
+	}
 	upstreamModelMismatch, err = parseOptionalBoolDashboardFilter(c, "upstream_model_mismatch")
 	if err != nil {
 		response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
 		return
 	}
 
-	trend, hit, err := h.getUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, billingType, upstreamModelMismatch)
+	trend, hit, err := h.getUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, nativeCompactionV2, billingType, upstreamModelMismatch)
 	if err != nil {
 		response.Error(c, 500, "Failed to get usage trend")
 		return
@@ -321,11 +292,7 @@ func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
 // GET /api/v1/admin/dashboard/models
 // Query params: start_date, end_date (YYYY-MM-DD), user_id, api_key_id, account_id, group_id, request_type, stream, billing_type
 func (h *DashboardHandler) GetModelStats(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 
 	// Parse optional filter params
 	var userID, apiKeyID, accountID, groupID int64
@@ -387,13 +354,18 @@ func (h *DashboardHandler) GetModelStats(c *gin.Context) {
 			return
 		}
 	}
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
+	}
 	upstreamModelMismatch, err = parseOptionalBoolDashboardFilter(c, "upstream_model_mismatch")
 	if err != nil {
 		response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
 		return
 	}
 
-	stats, hit, err := h.getModelStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, modelSource, requestType, stream, billingType, upstreamModelMismatch)
+	stats, hit, err := h.getModelStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, modelSource, requestType, stream, nativeCompactionV2, billingType, upstreamModelMismatch)
 	if err != nil {
 		response.Error(c, 500, "Failed to get model statistics")
 		return
@@ -411,11 +383,7 @@ func (h *DashboardHandler) GetModelStats(c *gin.Context) {
 // GET /api/v1/admin/dashboard/groups
 // Query params: start_date, end_date (YYYY-MM-DD), user_id, api_key_id, account_id, group_id, request_type, stream, billing_type
 func (h *DashboardHandler) GetGroupStats(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 
 	var userID, apiKeyID, accountID, groupID int64
 	var requestType *int16
@@ -468,13 +436,18 @@ func (h *DashboardHandler) GetGroupStats(c *gin.Context) {
 			return
 		}
 	}
+	nativeCompactionV2, err := parseOptionalBoolDashboardFilter(c, "native_compaction_v2")
+	if err != nil {
+		response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+		return
+	}
 	upstreamModelMismatch, err = parseOptionalBoolDashboardFilter(c, "upstream_model_mismatch")
 	if err != nil {
 		response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
 		return
 	}
 
-	stats, hit, err := h.getGroupStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, requestType, stream, billingType, upstreamModelMismatch)
+	stats, hit, err := h.getGroupStatsCached(c.Request.Context(), startTime, endTime, userID, apiKeyID, accountID, groupID, requestType, stream, nativeCompactionV2, billingType, upstreamModelMismatch)
 	if err != nil {
 		response.Error(c, 500, "Failed to get group statistics")
 		return
@@ -492,11 +465,7 @@ func (h *DashboardHandler) GetGroupStats(c *gin.Context) {
 // GET /api/v1/admin/dashboard/api-keys-trend
 // Query params: start_date, end_date (YYYY-MM-DD), granularity (day/hour), limit (default 5)
 func (h *DashboardHandler) GetAPIKeyUsageTrend(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 	granularity := c.DefaultQuery("granularity", "day")
 	limitStr := c.DefaultQuery("limit", "5")
 	limit, err := strconv.Atoi(limitStr)
@@ -523,11 +492,7 @@ func (h *DashboardHandler) GetAPIKeyUsageTrend(c *gin.Context) {
 // GET /api/v1/admin/dashboard/users-trend
 // Query params: start_date, end_date (YYYY-MM-DD), granularity (day/hour), limit (default 12)
 func (h *DashboardHandler) GetUserUsageTrend(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 	granularity := c.DefaultQuery("granularity", "day")
 	limitStr := c.DefaultQuery("limit", "12")
 	limit, err := strconv.Atoi(limitStr)
@@ -538,43 +503,6 @@ func (h *DashboardHandler) GetUserUsageTrend(c *gin.Context) {
 	trend, hit, err := h.getUserUsageTrendCached(c.Request.Context(), startTime, endTime, granularity, limit)
 	if err != nil {
 		response.Error(c, 500, "Failed to get user usage trend")
-		return
-	}
-	c.Header("X-Snapshot-Cache", cacheStatusValue(hit))
-
-	response.Success(c, gin.H{
-		"trend":       trend,
-		"start_date":  startTime.Format("2006-01-02"),
-		"end_date":    endTime.Add(-24 * time.Hour).Format("2006-01-02"),
-		"granularity": granularity,
-	})
-}
-
-const userRequestBodyTrendGranularity = "5minute"
-
-// GetUserRequestBodyTrend handles getting user-level request body size trend data.
-// GET /api/v1/admin/dashboard/request-body-trend
-// Query params: start_date, end_date (YYYY-MM-DD), limit (default 12).
-// Request body size is always aggregated into five-minute buckets.
-func (h *DashboardHandler) GetUserRequestBodyTrend(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
-	granularity := userRequestBodyTrendGranularity
-	limitStr := c.DefaultQuery("limit", "12")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 12
-	}
-	if limit > 50 {
-		limit = 50
-	}
-
-	trend, hit, err := h.getUserRequestBodyTrendCached(c.Request.Context(), startTime, endTime, granularity, limit)
-	if err != nil {
-		response.Error(c, 500, "Failed to get request body trend")
 		return
 	}
 	c.Header("X-Snapshot-Cache", cacheStatusValue(hit))
@@ -610,11 +538,7 @@ func parseRankingLimit(raw string) int {
 // GetUserSpendingRanking handles getting user spending ranking data.
 // GET /api/v1/admin/dashboard/users-ranking
 func (h *DashboardHandler) GetUserSpendingRanking(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 	limit := parseRankingLimit(c.DefaultQuery("limit", "12"))
 
 	keyRaw, _ := json.Marshal(struct {
@@ -744,11 +668,7 @@ func (h *DashboardHandler) GetBatchAPIKeysUsage(c *gin.Context) {
 // GET /api/v1/admin/dashboard/user-breakdown
 // Query params: start_date, end_date, group_id, model, endpoint, endpoint_type, limit
 func (h *DashboardHandler) GetUserBreakdown(c *gin.Context) {
-	startTime, endTime, err := parseTimeRange(c)
-	if err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
+	startTime, endTime := parseTimeRange(c)
 
 	dim := usagestats.UserBreakdownDimension{}
 	if v := c.Query("group_id"); v != "" {
@@ -795,6 +715,14 @@ func (h *DashboardHandler) GetUserBreakdown(c *gin.Context) {
 		if s, err := strconv.ParseBool(v); err == nil {
 			dim.Stream = &s
 		}
+	}
+	if v := strings.TrimSpace(c.Query("native_compaction_v2")); v != "" {
+		value, err := strconv.ParseBool(v)
+		if err != nil {
+			response.BadRequest(c, "Invalid native_compaction_v2 value, use true or false")
+			return
+		}
+		dim.NativeCompactionV2 = &value
 	}
 	if v := c.Query("billing_type"); v != "" {
 		if bt, err := strconv.ParseInt(v, 10, 8); err == nil {

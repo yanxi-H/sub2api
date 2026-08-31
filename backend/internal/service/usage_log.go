@@ -173,12 +173,13 @@ type UsageLog struct {
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
 
-	BillingType  int8
-	RequestType  RequestType
-	Stream       bool
-	OpenAIWSMode bool
-	DurationMs   *int
-	FirstTokenMs *int
+	BillingType        int8
+	RequestType        RequestType
+	Stream             bool
+	OpenAIWSMode       bool
+	NativeCompactionV2 bool
+	DurationMs         *int
+	FirstTokenMs       *int
 	// RequestBodyBytes records the inbound request body size in bytes.
 	RequestBodyBytes int64
 	// RequestBodyLane snapshots the admission lane selected for this request.

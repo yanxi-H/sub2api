@@ -1689,6 +1689,7 @@ export interface UsageLog {
   request_type?: UsageRequestType
   stream: boolean
   openai_ws_mode?: boolean
+  native_compaction_v2: boolean
   duration_ms: number | null
   first_token_ms: number | null
   request_body_bytes: number
@@ -2135,6 +2136,7 @@ export interface UsageQueryParams {
   model?: string
   request_type?: UsageRequestType
   stream?: boolean
+  native_compaction_v2?: boolean | null
   billing_type?: number | null
   billing_mode?: string | null
   start_date?: string

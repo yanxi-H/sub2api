@@ -1255,6 +1255,47 @@ func openAIStreamDataStartsVisibleOutput(data, eventType string) bool {
 	return false
 }
 
+// openAIStreamDataStartsSemanticTTFT 保留 900194fab 之前的 first_token_ms
+// 口径：跳过 Responses preamble 后，首个语义 SSE 事件即视为首 token。
+func openAIStreamDataStartsSemanticTTFT(data, eventType string) bool {
+	trimmed := strings.TrimSpace(data)
+	if trimmed == "" || trimmed == "[DONE]" {
+		return false
+	}
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" && gjson.Valid(trimmed) {
+		eventType = strings.TrimSpace(gjson.Get(trimmed, "type").String())
+	}
+	switch eventType {
+	case "response.failed":
+		return false
+	case "error":
+		payload := []byte(trimmed)
+		return !openAIStreamFailedEventShouldFailover(payload, extractOpenAISSEErrorMessage(payload))
+	default:
+		return !openAIStreamEventIsPreamble(eventType)
+	}
+}
+
+func (s *OpenAIGatewayService) openAITTFTMode(ctx context.Context) string {
+	mode := OpenAITTFTModeSemantic
+	if s != nil && s.settingService != nil {
+		mode = s.settingService.GetOpenAITTFTMode(ctx)
+	} else if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
+		if cached.expiresAt == 0 || time.Now().UnixNano() < cached.expiresAt {
+			mode = normalizeOpenAITTFTMode(cached.openAITTFTMode)
+		}
+	}
+	return normalizeOpenAITTFTMode(mode)
+}
+
+func openAIStreamDataStartsTTFT(data, eventType string, forceOutput bool, mode string) bool {
+	if mode == OpenAITTFTModeVisible {
+		return openAIStreamDataStartsVisibleOutput(data, eventType)
+	}
+	return forceOutput || openAIStreamDataStartsSemanticTTFT(data, eventType)
+}
+
 // openAIStreamFailedEventErrorCode 提取流内 failed 事件的错误码（小写），
 // 兼容 response.failed 的嵌套形态与裸 error 形态。
 func openAIStreamFailedEventErrorCode(payload []byte) string {
@@ -1863,6 +1904,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	var maxStreamGapMs *int
 	var lastUpstreamEventAt time.Time
 	responseID := ""
+	ttftMode := s.openAITTFTMode(ctx)
 	clientDisconnected := false
 	sawDone := false
 	sawTerminalEvent := false
@@ -2157,16 +2199,15 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			if startsVisibleOutput {
 				observedAt := time.Now()
 				observeOpenAIStreamSemanticOutput(observedAt, &lastUpstreamEventAt, &maxStreamGapMs)
-				if firstTokenMs == nil {
-					elapsedMs := observedAt.Sub(startTime).Milliseconds()
-					if elapsedMs < 0 {
-						elapsedMs = 0
-					}
-					ms := int(elapsedMs)
-					firstTokenMs = &ms
-				}
 			} else if isTerminalEvent {
 				observeOpenAIStreamTerminalGap(time.Now(), &lastUpstreamEventAt, &maxStreamGapMs)
+			}
+			if firstTokenMs == nil && openAIStreamDataStartsTTFT(trimmedData, eventType, forceFlushFailedEvent, ttftMode) {
+				ms := int(time.Since(startTime).Milliseconds())
+				if ms < 0 {
+					ms = 0
+				}
+				firstTokenMs = &ms
 			}
 			s.parseSSEUsageBytesWithType(dataBytes, eventType, usage)
 		}

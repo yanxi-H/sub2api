@@ -85,6 +85,7 @@ var usageLogInsertArgTypes = [...]string{
 	"numeric",     // account_stats_cost
 	"text",        // request_body_lane
 	"text",        // session_id
+	"boolean",     // native_compaction_v2
 	"timestamptz", // created_at
 }
 
@@ -286,6 +287,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			account_stats_cost,
 			request_body_lane,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
@@ -294,7 +296,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			$31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
 			$41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
 			$51, $52, $53, $54, $55, $56, $57, $58, $59, $60,
-			$61, $62
+			$61, $62, $63
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -747,6 +749,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			account_stats_cost,
 			request_body_lane,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) AS (VALUES `)
 
@@ -841,6 +844,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				account_stats_cost,
 				request_body_lane,
 				session_id,
+				native_compaction_v2,
 				created_at
 			)
 			SELECT
@@ -905,6 +909,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				account_stats_cost,
 				request_body_lane,
 				session_id,
+				native_compaction_v2,
 				created_at
 			FROM input
 			ON CONFLICT (request_id, api_key_id) DO NOTHING
@@ -1009,6 +1014,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			account_stats_cost,
 			request_body_lane,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) AS (VALUES `)
 
@@ -1099,6 +1105,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			account_stats_cost,
 			request_body_lane,
 			session_id,
+			native_compaction_v2,
 			created_at
 		)
 		SELECT
@@ -1163,6 +1170,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			account_stats_cost,
 			request_body_lane,
 			session_id,
+			native_compaction_v2,
 			created_at
 		FROM input
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
@@ -1235,6 +1243,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			account_stats_cost,
 			request_body_lane,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
@@ -1243,7 +1252,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			$31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
 			$41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
 			$51, $52, $53, $54, $55, $56, $57, $58, $59, $60,
-			$61, $62
+			$61, $62, $63
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1373,6 +1382,8 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			log.AccountStatsCost, // account_stats_cost
 			requestBodyLane,
 			sessionID, // session_id
+			sessionID,            // session_id
+			log.NativeCompactionV2,
 			createdAt,
 		},
 	}
