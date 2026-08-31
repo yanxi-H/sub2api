@@ -92,7 +92,7 @@
         </div>
       </section>
 
-      <section v-if="intelligenceGroups.length" class="px-4 py-5 sm:px-6">
+      <section v-if="hasIntelligenceData" class="px-4 py-5 sm:px-6">
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600 dark:text-primary-400">02 / {{ t('dashboard.modelRecommendations.intelligence') }}</p>
@@ -108,6 +108,18 @@
           </div>
         </div>
 
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div class="display-switch dimension-switch" role="tablist" :aria-label="t('dashboard.modelRecommendations.intelligenceDimension')">
+            <button type="button" role="tab" :class="{ active: resolvedIntelligenceDimension === 'comprehensive' }" :aria-selected="resolvedIntelligenceDimension === 'comprehensive'" :disabled="!dimensionAvailable('comprehensive')" data-intelligence-dimension="comprehensive" @click="intelligenceDimension = 'comprehensive'">{{ t('dashboard.modelRecommendations.dimensions.comprehensive') }}</button>
+            <button type="button" role="tab" :class="{ active: resolvedIntelligenceDimension === 'software' }" :aria-selected="resolvedIntelligenceDimension === 'software'" :disabled="!dimensionAvailable('software')" data-intelligence-dimension="software" @click="intelligenceDimension = 'software'">{{ t('dashboard.modelRecommendations.dimensions.software') }}</button>
+            <button type="button" role="tab" :class="{ active: resolvedIntelligenceDimension === 'visual' }" :aria-selected="resolvedIntelligenceDimension === 'visual'" :disabled="!dimensionAvailable('visual')" data-intelligence-dimension="visual" @click="intelligenceDimension = 'visual'">{{ t('dashboard.modelRecommendations.dimensions.visual') }}</button>
+          </div>
+          <div v-if="hasBandedPrices" class="display-switch" role="group" :aria-label="t('dashboard.modelRecommendations.priceBand')">
+            <button type="button" :class="{ active: priceBand === 'off_peak' }" :aria-pressed="priceBand === 'off_peak'" data-price-band="off_peak" @click="priceBand = 'off_peak'">{{ t('dashboard.modelRecommendations.priceBands.offPeak') }}</button>
+            <button type="button" :class="{ active: priceBand === 'peak' }" :aria-pressed="priceBand === 'peak'" data-price-band="peak" @click="priceBand = 'peak'">{{ t('dashboard.modelRecommendations.priceBands.peak') }}</button>
+          </div>
+        </div>
+
         <div class="intelligence-groups-grid grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-intelligence-groups>
           <section v-for="group in intelligenceGroups" :key="group.model" class="intelligence-group self-start overflow-hidden rounded-xl border bg-white dark:bg-dark-800/60" :data-model="group.model" :style="modelStyle(group.model)">
             <header class="flex items-center justify-between border-b border-gray-100 px-3.5 py-2.5 dark:border-dark-700">
@@ -116,22 +128,22 @@
             </header>
 
             <div v-if="intelligenceMode === 'rail'" class="space-y-1.5 p-3">
-              <article v-for="item in group.items" :key="intelligenceItemKey(item)" class="intelligence-rail-row grid items-center gap-2 rounded-lg px-2 py-1.5 sm:grid-cols-[58px_minmax(7rem,15rem)_62px_90px]" :data-effort="item.effort">
+              <article v-for="item in group.items" :key="intelligenceItemKey(item)" class="intelligence-rail-row grid items-center gap-2 rounded-lg px-2 py-1.5 sm:grid-cols-[58px_minmax(7rem,15rem)_62px_90px]" :data-effort="item.effort" :data-combination="intelligenceItemKey(item)">
                 <span class="effort-name">{{ effortLabel(item.effort) }}</span>
                 <div class="iq-track" :title="`IQ ${formatIQ(item.iq)}`"><span :style="{ width: iqBarWidth(item.iq) }"></span></div>
                 <div class="flex items-baseline justify-end gap-1"><strong class="model-iq font-mono text-base leading-none">{{ formatIQ(item.iq) }}</strong><span class="text-[8px] font-bold text-gray-400">IQ</span></div>
                 <div class="flex justify-end gap-2 font-mono text-[9px] text-gray-500 dark:text-gray-400">
-                  <span>${{ formatPrice(item.average_cost_usd) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span>
+                  <span>${{ formatPrice(metricPrice(item)) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span>
                   <span v-if="isBest(group, item)" class="best-inline" :title="t('dashboard.modelRecommendations.best')" :data-best-combination="intelligenceItemKey(item)">★</span>
                 </div>
               </article>
             </div>
 
             <div v-else class="intelligence-matrix grid grid-cols-2" :class="group.items.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
-              <article v-for="item in group.items" :key="intelligenceItemKey(item)" class="intelligence-matrix-cell min-w-0 px-3 py-2.5" :data-effort="item.effort">
+              <article v-for="item in group.items" :key="intelligenceItemKey(item)" class="intelligence-matrix-cell min-w-0 px-3 py-2.5" :data-effort="item.effort" :data-combination="intelligenceItemKey(item)">
                 <div class="flex items-center justify-between gap-2"><span class="effort-name effort-name-dot">{{ effortLabel(item.effort) }}</span><span v-if="isBest(group, item)" class="best-mark" :title="t('dashboard.modelRecommendations.best')" :data-best-combination="intelligenceItemKey(item)"><Icon name="star" size="xs" /></span></div>
                 <div class="mt-2 flex items-end gap-1"><strong class="model-iq font-mono text-[22px] leading-none">{{ formatIQ(item.iq) }}</strong><span class="pb-0.5 text-[9px] font-bold text-gray-400">IQ</span></div>
-                <div class="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 font-mono text-[10px] text-gray-500 dark:border-dark-700 dark:text-gray-400"><span>${{ formatPrice(item.average_cost_usd) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span></div>
+                <div class="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 font-mono text-[10px] text-gray-500 dark:border-dark-700 dark:text-gray-400"><span>${{ formatPrice(metricPrice(item)) }}</span><span>{{ formatDuration(item.average_duration_minutes) }}</span></div>
               </article>
             </div>
           </section>
@@ -160,6 +172,8 @@ interface IntelligenceGroup {
   bestKey: string | null
 }
 
+type IntelligenceDimension = 'comprehensive' | 'software' | 'visual'
+type PriceBand = 'off_peak' | 'peak'
 type SummaryTone = 'teal' | 'amber' | 'sky'
 type SummaryIcon = 'brain' | 'star' | 'bolt'
 interface SummaryCard {
@@ -185,6 +199,8 @@ defineEmits<{
 
 const { t } = useI18n()
 const intelligenceMode = ref<'matrix' | 'rail'>('rail')
+const intelligenceDimension = ref<IntelligenceDimension>('comprehensive')
+const priceBand = ref<PriceBand>('off_peak')
 
 const effortOrder: Record<string, number> = {
   ultra: 0,
@@ -219,10 +235,26 @@ const stationCategoryKeys: Record<string, string> = {
 }
 
 const stationGroups = computed(() => props.data?.station_recommendations ?? [])
+const resolvedIntelligenceDimension = computed<IntelligenceDimension>(() => {
+  if (dimensionAvailable(intelligenceDimension.value)) return intelligenceDimension.value
+  if (dimensionAvailable('comprehensive')) return 'comprehensive'
+  if (dimensionAvailable('software')) return 'software'
+  return 'visual'
+})
+const activeMetrics = computed<CodexRadarIntelligenceMetric[]>(() => {
+  switch (resolvedIntelligenceDimension.value) {
+    case 'software':
+      return props.data?.software_engineering_recommendations ?? []
+    case 'visual':
+      return props.data?.visual_spatial_recommendations ?? []
+    default:
+      return props.data?.intelligence_recommendations ?? []
+  }
+})
 
 const intelligenceGroups = computed<IntelligenceGroup[]>(() => {
   const groups = new Map<string, CodexRadarIntelligenceMetric[]>()
-  for (const metric of props.data?.intelligence_recommendations ?? []) {
+  for (const metric of activeMetrics.value) {
     const model = metric.model.trim()
     if (!model) continue
     const items = groups.get(model) ?? []
@@ -245,12 +277,14 @@ const intelligenceGroups = computed<IntelligenceGroup[]>(() => {
     })
 })
 
-const intelligenceItems = computed(() => intelligenceGroups.value.flatMap((group) => group.items))
-const hasData = computed(() => stationGroups.value.length > 0 || intelligenceGroups.value.length > 0)
+const summaryItems = computed(() => props.data?.intelligence_recommendations ?? [])
+const hasBandedPrices = computed(() => activeMetrics.value.some((item) => item.average_cost_usd_by_band?.off_peak != null || item.average_cost_usd_by_band?.peak != null))
+const hasIntelligenceData = computed(() => summaryItems.value.length > 0 || (props.data?.software_engineering_recommendations?.length ?? 0) > 0 || (props.data?.visual_spatial_recommendations?.length ?? 0) > 0)
+const hasData = computed(() => stationGroups.value.length > 0 || hasIntelligenceData.value)
 const formattedUpdatedAt = computed(() => formatDateTimeToMinute(props.data?.source_updated_at ?? null))
 
 const summaryCards = computed<SummaryCard[]>(() => {
-  const items = intelligenceItems.value
+  const items = summaryItems.value
   if (items.length === 0) return []
 
   const strongest = items.reduce((best, item) => (item.iq > best.iq ? item : best), items[0])
@@ -294,6 +328,14 @@ const summaryCards = computed<SummaryCard[]>(() => {
 
 function effortRank(effort: string): number {
   return effortOrder[effort.trim().toLowerCase()] ?? Number.MAX_SAFE_INTEGER
+}
+
+function dimensionAvailable(dimension: IntelligenceDimension): boolean {
+  switch (dimension) {
+    case 'software': return (props.data?.software_engineering_recommendations?.length ?? 0) > 0
+    case 'visual': return (props.data?.visual_spatial_recommendations?.length ?? 0) > 0
+    default: return (props.data?.intelligence_recommendations?.length ?? 0) > 0
+  }
 }
 
 function effortLabel(effort: string): string {
@@ -374,6 +416,10 @@ function formatPrice(value: number | null | undefined): string {
   return value < 0.01 ? value.toFixed(4) : value.toFixed(2)
 }
 
+function metricPrice(item: CodexRadarIntelligenceMetric): number | null {
+  return item.average_cost_usd_by_band?.[priceBand.value] ?? item.average_cost_usd
+}
+
 function formatDuration(value: number | null | undefined): string {
   if (!isFiniteNumber(value)) return '-'
   const formatted = value < 10 ? value.toFixed(1) : String(Math.round(value))
@@ -388,7 +434,7 @@ function bestCombinationKey(items: CodexRadarIntelligenceMetric[]): string | nul
   if (items.length === 0) return null
 
   const intelligenceValues = items.map((item) => item.iq)
-  const priceValues = items.map((item) => item.average_cost_usd)
+  const priceValues = items.map(metricPrice)
   const durationValues = items.map((item) => item.average_duration_minutes)
   let bestItem = items[0]
   let bestScore = Number.NEGATIVE_INFINITY
@@ -396,7 +442,7 @@ function bestCombinationKey(items: CodexRadarIntelligenceMetric[]): string | nul
   for (const item of items) {
     const score =
       normalizedScore(item.iq, intelligenceValues) * 0.5 +
-      normalizedScore(item.average_cost_usd, priceValues, true) * 0.3 +
+      normalizedScore(metricPrice(item), priceValues, true) * 0.3 +
       normalizedScore(item.average_duration_minutes, durationValues, true) * 0.2
     if (score > bestScore) {
       bestScore = score
@@ -408,16 +454,16 @@ function bestCombinationKey(items: CodexRadarIntelligenceMetric[]): string | nul
 }
 
 function balancedItem(items: CodexRadarIntelligenceMetric[]): CodexRadarIntelligenceMetric {
-  const priceValues = items.map((item) => item.average_cost_usd)
+  const priceValues = items.map(metricPrice)
   const durationValues = items.map((item) => item.average_duration_minutes)
   return items.reduce((best, item) => {
     const itemScore =
       normalizedScore(item.iq, items.map((candidate) => candidate.iq)) * 0.5 +
-      normalizedScore(item.average_cost_usd, priceValues, true) * 0.3 +
+      normalizedScore(metricPrice(item), priceValues, true) * 0.3 +
       normalizedScore(item.average_duration_minutes, durationValues, true) * 0.2
     const bestScore =
       normalizedScore(best.iq, items.map((candidate) => candidate.iq)) * 0.5 +
-      normalizedScore(best.average_cost_usd, priceValues, true) * 0.3 +
+      normalizedScore(metricPrice(best), priceValues, true) * 0.3 +
       normalizedScore(best.average_duration_minutes, durationValues, true) * 0.2
     return itemScore > bestScore ? item : best
   }, items[0])
@@ -1111,6 +1157,7 @@ function isBest(group: IntelligenceGroup, item: CodexRadarIntelligenceMetric): b
 
 .display-switch button {
   display: inline-flex;
+  flex-shrink: 0;
   height: 1.75rem;
   align-items: center;
   gap: 0.35rem;
@@ -1119,11 +1166,15 @@ function isBest(group: IntelligenceGroup, item: CodexRadarIntelligenceMetric): b
   color: #64748b;
   font-size: 0.6875rem;
   font-weight: 600;
+  white-space: nowrap;
   transition: color 150ms ease-out, background-color 150ms ease-out;
 }
 
+.dimension-switch { max-width: 100%; overflow-x: auto; }
+
 .display-switch button:hover { color: #334155; }
 .display-switch button.active { color: #0f766e; background: #f0fdfa; }
+.display-switch button:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .intelligence-group {
   border-color: color-mix(in srgb, var(--model-color) 62%, #e5e7eb);

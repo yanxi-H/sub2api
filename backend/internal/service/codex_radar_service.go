@@ -15,13 +15,17 @@ import (
 )
 
 const (
-	codexRadarInsightsURL       = "https://codexradar.com/api/radar-insights"
-	codexRadarIntelligenceURL   = "https://codexradar.com/api/intelligence-efficiency"
-	codexRadarRequestTimeout    = 12 * time.Second
-	codexRadarResponseHeaderTTL = 8 * time.Second
+	codexRadarInsightsURL           = "https://codexradar.com/api/radar-insights"
+	codexRadarSoftwareMetricsURL    = "https://codexradar.com/api/intelligence-efficiency-metrics"
+	codexRadarVisualSpatialURL      = "https://codexradar.com/api/visual-spatial-reasoning"
+	codexRadarRequestTimeout        = 12 * time.Second
+	codexRadarResponseHeaderTTL     = 8 * time.Second
+	codexRadarSoftwareMetricsSchema = 3
+	codexRadarVisualSpatialSchema   = 1
 
-	codexRadarInsightsBodyLimit     int64 = 512 << 10
-	codexRadarIntelligenceBodyLimit int64 = 5 << 20
+	codexRadarInsightsBodyLimit        int64 = 512 << 10
+	codexRadarSoftwareMetricsBodyLimit int64 = 256 << 10
+	codexRadarVisualSpatialBodyLimit   int64 = 1 << 20
 
 	codexRadarMaxStationItems = 2
 )
@@ -29,11 +33,15 @@ const (
 // CodexRadarDashboardRecommendations contains the limited public data shown on
 // the user dashboard. It deliberately excludes raw task and runner data.
 type CodexRadarDashboardRecommendations struct {
-	SourceUpdatedAt             string                               `json:"source_updated_at,omitempty"`
-	StationAvailable            bool                                 `json:"station_available"`
-	IntelligenceAvailable       bool                                 `json:"intelligence_available"`
-	StationRecommendations      []CodexRadarStationRecommendationSet `json:"station_recommendations"`
-	IntelligenceRecommendations []CodexRadarIntelligenceMetric       `json:"intelligence_recommendations"`
+	SourceUpdatedAt                    string                               `json:"source_updated_at,omitempty"`
+	StationAvailable                   bool                                 `json:"station_available"`
+	IntelligenceAvailable              bool                                 `json:"intelligence_available"`
+	SoftwareEngineeringAvailable       bool                                 `json:"software_engineering_available"`
+	VisualSpatialAvailable             bool                                 `json:"visual_spatial_available"`
+	StationRecommendations             []CodexRadarStationRecommendationSet `json:"station_recommendations"`
+	IntelligenceRecommendations        []CodexRadarIntelligenceMetric       `json:"intelligence_recommendations"`
+	SoftwareEngineeringRecommendations []CodexRadarIntelligenceMetric       `json:"software_engineering_recommendations"`
+	VisualSpatialRecommendations       []CodexRadarIntelligenceMetric       `json:"visual_spatial_recommendations"`
 }
 
 type CodexRadarStationRecommendationSet struct {
@@ -51,22 +59,29 @@ type CodexRadarStationRecommendation struct {
 }
 
 type CodexRadarIntelligenceMetric struct {
-	Model                  string   `json:"model"`
-	Effort                 string   `json:"effort"`
-	IQ                     float64  `json:"iq"`
-	Samples                int      `json:"samples"`
-	AverageCostUSD         *float64 `json:"average_cost_usd"`
-	AverageDurationMinutes *float64 `json:"average_duration_minutes"`
+	Model                  string                `json:"model"`
+	Effort                 string                `json:"effort"`
+	IQ                     float64               `json:"iq"`
+	Samples                int                   `json:"samples"`
+	AverageCostUSD         *float64              `json:"average_cost_usd"`
+	AverageCostUSDByBand   *CodexRadarPriceBands `json:"average_cost_usd_by_band,omitempty"`
+	AverageDurationMinutes *float64              `json:"average_duration_minutes"`
+}
+
+type CodexRadarPriceBands struct {
+	OffPeak *float64 `json:"off_peak"`
+	Peak    *float64 `json:"peak"`
 }
 
 type CodexRadarService struct {
-	httpClient                *http.Client
-	insightsURL               string
-	intelligenceEfficiencyURL string
+	httpClient         *http.Client
+	insightsURL        string
+	softwareMetricsURL string
+	visualSpatialURL   string
 }
 
 // NewCodexRadarService builds a direct, DNS-rebinding-protected client for the
-// two fixed CodexRadar endpoints. It never inherits an environment proxy.
+// fixed CodexRadar endpoints. It never inherits an environment proxy.
 func NewCodexRadarService() (*CodexRadarService, error) {
 	client, err := httpclient.GetClient(httpclient.Options{
 		Timeout:               codexRadarRequestTimeout,
@@ -78,10 +93,10 @@ func NewCodexRadarService() (*CodexRadarService, error) {
 		return nil, fmt.Errorf("create CodexRadar HTTP client: %w", err)
 	}
 
-	return newCodexRadarService(client, codexRadarInsightsURL, codexRadarIntelligenceURL), nil
+	return newCodexRadarService(client, codexRadarInsightsURL, codexRadarSoftwareMetricsURL, codexRadarVisualSpatialURL), nil
 }
 
-func newCodexRadarService(client *http.Client, insightsURL, intelligenceEfficiencyURL string) *CodexRadarService {
+func newCodexRadarService(client *http.Client, insightsURL, softwareMetricsURL, visualSpatialURL string) *CodexRadarService {
 	if client == nil {
 		client = &http.Client{Timeout: codexRadarRequestTimeout}
 	}
@@ -92,55 +107,69 @@ func newCodexRadarService(client *http.Client, insightsURL, intelligenceEfficien
 	}
 
 	return &CodexRadarService{
-		httpClient:                &clientCopy,
-		insightsURL:               insightsURL,
-		intelligenceEfficiencyURL: intelligenceEfficiencyURL,
+		httpClient:         &clientCopy,
+		insightsURL:        insightsURL,
+		softwareMetricsURL: softwareMetricsURL,
+		visualSpatialURL:   visualSpatialURL,
 	}
 }
 
-// GetDashboardRecommendations loads both independent public sources in
-// parallel. A temporary failure in either source still leaves the other source
+// GetDashboardRecommendations loads the independent public sources in
+// parallel. A temporary failure in one source still leaves the others
 // available to the dashboard.
 func (s *CodexRadarService) GetDashboardRecommendations(ctx context.Context) (*CodexRadarDashboardRecommendations, error) {
 	if s == nil || s.httpClient == nil {
 		return nil, infraerrors.ServiceUnavailable("CODEX_RADAR_UNAVAILABLE", "Model recommendations are temporarily unavailable")
 	}
 
-	type stationResult struct {
-		groups    []CodexRadarStationRecommendationSet
-		updatedAt time.Time
-		err       error
+	type insightsResult struct {
+		groups              []CodexRadarStationRecommendationSet
+		comprehensivePoints []codexRadarComprehensivePointPayload
+		updatedAt           time.Time
+		err                 error
 	}
-	type intelligenceResult struct {
+	type metricsResult struct {
 		metrics   []CodexRadarIntelligenceMetric
 		updatedAt time.Time
 		err       error
 	}
 
-	stationCh := make(chan stationResult, 1)
-	intelligenceCh := make(chan intelligenceResult, 1)
+	insightsCh := make(chan insightsResult, 1)
+	softwareCh := make(chan metricsResult, 1)
+	visualCh := make(chan metricsResult, 1)
 
 	go func() {
-		groups, updatedAt, err := s.fetchStationRecommendations(ctx)
-		stationCh <- stationResult{groups: groups, updatedAt: updatedAt, err: err}
+		groups, points, updatedAt, err := s.fetchInsights(ctx)
+		insightsCh <- insightsResult{groups: groups, comprehensivePoints: points, updatedAt: updatedAt, err: err}
 	}()
 	go func() {
-		metrics, updatedAt, err := s.fetchIntelligenceMetrics(ctx)
-		intelligenceCh <- intelligenceResult{metrics: metrics, updatedAt: updatedAt, err: err}
+		metrics, updatedAt, err := s.fetchMetricPoints(ctx, s.softwareMetricsURL, codexRadarSoftwareMetricsBodyLimit, codexRadarSoftwareMetricsSchema)
+		softwareCh <- metricsResult{metrics: metrics, updatedAt: updatedAt, err: err}
+	}()
+	go func() {
+		metrics, updatedAt, err := s.fetchMetricPoints(ctx, s.visualSpatialURL, codexRadarVisualSpatialBodyLimit, codexRadarVisualSpatialSchema)
+		visualCh <- metricsResult{metrics: metrics, updatedAt: updatedAt, err: err}
 	}()
 
-	station := <-stationCh
-	intelligence := <-intelligenceCh
-	if station.err != nil && intelligence.err != nil {
+	insights := <-insightsCh
+	software := <-softwareCh
+	visual := <-visualCh
+	if insights.err != nil && software.err != nil && visual.err != nil {
 		return nil, infraerrors.ServiceUnavailable("CODEX_RADAR_UNAVAILABLE", "Model recommendations are temporarily unavailable")
 	}
 
-	updatedAt := latestCodexRadarTime(station.updatedAt, intelligence.updatedAt)
+	comprehensive := buildCodexRadarComprehensiveMetrics(insights.comprehensivePoints, software.metrics, visual.metrics)
+	updatedAt := latestCodexRadarTime(insights.updatedAt, software.updatedAt)
+	updatedAt = latestCodexRadarTime(updatedAt, visual.updatedAt)
 	result := &CodexRadarDashboardRecommendations{
-		StationAvailable:            station.err == nil,
-		IntelligenceAvailable:       intelligence.err == nil,
-		StationRecommendations:      station.groups,
-		IntelligenceRecommendations: intelligence.metrics,
+		StationAvailable:                   insights.err == nil && len(insights.groups) > 0,
+		IntelligenceAvailable:              len(comprehensive) > 0,
+		SoftwareEngineeringAvailable:       software.err == nil && len(software.metrics) > 0,
+		VisualSpatialAvailable:             visual.err == nil && len(visual.metrics) > 0,
+		StationRecommendations:             insights.groups,
+		IntelligenceRecommendations:        comprehensive,
+		SoftwareEngineeringRecommendations: software.metrics,
+		VisualSpatialRecommendations:       visual.metrics,
 	}
 	if !updatedAt.IsZero() {
 		result.SourceUpdatedAt = updatedAt.UTC().Format(time.RFC3339)
@@ -149,13 +178,13 @@ func (s *CodexRadarService) GetDashboardRecommendations(ctx context.Context) (*C
 	return result, nil
 }
 
-func (s *CodexRadarService) fetchStationRecommendations(ctx context.Context) ([]CodexRadarStationRecommendationSet, time.Time, error) {
+func (s *CodexRadarService) fetchInsights(ctx context.Context) ([]CodexRadarStationRecommendationSet, []codexRadarComprehensivePointPayload, time.Time, error) {
 	var payload codexRadarInsightsPayload
 	if err := s.fetchJSON(ctx, s.insightsURL, codexRadarInsightsBodyLimit, &payload); err != nil {
-		return nil, time.Time{}, err
+		return nil, nil, time.Time{}, err
 	}
 	if payload.Schema != 1 {
-		return nil, time.Time{}, fmt.Errorf("unsupported CodexRadar insights schema")
+		return nil, nil, time.Time{}, fmt.Errorf("unsupported CodexRadar insights schema")
 	}
 
 	sets := make([]CodexRadarStationRecommendationSet, 0, len(payload.Recommendations))
@@ -199,95 +228,40 @@ func (s *CodexRadarService) fetchStationRecommendations(ctx context.Context) ([]
 		})
 	}
 	if len(sets) == 0 {
-		return nil, time.Time{}, fmt.Errorf("CodexRadar returned no station recommendations")
+		return nil, nil, time.Time{}, fmt.Errorf("CodexRadar returned no station recommendations")
 	}
 
-	return sets, parseCodexRadarTime(payload.SourceUpdatedAt), nil
+	return sets, payload.ComprehensivePoints, parseCodexRadarTime(payload.SourceUpdatedAt), nil
 }
 
-func (s *CodexRadarService) fetchIntelligenceMetrics(ctx context.Context) ([]CodexRadarIntelligenceMetric, time.Time, error) {
-	var payload codexRadarIntelligencePayload
-	if err := s.fetchJSON(ctx, s.intelligenceEfficiencyURL, codexRadarIntelligenceBodyLimit, &payload); err != nil {
+func (s *CodexRadarService) fetchMetricPoints(ctx context.Context, endpoint string, bodyLimit int64, schema int) ([]CodexRadarIntelligenceMetric, time.Time, error) {
+	var payload codexRadarMetricsPayload
+	if err := s.fetchJSON(ctx, endpoint, bodyLimit, &payload); err != nil {
 		return nil, time.Time{}, err
 	}
-	if payload.Schema != 1 || len(payload.Combos) == 0 || len(payload.Tasks) == 0 || len(payload.Cells) == 0 {
-		return nil, time.Time{}, fmt.Errorf("invalid CodexRadar intelligence payload")
+	if payload.Schema != schema || len(payload.Points) == 0 {
+		return nil, time.Time{}, fmt.Errorf("invalid CodexRadar metrics payload")
 	}
 
-	metrics := make([]CodexRadarIntelligenceMetric, 0, len(payload.Combos))
-	seenCombinations := make(map[string]struct{}, len(payload.Combos))
-	var updatedAt time.Time
-	for _, combo := range payload.Combos {
-		model := codexRadarText(combo.Model, 128)
-		effort := codexRadarText(combo.Effort, 32)
-		if model == "" || effort == "" {
+	metrics := make([]CodexRadarIntelligenceMetric, 0, len(payload.Points))
+	seenCombinations := make(map[string]struct{}, len(payload.Points))
+	for _, point := range payload.Points {
+		metric, ok := codexRadarMetricFromPoint(point)
+		if !ok {
 			continue
 		}
-		combinationKey := model + "|" + effort
-		if _, seen := seenCombinations[combinationKey]; seen {
+		key := codexRadarCombinationKey(metric.Model, metric.Effort)
+		if _, seen := seenCombinations[key]; seen {
 			continue
 		}
-
-		passed := 0
-		validTasks := 0
-		priceSum := 0.0
-		priceSamples := 0
-		durationSum := 0.0
-		durationSamples := 0
-		for _, task := range payload.Tasks {
-			taskID := codexRadarTaskID(task.ID)
-			if taskID == "" {
-				continue
-			}
-			cell, ok := payload.Cells[taskID+"|"+combinationKey]
-			if !ok || len(cell.RanBy) == 0 {
-				continue
-			}
-			runner := cell.RanBy[0]
-			if runner.Passed == nil {
-				continue
-			}
-
-			validTasks++
-			if *runner.Passed {
-				passed++
-			}
-			if duration := codexRadarPositive(runner.DurationSeconds); duration != nil {
-				durationSum += *duration / 60
-				durationSamples++
-			}
-			if price := codexRadarNonNegative(runner.ActualCostUSD); price != nil && (effort != "ultra" || runner.CostComplete) {
-				priceSum += *price
-				priceSamples++
-			}
-			updatedAt = latestCodexRadarTime(updatedAt, parseCodexRadarTime(runner.GradedAt))
-		}
-		if validTasks == 0 {
-			continue
-		}
-
-		seenCombinations[combinationKey] = struct{}{}
-		metric := CodexRadarIntelligenceMetric{
-			Model:   model,
-			Effort:  effort,
-			IQ:      float64(passed) / float64(validTasks) * 150,
-			Samples: validTasks,
-		}
-		if priceSamples > 0 {
-			average := priceSum / float64(priceSamples)
-			metric.AverageCostUSD = &average
-		}
-		if durationSamples > 0 {
-			average := durationSum / float64(durationSamples)
-			metric.AverageDurationMinutes = &average
-		}
+		seenCombinations[key] = struct{}{}
 		metrics = append(metrics, metric)
 	}
 	if len(metrics) == 0 {
-		return nil, time.Time{}, fmt.Errorf("CodexRadar returned no intelligence metrics")
+		return nil, time.Time{}, fmt.Errorf("CodexRadar returned no metrics")
 	}
 
-	return metrics, updatedAt, nil
+	return metrics, parseCodexRadarTime(payload.SourceUpdatedAt), nil
 }
 
 func (s *CodexRadarService) fetchJSON(ctx context.Context, endpoint string, bodyLimit int64, target any) error {
@@ -326,9 +300,10 @@ func (s *CodexRadarService) fetchJSON(ctx context.Context, endpoint string, body
 }
 
 type codexRadarInsightsPayload struct {
-	Schema          int                           `json:"schema"`
-	SourceUpdatedAt string                        `json:"source_updated_at"`
-	Recommendations []codexRadarStationSetPayload `json:"recommendations"`
+	Schema              int                                   `json:"schema"`
+	SourceUpdatedAt     string                                `json:"source_updated_at"`
+	Recommendations     []codexRadarStationSetPayload         `json:"recommendations"`
+	ComprehensivePoints []codexRadarComprehensivePointPayload `json:"comprehensive_points"`
 }
 
 type codexRadarStationSetPayload struct {
@@ -345,32 +320,124 @@ type codexRadarStationItemPayload struct {
 	AverageDurationMinutes *float64 `json:"average_duration_minutes"`
 }
 
-type codexRadarIntelligencePayload struct {
-	Schema int                              `json:"schema"`
-	Combos []codexRadarCombinationPayload   `json:"combos"`
-	Tasks  []codexRadarTaskPayload          `json:"tasks"`
-	Cells  map[string]codexRadarCellPayload `json:"cells"`
+type codexRadarComprehensivePointPayload struct {
+	Model   string   `json:"model"`
+	Effort  string   `json:"effort"`
+	IQ      *float64 `json:"iq"`
+	Samples int      `json:"samples"`
 }
 
-type codexRadarCombinationPayload struct {
-	Model  string `json:"model"`
-	Effort string `json:"effort"`
+type codexRadarMetricsPayload struct {
+	Schema          int                            `json:"schema"`
+	SourceUpdatedAt string                         `json:"source_updated_at"`
+	Points          []codexRadarMetricPointPayload `json:"points"`
 }
 
-type codexRadarTaskPayload struct {
-	ID any `json:"id"`
+type codexRadarMetricPointPayload struct {
+	Model                 string                       `json:"model"`
+	Effort                string                       `json:"effort"`
+	IQ                    *float64                     `json:"iq"`
+	Total                 int                          `json:"total"`
+	ValidTasks            int                          `json:"valid_tasks"`
+	AveragePriceUSD       *float64                     `json:"average_price_usd"`
+	AveragePriceUSDByBand *codexRadarPriceBandsPayload `json:"average_price_usd_by_band"`
+	AverageMinutes        *float64                     `json:"average_minutes"`
 }
 
-type codexRadarCellPayload struct {
-	RanBy []codexRadarRunnerPayload `json:"ran_by"`
+type codexRadarPriceBandsPayload struct {
+	OffPeak *float64 `json:"off_peak"`
+	Peak    *float64 `json:"peak"`
 }
 
-type codexRadarRunnerPayload struct {
-	Passed          *bool    `json:"passed"`
-	DurationSeconds *float64 `json:"duration_sec"`
-	ActualCostUSD   *float64 `json:"actual_cost_usd"`
-	CostComplete    bool     `json:"cost_complete"`
-	GradedAt        string   `json:"graded_at"`
+func codexRadarMetricFromPoint(point codexRadarMetricPointPayload) (CodexRadarIntelligenceMetric, bool) {
+	model := codexRadarText(point.Model, 128)
+	effort := codexRadarText(point.Effort, 32)
+	iq := codexRadarNonNegative(point.IQ)
+	if model == "" || effort == "" || iq == nil {
+		return CodexRadarIntelligenceMetric{}, false
+	}
+
+	samples := point.Total
+	if samples <= 0 {
+		samples = point.ValidTasks
+	}
+	metric := CodexRadarIntelligenceMetric{
+		Model:                  model,
+		Effort:                 effort,
+		IQ:                     *iq,
+		Samples:                samples,
+		AverageCostUSD:         codexRadarNonNegative(point.AveragePriceUSD),
+		AverageDurationMinutes: codexRadarNonNegative(point.AverageMinutes),
+	}
+	if point.AveragePriceUSDByBand != nil {
+		bands := &CodexRadarPriceBands{
+			OffPeak: codexRadarNonNegative(point.AveragePriceUSDByBand.OffPeak),
+			Peak:    codexRadarNonNegative(point.AveragePriceUSDByBand.Peak),
+		}
+		if bands.OffPeak != nil || bands.Peak != nil {
+			metric.AverageCostUSDByBand = bands
+		}
+	}
+	return metric, true
+}
+
+func buildCodexRadarComprehensiveMetrics(
+	points []codexRadarComprehensivePointPayload,
+	software []CodexRadarIntelligenceMetric,
+	visual []CodexRadarIntelligenceMetric,
+) []CodexRadarIntelligenceMetric {
+	softwareByKey := codexRadarMetricsByCombination(software)
+	visualByKey := codexRadarMetricsByCombination(visual)
+	metrics := make([]CodexRadarIntelligenceMetric, 0, len(points))
+	seen := make(map[string]struct{}, len(points))
+	for _, point := range points {
+		model := codexRadarText(point.Model, 128)
+		effort := codexRadarText(point.Effort, 32)
+		iq := codexRadarNonNegative(point.IQ)
+		key := codexRadarCombinationKey(model, effort)
+		if model == "" || effort == "" || iq == nil {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		softwareMetric, hasSoftware := softwareByKey[key]
+		visualMetric, hasVisual := visualByKey[key]
+		metric := CodexRadarIntelligenceMetric{
+			Model:   model,
+			Effort:  effort,
+			IQ:      *iq,
+			Samples: point.Samples,
+		}
+		if hasSoftware && hasVisual {
+			metric.AverageCostUSD = averageCodexRadarValues(softwareMetric.AverageCostUSD, visualMetric.AverageCostUSD)
+			metric.AverageDurationMinutes = averageCodexRadarValues(softwareMetric.AverageDurationMinutes, visualMetric.AverageDurationMinutes)
+		}
+		metrics = append(metrics, metric)
+	}
+	return metrics
+}
+
+func codexRadarMetricsByCombination(metrics []CodexRadarIntelligenceMetric) map[string]CodexRadarIntelligenceMetric {
+	byKey := make(map[string]CodexRadarIntelligenceMetric, len(metrics))
+	for _, metric := range metrics {
+		byKey[codexRadarCombinationKey(metric.Model, metric.Effort)] = metric
+	}
+	return byKey
+}
+
+func codexRadarCombinationKey(model, effort string) string {
+	return model + "|" + effort
+}
+
+func averageCodexRadarValues(left, right *float64) *float64 {
+	if left == nil || right == nil {
+		return nil
+	}
+	average := (*left + *right) / 2
+	return &average
 }
 
 func codexRadarText(value string, maxRunes int) string {
@@ -381,30 +448,8 @@ func codexRadarText(value string, maxRunes int) string {
 	return value
 }
 
-func codexRadarTaskID(value any) string {
-	switch id := value.(type) {
-	case string:
-		return codexRadarText(id, 128)
-	case float64:
-		if math.IsNaN(id) || math.IsInf(id, 0) {
-			return ""
-		}
-		return fmt.Sprintf("%v", id)
-	default:
-		return ""
-	}
-}
-
 func codexRadarNonNegative(value *float64) *float64 {
 	if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 || *value > 1e12 {
-		return nil
-	}
-	copy := *value
-	return &copy
-}
-
-func codexRadarPositive(value *float64) *float64 {
-	if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) || *value <= 0 || *value > 1e12 {
 		return nil
 	}
 	copy := *value

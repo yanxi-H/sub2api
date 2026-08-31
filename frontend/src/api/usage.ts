@@ -75,6 +75,10 @@ export interface CodexRadarIntelligenceMetric {
   iq: number
   samples: number
   average_cost_usd: number | null
+  average_cost_usd_by_band?: {
+    off_peak: number | null
+    peak: number | null
+  }
   average_duration_minutes: number | null
 }
 
@@ -82,8 +86,12 @@ export interface CodexRadarDashboardRecommendations {
   source_updated_at?: string
   station_available: boolean
   intelligence_available: boolean
+  software_engineering_available: boolean
+  visual_spatial_available: boolean
   station_recommendations: CodexRadarStationRecommendationSet[]
   intelligence_recommendations: CodexRadarIntelligenceMetric[]
+  software_engineering_recommendations: CodexRadarIntelligenceMetric[]
+  visual_spatial_recommendations: CodexRadarIntelligenceMetric[]
 }
 
 export interface TrendParams {

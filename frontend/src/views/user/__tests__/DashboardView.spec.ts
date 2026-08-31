@@ -61,8 +61,12 @@ const dashboardStats = {
 const recommendationData = {
   station_available: true,
   intelligence_available: true,
+  software_engineering_available: true,
+  visual_spatial_available: true,
   station_recommendations: [],
-  intelligence_recommendations: []
+  intelligence_recommendations: [],
+  software_engineering_recommendations: [],
+  visual_spatial_recommendations: []
 }
 
 function mountDashboard() {

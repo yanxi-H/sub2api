@@ -16,6 +16,8 @@ vi.mock('vue-i18n', async () => {
 const data: CodexRadarDashboardRecommendations = {
   station_available: true,
   intelligence_available: true,
+  software_engineering_available: true,
+  visual_spatial_available: true,
   station_recommendations: [
     {
       key: 'daily_development',
@@ -31,6 +33,12 @@ const data: CodexRadarDashboardRecommendations = {
     { model: 'gpt-5.6-sol', effort: 'low', iq: 60, samples: 112, average_cost_usd: 1, average_duration_minutes: 20 },
     { model: 'gpt-5.6-sol', effort: 'medium', iq: 90, samples: 112, average_cost_usd: 2, average_duration_minutes: 10 },
     { model: 'gpt-5.6-luna', effort: 'max', iq: 95, samples: 112, average_cost_usd: 1.5, average_duration_minutes: 15 }
+  ],
+  software_engineering_recommendations: [
+    { model: 'deepseek-v4-flash', effort: 'high', iq: 66, samples: 112, average_cost_usd: 0.22, average_cost_usd_by_band: { off_peak: 0.22, peak: 0.44 }, average_duration_minutes: 31 }
+  ],
+  visual_spatial_recommendations: [
+    { model: 'gpt-5.6-sol', effort: 'high', iq: 97.5, samples: 86, average_cost_usd: 2.88, average_duration_minutes: 24.6 }
   ]
 }
 
@@ -92,6 +100,41 @@ describe('UserDashboardModelRecommendations', () => {
     expect(wrapper.find('[data-intelligence-mode="matrix"]').attributes('aria-pressed')).toBe('true')
     expect(wrapper.findAll('.intelligence-matrix-cell')).toHaveLength(4)
     expect(wrapper.find('.intelligence-rail-row').exists()).toBe(false)
+  })
+
+  it('switches capability dimensions and peak pricing from the latest metrics', async () => {
+    const wrapper = mount(UserDashboardModelRecommendations, { props: { data } })
+
+    await wrapper.find('[data-intelligence-dimension="software"]').trigger('click')
+    expect(wrapper.find('[data-intelligence-dimension="software"]').attributes('aria-selected')).toBe('true')
+    const softwareRow = wrapper.find('[data-combination="deepseek-v4-flash|high"]')
+    expect(softwareRow.find('.model-iq').text()).toBe('66.0')
+    expect(softwareRow.text()).toContain('$0.22')
+
+    await wrapper.find('[data-price-band="peak"]').trigger('click')
+    expect(wrapper.find('[data-price-band="peak"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-combination="deepseek-v4-flash|high"]').text()).toContain('$0.44')
+
+    await wrapper.find('[data-intelligence-dimension="visual"]').trigger('click')
+    expect(wrapper.find('[data-intelligence-dimension="visual"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-combination="gpt-5.6-sol|high"] .model-iq').text()).toBe('97.5')
+    expect(wrapper.find('[data-price-band="peak"]').exists()).toBe(false)
+  })
+
+  it('falls back to an available capability when comprehensive metrics are unavailable', () => {
+    const wrapper = mount(UserDashboardModelRecommendations, {
+      props: {
+        data: {
+          ...data,
+          intelligence_available: false,
+          intelligence_recommendations: []
+        }
+      }
+    })
+
+    expect(wrapper.find('[data-intelligence-dimension="comprehensive"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-intelligence-dimension="software"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-combination="deepseek-v4-flash|high"]').exists()).toBe(true)
   })
 
   it('emits refresh from the icon button', async () => {

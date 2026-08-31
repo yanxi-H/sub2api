@@ -417,6 +417,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/usage-windows", h.Admin.Account.ListUsageWindows)
 		accounts.POST("/usage-windows/refresh", h.Admin.Account.RefreshUsageWindows)
 		accounts.POST("/usage-windows/openai-reset-credits/refresh", h.Admin.Account.RefreshOpenAIResetCredits)
+		accounts.GET("/upstream-billing-rates", h.Admin.Account.GetUpstreamBillingRates)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)
