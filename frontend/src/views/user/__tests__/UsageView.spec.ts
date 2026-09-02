@@ -237,6 +237,7 @@ describe('user UsageView', () => {
       start_time: undefined,
       end_time: undefined,
     }))
+  })
 
   it('propagates and resets the native compaction filter across page requests', async () => {
     const wrapper = mountUsageView()
