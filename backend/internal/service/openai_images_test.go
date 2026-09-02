@@ -305,7 +305,9 @@ func TestOpenAIGatewayServiceParseOpenAIImagesRequest_PromptOnlyDefaultsRemainBa
 	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
 	require.NoError(t, err)
 	require.NotNil(t, parsed)
-	require.Equal(t, "gpt-image-2", parsed.Model)
+	// 空 model 默认 auto：OAuth 桥接不带 tool model 由上游自选，
+	// API Key 路径兜底 gpt-image-2。
+	require.Equal(t, "auto", parsed.Model)
 	require.Equal(t, OpenAIImagesCapabilityBasic, parsed.RequiredCapability)
 }
 

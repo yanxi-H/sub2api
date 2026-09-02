@@ -398,9 +398,13 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 	if parsed.IsEdits() {
 		action = "edit"
 	}
-	tool := []byte(`{"type":"image_generation","action":"","model":""}`)
+	// toolModel 为空 = 自动模式：hosted 工具不带 model 字段，由上游路由最新生图模型
+	// （与本地 Codex CLI 声明 image_generation 工具的行为一致）。
+	tool := []byte(`{"type":"image_generation","action":""}`)
 	tool, _ = sjson.SetBytes(tool, "action", action)
-	tool, _ = sjson.SetBytes(tool, "model", strings.TrimSpace(toolModel))
+	if trimmedModel := strings.TrimSpace(toolModel); trimmedModel != "" {
+		tool, _ = sjson.SetBytes(tool, "model", trimmedModel)
+	}
 	if shouldPassOpenAIImagesN(toolModel, parsed.N) {
 		tool, _ = sjson.SetBytes(tool, "n", parsed.N)
 	}
@@ -1781,6 +1785,13 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		requestModel = mapped
 	}
 	if requestModel == "" {
+		requestModel = "auto"
+	}
+	// auto = 自动模式：hosted 工具不指定 model，由上游路由最新生图模型；
+	// 计费/日志回退到当前 auto 实际对应的 gpt-image-2 档。
+	toolModel := requestModel
+	if strings.EqualFold(requestModel, "auto") {
+		toolModel = ""
 		requestModel = "gpt-image-2"
 	}
 	if err := validateOpenAIImagesModel(requestModel); err != nil {
@@ -1802,7 +1813,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		return nil, err
 	}
 
-	responsesBody, err := buildOpenAIImagesResponsesRequest(parsed, requestModel)
+	responsesBody, err := buildOpenAIImagesResponsesRequest(parsed, toolModel)
 	if err != nil {
 		return nil, err
 	}

@@ -452,7 +452,9 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 		req.Model = strings.TrimSpace(req.Model)
 		return
 	}
-	req.Model = "gpt-image-2"
+	// 自动模式：OAuth 桥接让上游自选最新生图模型；
+	// API Key 路径由 forwardOpenAIImagesAPIKey 兜底为 gpt-image-2。
+	req.Model = "auto"
 }
 
 func isOpenAIImageGenerationModel(model string) bool {
@@ -475,6 +477,11 @@ func isGrokImageGenerationModel(model string) bool {
 func validateOpenAIImagesModel(model string) error {
 	model = strings.TrimSpace(model)
 	if isOpenAIImageGenerationModel(model) {
+		return nil
+	}
+	// auto = 自动模式：OAuth 桥接不带 tool model 由上游自选，
+	// API Key 路径在 forwardOpenAIImagesAPIKey 兜底为具体模型。
+	if strings.EqualFold(model, "auto") {
 		return nil
 	}
 	if model == "" {
@@ -503,7 +510,8 @@ func classifyOpenAIImagesCapability(req *OpenAIImagesRequest) OpenAIImagesCapabi
 		return OpenAIImagesCapabilityNative
 	}
 	model := strings.ToLower(strings.TrimSpace(req.Model))
-	if !strings.HasPrefix(model, "gpt-image-") {
+	// auto 按最保守能力判定（同 gpt-image- 基础链路），由后续条件决定是否升档。
+	if model != "auto" && !strings.HasPrefix(model, "gpt-image-") {
 		return OpenAIImagesCapabilityNative
 	}
 	if req.Stream || req.N != 1 || req.HasMask || req.HasNativeOptions {
@@ -582,6 +590,10 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	requestModel := strings.TrimSpace(parsed.Model)
 	if mapped := strings.TrimSpace(channelMappedModel); mapped != "" {
 		requestModel = mapped
+	}
+	// 平台 images API 必须具体模型：自动模式兜底 gpt-image-2。
+	if requestModel == "" || strings.EqualFold(requestModel, "auto") {
+		requestModel = "gpt-image-2"
 	}
 	if err := validateOpenAIImagesModel(requestModel); err != nil {
 		return nil, err
