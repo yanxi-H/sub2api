@@ -103,6 +103,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			sql.NullString{String: string(service.RequestBodyLaneHeavy), Valid: true},
+			sqlmock.AnyArg(), // upstream_request_id
 			sqlmock.AnyArg(), // session_id
 			sqlmock.AnyArg(), // native_compaction_v2
 			createdAt,
@@ -199,6 +200,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			sqlmock.AnyArg(), // request_body_lane
+			sqlmock.AnyArg(), // upstream_request_id
 			sqlmock.AnyArg(), // session_id
 			sqlmock.AnyArg(), // native_compaction_v2
 			createdAt,
@@ -852,6 +854,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullFloat64{},
 			sql.NullString{}, // request_body_lane
 			sql.NullString{}, // session_id
+			sql.NullString{}, // upstream_request_id
+			sql.NullString{},
 			false, // native_compaction_v2
 			now,
 		}})
@@ -933,6 +937,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullString{},  // request_body_lane
+			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false, // native_compaction_v2
 			now,
@@ -997,6 +1002,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullString{},  // request_body_lane
+			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false, // native_compaction_v2
 			now,
@@ -1061,6 +1067,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullString{},  // request_body_lane
+			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false, // native_compaction_v2
 			now,

@@ -62,9 +62,6 @@ func writeResponsesFailedSSE(c *gin.Context, errType, code, message string) bool
 		return false
 	}
 
-	if code = strings.TrimSpace(code); code == "" {
-		code = mapResponsesErrorCode(errType)
-	}
 	payload, err := json.Marshal(responsesFailedEvent{
 		Type: "response.failed",
 		Response: responsesFailedBody{
@@ -75,7 +72,7 @@ func writeResponsesFailedSSE(c *gin.Context, errType, code, message string) bool
 			Status:    "failed",
 			Output:    []any{},
 			Error: responsesFailedError{
-				Code:    code,
+				Code:    mapResponsesErrorCode(errType, code),
 				Message: message,
 			},
 		},
@@ -158,7 +155,10 @@ func requestModel(c *gin.Context) string {
 
 // mapResponsesErrorCode 把内部 errType 映射为 Responses 协议常见的 error.code。
 // 无明确映射时原样返回，保证至少可读。
-func mapResponsesErrorCode(errType string) string {
+func mapResponsesErrorCode(errType, code string) string {
+	if code != "" {
+		return code
+	}
 	switch errType {
 	case "rate_limit_error":
 		return "rate_limit_exceeded"
