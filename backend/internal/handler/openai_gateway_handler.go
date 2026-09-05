@@ -3441,7 +3441,7 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareErrorWithCode(
 		if countTowardsSLA {
 			service.MarkOpsStreamFailure(c, errType, code, message, status)
 		} else {
-			service.MarkOpsStreamError(c, errType, message, status)
+			service.MarkOpsStreamErrorWithCode(c, errType, code, message, status)
 		}
 		// /v1/responses 的严格 SDK（Codex CLI）要求终止事件必须属于
 		// response.completed/failed/incomplete/cancelled 集合。

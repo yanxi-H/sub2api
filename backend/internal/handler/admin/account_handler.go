@@ -418,6 +418,8 @@ func (h *AccountHandler) loadAccount7dAllocations(ctx context.Context, accounts 
 		}
 	}
 	return result, nil
+}
+
 // AccountListItemWithConcurrency is the compact account-list envelope used
 // for lite=1. It embeds dto.AccountListItem instead of the full dto.Account,
 // so groups/account_groups never appear in the list payload.
@@ -1165,8 +1167,6 @@ func (h *AccountHandler) RefreshOpenAIResetCredits(c *gin.Context) {
 	response.Success(c, results)
 }
 
-func buildAccountsListETag(
-	items []AccountWithConcurrency,
 func buildAccountsListETag[T any](
 	items []T,
 	total int64,

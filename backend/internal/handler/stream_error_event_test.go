@@ -98,6 +98,7 @@ func TestOpenAIHandleStreamingAwareErrorWithCode_PreservesStableCode(t *testing.
 	require.True(t, ok)
 	assert.Equal(t, "rate_limit_error", streamErr.ErrType)
 	assert.Equal(t, largeRequestQueueTimeoutCode, streamErr.Code)
+}
 
 func TestOpenAIAdmissionError_SynchronousNonResponsesIncludesGatewayCode(t *testing.T) {
 	c, w := newGinContextForEndpoint(t, EndpointChatCompletions)

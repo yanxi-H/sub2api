@@ -853,9 +853,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullFloat64{},
 			sql.NullString{}, // request_body_lane
-			sql.NullString{}, // session_id
 			sql.NullString{}, // upstream_request_id
-			sql.NullString{},
+			sql.NullString{}, // session_id
 			false, // native_compaction_v2
 			now,
 		}})

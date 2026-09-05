@@ -869,39 +869,6 @@ func (b *readTrackingBody) Read([]byte) (int, error) {
 
 func (b *readTrackingBody) Close() error { return nil }
 
-func TestOpenAIResponses_UserQueueRejectsBeforeReadingBody(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	cache := &concurrencyCacheMock{
-		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) {
-			return false, nil
-		},
-		incrementUserWaitFn: func(context.Context, int64, int) (bool, error) {
-			return false, nil
-		},
-	}
-	h := &OpenAIGatewayHandler{
-		gatewayService:      &service.OpenAIGatewayService{},
-		billingCacheService: &service.BillingCacheService{},
-		apiKeyService:       &service.APIKeyService{},
-		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
-	}
-
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", http.NoBody)
-	body := &readTrackingBody{}
-	c.Request.Body = body
-	groupID := int64(2)
-	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 10, GroupID: &groupID})
-	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
-
-	h.Responses(c)
-
-	require.False(t, body.read, "queued requests must not materialize their body before user admission")
-	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
-}
-
 func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

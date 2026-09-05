@@ -42,14 +42,6 @@ describe('AppSidebar scroll position persistence', () => {
   })
 })
 
-describe('AppSidebar admin personal navigation', () => {
-  it('provides a clearly labelled link to the user dashboard', () => {
-    expect(componentSource).toContain("{ path: '/dashboard', label: t('nav.userDashboard'), icon: DashboardIcon }")
-    expect(componentSource).toContain('...buildSelfNavItems(false)')
-  })
-
-  it('keeps the regular user dashboard in the main user navigation', () => {
-    expect(componentSource).toContain('finalizeNav(buildSelfNavItems(true))')
 describe('AppSidebar collapsible groups', () => {
   it('lets the user collapse a group even while a child route is active', () => {
     // The expand state must come from the user's override first, falling back
@@ -68,5 +60,16 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch).not.toBeNull()
     expect(sidebarHeaderBlockMatch?.[0]).not.toContain('@apply overflow-hidden;')
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
+  })
+})
+
+describe('AppSidebar admin personal navigation', () => {
+  it('provides a clearly labelled link to the user dashboard', () => {
+    expect(componentSource).toContain("{ path: '/dashboard', label: t('nav.userDashboard'), icon: DashboardIcon }")
+    expect(componentSource).toContain('...buildSelfNavItems(false)')
+  })
+
+  it('keeps the regular user dashboard in the main user navigation', () => {
+    expect(componentSource).toContain('finalizeNav(buildSelfNavItems(true))')
   })
 })

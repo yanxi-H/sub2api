@@ -5487,6 +5487,9 @@ const handleSubmit = async () => {
         delete newExtra.request_body_normal_limit_bytes
         delete newExtra.request_body_heavy_limit_bytes
         delete newExtra.request_body_recovery_limit_bytes
+      }
+      updatePayload.extra = newExtra
+    }
     // 上游ID头名只在改动时写回 extra，避免用弹窗打开时的快照覆盖运行态键。
     const nextUpstreamRequestIdHeader = upstreamRequestIdHeader.value.trim()
     if (nextUpstreamRequestIdHeader !== readUpstreamRequestIdHeader(props.account.extra)) {
