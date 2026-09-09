@@ -106,6 +106,33 @@ func TestResponsesWebSocketHasFirstAndSubsequentTurnPromptGates(t *testing.T) {
 	)
 }
 
+func TestGrokRealtimeWebSocketIsCoveredByPromptAudit(t *testing.T) {
+	routeSource, err := os.ReadFile("gateway.go")
+	require.NoError(t, err)
+	// v1 分组与根别名两条入口都必须存在；根别名经上游 rootRoute 辅助函数注册。
+	require.GreaterOrEqual(t, strings.Count(string(routeSource), `gateway.GET("/realtime"`), 1)
+	require.GreaterOrEqual(t, strings.Count(string(routeSource), `rootRoute(http.MethodGet, "/realtime"`), 1)
+
+	handlerSource, err := os.ReadFile(filepath.Join("..", "..", "handler", "grok_audio.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(handlerSource), "rejectGrokRealtimeWithoutPreRoutingAudit")
+	require.Contains(t, string(handlerSource), "auditGrokRealtimeEvent")
+
+	serviceSource, err := os.ReadFile(filepath.Join("..", "..", "service", "grok_audio.go"))
+	require.NoError(t, err)
+	proxyStart := strings.Index(string(serviceSource), "func (s *OpenAIGatewayService) ProxyGrokRealtime")
+	require.NotEqual(t, -1, proxyStart)
+	proxySource := string(serviceSource)[proxyStart:]
+	auditIndex := strings.Index(proxySource, "beforeClientEvent(msg)")
+	upstreamWriteIndex := strings.Index(proxySource, "conn.WriteJSON(ctx, raw)")
+	require.NotEqual(t, -1, auditIndex, "missing per-event prompt audit callback")
+	require.NotEqual(t, -1, upstreamWriteIndex, "missing upstream event write")
+	require.Less(t,
+		auditIndex,
+		upstreamWriteIndex,
+		"each client event must pass prompt audit before upstream write",
+	)
+}
 
 func TestPromptAuditAdminRoutesRejectUnauthenticatedAndNonAdminRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -57,4 +57,43 @@ describe('account7dWindow', () => {
       source: 'codex'
     })
   })
+
+  it('reads a future Zhipu coding plan weekly reset', () => {
+    const resetAt = '2026-08-24T00:00:00.000Z'
+    const result = getAccount7dReset({
+      platform: 'zhipu',
+      extra: { zhipu_weekly_reset_at: resetAt }
+    }, now)
+
+    expect(result).toEqual({ resetAt, source: 'zhipu_weekly' })
+    expect(account7dResetSourceI18nKey('zhipu_weekly')).toBe('keys.sync7dWindowSourceZhipu')
+  })
+
+  it('reads a future Kimi coding plan weekly reset and ignores expired ones', () => {
+    const resetAt = '2026-08-25T00:00:00.000Z'
+    expect(getAccount7dReset({ platform: 'kimi', extra: { kimi_weekly_reset_at: resetAt } }, now))
+      .toEqual({ resetAt, source: 'kimi_weekly' })
+    expect(account7dResetSourceI18nKey('kimi_weekly')).toBe('keys.sync7dWindowSourceKimi')
+
+    expect(getAccount7dReset({ platform: 'kimi', extra: { kimi_weekly_reset_at: '2026-08-10T00:00:00.000Z' } }, now)).toBeNull()
+  })
+
+  it('ignores CN snapshots left over from a different provider', () => {
+    // 账号从 zhipu 切到 kimi 端点后，extra 里残留的 zhipu 快照不得成为窗口来源。
+    expect(getAccount7dReset({
+      platform: 'kimi',
+      extra: { zhipu_weekly_reset_at: '2026-08-24T00:00:00.000Z' }
+    }, now)).toBeNull()
+
+    expect(getAccount7dReset({
+      platform: 'zhipu',
+      extra: { kimi_weekly_reset_at: '2026-08-25T00:00:00.000Z' }
+    }, now)).toBeNull()
+
+    // 非 CN 平台一律不读 CN 快照。
+    expect(getAccount7dReset({
+      platform: 'openai',
+      extra: { zhipu_weekly_reset_at: '2026-08-24T00:00:00.000Z' }
+    }, now)).toBeNull()
+  })
 })

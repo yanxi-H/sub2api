@@ -219,9 +219,10 @@ type AccountUsageWindowItem struct {
 	RefreshError               string                             `json:"refresh_error,omitempty"`
 }
 
-// SevenDayQuotaCapacity compares the estimated upstream capacity with local
+// SevenDayQuotaCapacity compares an inferred or fixed plan capacity with local
 // account spend and the 7-day limits allocated to API Keys in this account's groups.
 type SevenDayQuotaCapacity struct {
+	CapacitySource              string   `json:"capacity_source"`
 	EstimatedTotalUSD           float64  `json:"estimated_total_usd"`
 	ActualUsedUSD               float64  `json:"actual_used_usd"`
 	ActualRemainingUSD          float64  `json:"actual_remaining_usd"`
@@ -264,24 +265,38 @@ func accountUsageWindowItem(account *service.Account, usage *service.UsageInfo) 
 	return item
 }
 
-func buildSevenDayQuotaCapacity(progress *service.UsageProgress, allocation *service.APIKey7dAllocation) *SevenDayQuotaCapacity {
-	if progress == nil || progress.WindowStats == nil || progress.Utilization <= 0 || math.IsNaN(progress.Utilization) || math.IsInf(progress.Utilization, 0) {
+func buildSevenDayQuotaCapacity(progress *service.UsageProgress, allocation *service.APIKey7dAllocation, fixed *service.FixedQuotaCapacity) *SevenDayQuotaCapacity {
+	if progress == nil || progress.WindowStats == nil || progress.Utilization < 0 || math.IsNaN(progress.Utilization) || math.IsInf(progress.Utilization, 0) {
 		return nil
 	}
 	actualUsedUSD := progress.WindowStats.UserCost
-	if actualUsedUSD <= 0 || math.IsNaN(actualUsedUSD) || math.IsInf(actualUsedUSD, 0) {
+	if actualUsedUSD < 0 || math.IsNaN(actualUsedUSD) || math.IsInf(actualUsedUSD, 0) {
 		return nil
 	}
-	estimatedTotalUSD := actualUsedUSD * 100 / progress.Utilization
+	capacitySource := "inferred"
+	estimatedTotalUSD := 0.0
+	actualRemainingPercent := 0.0
+	if fixed != nil {
+		estimatedTotalUSD = fixed.SevenDayUSD
+		capacitySource = fixed.Source
+		actualRemainingPercent = math.Max(100-math.Min(progress.Utilization, 100), 0)
+	} else {
+		if progress.Utilization <= 0 || actualUsedUSD <= 0 {
+			return nil
+		}
+		estimatedTotalUSD = actualUsedUSD * 100 / progress.Utilization
+		actualRemainingPercent = math.Max((estimatedTotalUSD-actualUsedUSD)/estimatedTotalUSD*100, 0)
+	}
 	if estimatedTotalUSD <= 0 || math.IsNaN(estimatedTotalUSD) || math.IsInf(estimatedTotalUSD, 0) {
 		return nil
 	}
-	actualRemainingUSD := math.Max(estimatedTotalUSD-actualUsedUSD, 0)
+	actualRemainingUSD := estimatedTotalUSD * actualRemainingPercent / 100
 	capacity := &SevenDayQuotaCapacity{
+		CapacitySource:         capacitySource,
 		EstimatedTotalUSD:      estimatedTotalUSD,
 		ActualUsedUSD:          actualUsedUSD,
 		ActualRemainingUSD:     actualRemainingUSD,
-		ActualRemainingPercent: actualRemainingUSD / estimatedTotalUSD * 100,
+		ActualRemainingPercent: actualRemainingPercent,
 	}
 	if allocation == nil {
 		return capacity
@@ -302,6 +317,16 @@ func buildSevenDayQuotaCapacity(progress *service.UsageProgress, allocation *ser
 	capacity.UnallocatedRemainingPercent = &unallocatedRemainingPercent
 	capacity.AllocationUnlimited = allocation.Unlimited
 	return capacity
+}
+
+func accountSevenDayQuotaCapacity(account *service.Account, usage *service.UsageInfo, allocation *service.APIKey7dAllocation) *SevenDayQuotaCapacity {
+	if account == nil || usage == nil {
+		return nil
+	}
+	if account.IsCNProvider() && account.IsCodingPlan() && usage.FixedQuotaCapacity == nil {
+		return nil
+	}
+	return buildSevenDayQuotaCapacity(usage.SevenDay, allocation, usage.FixedQuotaCapacity)
 }
 
 func allocationForAccount(allocations map[int64]service.APIKey7dAllocation, accountID int64) *service.APIKey7dAllocation {
@@ -1126,7 +1151,7 @@ func (h *AccountHandler) ListUsageWindows(c *gin.Context) {
 	for i := range accounts {
 		account := &accounts[i]
 		item := accountUsageWindowItem(account, usages[i])
-		item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
+		item.SevenDayCapacity = accountSevenDayQuotaCapacity(account, usages[i], allocationForAccount(allocations, account.ID))
 		items[i] = item
 	}
 	response.Paginated(c, items, total, page, pageSize)
@@ -1184,13 +1209,13 @@ func (h *AccountHandler) RefreshUsageWindows(c *gin.Context) {
 				item.RefreshError = "LIVE_REFRESH_UNSUPPORTED"
 				h.attachSevenDayWindowStats(gctx, account, usage, now)
 				item.SevenDay = usage.SevenDay
-				item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
+				item.SevenDayCapacity = accountSevenDayQuotaCapacity(account, usage, allocationForAccount(allocations, account.ID))
 				results[i] = item
 				return nil
 			}
 			if h.accountUsageService == nil {
 				item.RefreshError = "USAGE_SERVICE_UNAVAILABLE"
-				item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
+				item.SevenDayCapacity = accountSevenDayQuotaCapacity(account, usage, allocationForAccount(allocations, account.ID))
 				results[i] = item
 				return nil
 			}
@@ -1205,7 +1230,7 @@ func (h *AccountHandler) RefreshUsageWindows(c *gin.Context) {
 			}
 			h.attachSevenDayWindowStats(gctx, account, usage, now)
 			item.SevenDay = usage.SevenDay
-			item.SevenDayCapacity = buildSevenDayQuotaCapacity(item.SevenDay, allocationForAccount(allocations, account.ID))
+			item.SevenDayCapacity = accountSevenDayQuotaCapacity(account, usage, allocationForAccount(allocations, account.ID))
 			results[i] = item
 			return nil
 		})

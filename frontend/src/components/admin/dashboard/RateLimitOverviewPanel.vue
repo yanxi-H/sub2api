@@ -178,13 +178,13 @@
                   {{ t('admin.dashboard.rateLimits.sevenDayUsdCapacity') }}
                 </p>
                 <p v-if="item.seven_day_capacity" class="flex-shrink-0 text-[11px] text-gray-400">
-                  {{ t('admin.dashboard.rateLimits.estimatedTotal', { amount: formatUsd(item.seven_day_capacity.estimated_total_usd) }) }}
+                  {{ t(isFixedPlanCapacity(item) ? 'admin.dashboard.rateLimits.planTotal' : 'admin.dashboard.rateLimits.estimatedTotal', { amount: formatUsd(item.seven_day_capacity.estimated_total_usd) }) }}
                 </p>
               </div>
               <div v-if="item.seven_day_capacity" class="space-y-2.5">
                 <div data-testid="actual-capacity-row">
                   <div class="mb-1 flex min-w-0 items-center justify-between gap-2 text-[11px]">
-                    <span class="truncate font-medium text-gray-600 dark:text-gray-300">{{ t('admin.dashboard.rateLimits.actualRemaining') }}</span>
+                    <span class="truncate font-medium text-gray-600 dark:text-gray-300">{{ t(isFixedPlanCapacity(item) ? 'admin.dashboard.rateLimits.officialRemaining' : 'admin.dashboard.rateLimits.actualRemaining') }}</span>
                     <span class="flex-shrink-0 font-semibold text-gray-800 dark:text-gray-100">
                       {{ t('admin.dashboard.rateLimits.remainingAmount', { amount: formatUsd(item.seven_day_capacity.actual_remaining_usd) }) }} · {{ formatPercent(item.seven_day_capacity.actual_remaining_percent) }}
                     </span>
@@ -193,7 +193,7 @@
                     <div class="h-full rounded-full" :class="remainingClass(item.seven_day_capacity.actual_remaining_percent)" :style="{ width: `${clampedUtilization(item.seven_day_capacity.actual_remaining_percent)}%` }"></div>
                   </div>
                   <p class="mt-1 text-[10px] text-gray-400">
-                    {{ t('admin.dashboard.rateLimits.usedAmount', { amount: formatUsd(item.seven_day_capacity.actual_used_usd) }) }}
+                    {{ t(isFixedPlanCapacity(item) ? 'admin.dashboard.rateLimits.localUsedAmount' : 'admin.dashboard.rateLimits.usedAmount', { amount: formatUsd(item.seven_day_capacity.actual_used_usd) }) }}
                   </p>
                 </div>
                 <div data-testid="allocation-capacity-row">
@@ -988,6 +988,10 @@ async function refreshOpenAIResetCredits(): Promise<void> {
 
 function formatUsd(value: number): string {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function isFixedPlanCapacity(item: AccountUsageWindowItem): boolean {
+  return Boolean(item.seven_day_capacity?.capacity_source && item.seven_day_capacity.capacity_source !== 'inferred')
 }
 
 function formatKeyUsage(used: number, limit: number): string {

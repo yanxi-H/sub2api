@@ -36,6 +36,7 @@ const (
 	cnExtraSuffixWeeklyUsed   = "weekly_used_percent"
 	cnExtraSuffixWeeklyReset  = "weekly_reset_at"
 	cnExtraSuffixUsageUpdated = "usage_updated_at"
+	zhipuPlanLevelExtraKey    = "zhipu_plan_level"
 )
 
 // cnExtraKey 拼接 provider 维度的 extra 键。
@@ -254,6 +255,9 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
 	result.CredentialValid = true
 
 	updates := cnQuotaExtraUpdates(provider, tiers, now)
+	if result.PlanLevel != "" {
+		updates[zhipuPlanLevelExtraKey] = result.PlanLevel
+	}
 	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
 		slog.Warn("cn_quota_persist_failed", "account_id", account.ID, "provider", provider, "error", err)
 	} else {

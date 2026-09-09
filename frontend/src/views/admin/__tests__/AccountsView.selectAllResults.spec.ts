@@ -143,7 +143,9 @@ const mountView = () => mount(AccountsView, {
 describe('admin AccountsView select all filtered results', () => {
   beforeEach(() => {
     localStorage.clear()
-    listAccounts.mockReset()
+    // mockClear 而非 mockReset：上一用例卸载组件后仍可能有迟到的表格重载请求，
+    // 保留实现可避免其拿到 undefined 而产生 unhandled rejection。
+    listAccounts.mockClear()
     listWithEtag.mockReset()
     batchRefresh.mockReset()
     getBatchTodayStats.mockReset()

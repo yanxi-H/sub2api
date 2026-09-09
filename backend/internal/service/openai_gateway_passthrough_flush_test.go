@@ -129,6 +129,26 @@ func runPassthroughFlushTest(
 	return result, recorder, writer, err
 }
 
+func runPassthroughFlushTestWithTTFTMode(
+	t *testing.T,
+	body io.ReadCloser,
+	failAfterWrites int,
+	ttftMode string,
+) (*openaiStreamingResultPassthrough, *httptest.ResponseRecorder, *passthroughFlushTestWriter, error) {
+	t.Helper()
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		openAITTFTMode: ttftMode,
+		expiresAt:      time.Now().Add(time.Minute).UnixNano(),
+	})
+	t.Cleanup(func() {
+		gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+			openAITTFTMode: OpenAITTFTModeSemantic,
+			expiresAt:      time.Now().Add(time.Minute).UnixNano(),
+		})
+	})
+	return runPassthroughFlushTest(t, body, failAfterWrites)
+}
+
 func TestOpenAIStreamingPassthroughFlushesAtCompleteEventBoundaries(t *testing.T) {
 	firstEvent := "event: response.output_text.delta\n" +
 		"id: event-1\n" +
@@ -179,7 +199,12 @@ func TestOpenAIStreamingPassthroughFlushesTerminalEventAtEOFWithoutBlankLine(t *
 		`data: {"type":"response.completed","response":{"id":"resp_eof","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`
 	wantBody := upstream + "\n"
 
-	result, recorder, writer, err := runPassthroughFlushTest(t, io.NopCloser(strings.NewReader(upstream)), -1)
+	result, recorder, writer, err := runPassthroughFlushTestWithTTFTMode(
+		t,
+		io.NopCloser(strings.NewReader(upstream)),
+		-1,
+		OpenAITTFTModeVisible,
+	)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -333,7 +358,7 @@ func TestOpenAIStreamingPassthroughTTFTIgnoresLifecycleEvents(t *testing.T) {
 		delays: []time.Duration{0, 30 * time.Millisecond, 0},
 	}
 
-	result, _, _, err := runPassthroughFlushTest(t, body, -1)
+	result, _, _, err := runPassthroughFlushTestWithTTFTMode(t, body, -1, OpenAITTFTModeVisible)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)

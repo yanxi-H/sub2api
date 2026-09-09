@@ -221,6 +221,42 @@ describe('RateLimitOverviewPanel', () => {
     expect(wrapper.get('[data-testid="allocation-capacity-row"]').text()).toContain('admin.dashboard.rateLimits.allocationUnavailable')
   })
 
+  it('labels fixed plan capacity separately from local billed usage', async () => {
+    listUsageWindows.mockResolvedValue({
+      items: [{
+        ...accountItem,
+        platform: 'zhipu',
+        seven_day_capacity: {
+          capacity_source: 'zhipu_glm_pro',
+          estimated_total_usd: 600,
+          actual_used_usd: 0.111835,
+          actual_remaining_usd: 594,
+          actual_remaining_percent: 99,
+          allocated_usd: 400,
+          unallocated_remaining_usd: 200,
+          unallocated_remaining_percent: 100 / 3,
+          allocation_unlimited: false
+        }
+      }],
+      total: 1,
+      page: 1,
+      page_size: 10,
+      pages: 1
+    })
+
+    const wrapper = mount(RateLimitOverviewPanel)
+    await flushPromises()
+    await wrapper.get('[data-testid="accounts-tab"]').trigger('click')
+    await flushPromises()
+
+    const capacity = wrapper.get('[data-testid="seven-day-capacity"]')
+    expect(capacity.text()).toContain('admin.dashboard.rateLimits.planTotal $600.00')
+    expect(capacity.text()).toContain('admin.dashboard.rateLimits.officialRemaining')
+    expect(capacity.text()).toContain('admin.dashboard.rateLimits.localUsedAmount $0.11')
+    expect(wrapper.get('[data-testid="actual-capacity-row"]').text()).toContain('$594.00')
+    expect(wrapper.get('[data-testid="allocation-capacity-row"]').text()).toContain('$200.00')
+  })
+
   it('shows cached reset credits, expands their expirations, and refreshes only eligible accounts', async () => {
     const wrapper = mount(RateLimitOverviewPanel)
     await flushPromises()

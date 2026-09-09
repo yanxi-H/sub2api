@@ -61,6 +61,7 @@ export interface OpenAIResetCreditRefreshResult {
 }
 
 export interface SevenDayQuotaCapacity {
+  capacity_source?: string
   estimated_total_usd: number
   actual_used_usd: number
   actual_remaining_usd: number

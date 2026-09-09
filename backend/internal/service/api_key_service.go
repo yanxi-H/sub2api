@@ -1029,9 +1029,16 @@ func accountSevenDayResetAt(account *Account, now time.Time) (time.Time, bool) {
 	candidates := []time.Time{
 		parseExtraTime(account.Extra["codex_7d_reset_at"]),
 		parseUnixSecondsTime(account.Extra["passive_usage_7d_reset"]),
+	}
+	// 国产 coding plan（kimi/zhipu）：CNProviderQuotaService 探测到的官方
+	// 周窗口重置时间同样视为产品窗口，优先于通用 quota_weekly_reset_at。
+	if provider := account.GetCodingPlanProvider(); provider != "" {
+		candidates = append(candidates, parseExtraTime(account.Extra[cnExtraKey(provider, cnExtraSuffixWeeklyReset)]))
+	}
+	candidates = append(candidates,
 		parseExtraTime(account.Extra["quota_weekly_reset_at"]),
 		grokBillingSevenDayResetAt(account.Extra),
-	}
+	)
 	for _, resetAt := range candidates {
 		if !resetAt.IsZero() && resetAt.After(now) {
 			return resetAt, true

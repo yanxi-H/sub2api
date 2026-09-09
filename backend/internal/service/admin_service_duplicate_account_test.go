@@ -124,6 +124,7 @@ func TestDuplicateAccountCopiesConfigurationAndResetsRuntimeState(t *testing.T) 
 			"openai_compact_checked_at":       "2026-07-15T00:00:00Z",
 			"session_window_utilization":      0.8,
 			"passive_usage_sampled_at":        "2026-07-15T00:00:00Z",
+			"zhipu_plan_level":                "GLM-Pro",
 			"antigravity_force_token_refresh": true,
 			"antigravity_credits_overages":    map[string]any{"enabled": true},
 			"crs_account_id":                  "remote-42",

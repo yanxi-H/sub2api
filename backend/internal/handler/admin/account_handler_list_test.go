@@ -258,7 +258,7 @@ func TestBuildSevenDayQuotaCapacity(t *testing.T) {
 	capacity := buildSevenDayQuotaCapacity(&service.UsageProgress{
 		Utilization: 40,
 		WindowStats: &service.WindowStats{Cost: 999, UserCost: 32},
-	}, &service.APIKey7dAllocation{AllocatedUSD: 60})
+	}, &service.APIKey7dAllocation{AllocatedUSD: 60}, nil)
 
 	require.NotNil(t, capacity)
 	require.InDelta(t, 80, capacity.EstimatedTotalUSD, 1e-9)
@@ -268,13 +268,49 @@ func TestBuildSevenDayQuotaCapacity(t *testing.T) {
 	require.InDelta(t, 20, *capacity.UnallocatedRemainingUSD, 1e-9)
 	require.InDelta(t, 60, capacity.ActualRemainingPercent, 1e-9)
 	require.InDelta(t, 25, *capacity.UnallocatedRemainingPercent, 1e-9)
+	require.Equal(t, "inferred", capacity.CapacitySource)
+}
+
+func TestBuildSevenDayQuotaCapacityUsesFixedPlanCapacity(t *testing.T) {
+	capacity := buildSevenDayQuotaCapacity(&service.UsageProgress{
+		Utilization: 1,
+		WindowStats: &service.WindowStats{UserCost: 0.111835},
+	}, &service.APIKey7dAllocation{AllocatedUSD: 400}, &service.FixedQuotaCapacity{
+		SevenDayUSD: 600,
+		Source:      "zhipu_glm_pro",
+	})
+
+	require.NotNil(t, capacity)
+	require.Equal(t, "zhipu_glm_pro", capacity.CapacitySource)
+	require.InDelta(t, 600, capacity.EstimatedTotalUSD, 1e-9)
+	require.InDelta(t, 0.111835, capacity.ActualUsedUSD, 1e-9)
+	require.InDelta(t, 594, capacity.ActualRemainingUSD, 1e-9)
+	require.InDelta(t, 99, capacity.ActualRemainingPercent, 1e-9)
+	require.InDelta(t, 200, *capacity.UnallocatedRemainingUSD, 1e-9)
+	require.InDelta(t, 100.0/3, *capacity.UnallocatedRemainingPercent, 1e-9)
+}
+
+func TestAccountSevenDayQuotaCapacitySuppressesUnknownCNCodingPlan(t *testing.T) {
+	account := &service.Account{
+		Platform: service.PlatformZhipu,
+		Credentials: map[string]any{
+			"account_mode": service.AccountModeCoding,
+			"base_url":     "https://open.bigmodel.cn/api/coding/paas/v4",
+		},
+	}
+	usage := &service.UsageInfo{SevenDay: &service.UsageProgress{
+		Utilization: 1,
+		WindowStats: &service.WindowStats{UserCost: 0.1},
+	}}
+
+	require.Nil(t, accountSevenDayQuotaCapacity(account, usage, &service.APIKey7dAllocation{AllocatedUSD: 400}))
 }
 
 func TestBuildSevenDayQuotaCapacityClampsOverageAndRejectsUnknownEstimate(t *testing.T) {
 	overallocated := buildSevenDayQuotaCapacity(&service.UsageProgress{
 		Utilization: 120,
 		WindowStats: &service.WindowStats{UserCost: 120},
-	}, &service.APIKey7dAllocation{AllocatedUSD: 150})
+	}, &service.APIKey7dAllocation{AllocatedUSD: 150}, nil)
 	require.NotNil(t, overallocated)
 	require.Zero(t, overallocated.ActualRemainingUSD)
 	require.Zero(t, *overallocated.UnallocatedRemainingUSD)
@@ -284,7 +320,7 @@ func TestBuildSevenDayQuotaCapacityClampsOverageAndRejectsUnknownEstimate(t *tes
 	unlimited := buildSevenDayQuotaCapacity(&service.UsageProgress{
 		Utilization: 50,
 		WindowStats: &service.WindowStats{UserCost: 50},
-	}, &service.APIKey7dAllocation{Unlimited: true})
+	}, &service.APIKey7dAllocation{Unlimited: true}, nil)
 	require.NotNil(t, unlimited)
 	require.True(t, unlimited.AllocationUnlimited)
 	require.Zero(t, *unlimited.UnallocatedRemainingUSD)
@@ -293,7 +329,7 @@ func TestBuildSevenDayQuotaCapacityClampsOverageAndRejectsUnknownEstimate(t *tes
 	allocationUnavailable := buildSevenDayQuotaCapacity(&service.UsageProgress{
 		Utilization: 50,
 		WindowStats: &service.WindowStats{UserCost: 50},
-	}, nil)
+	}, nil, nil)
 	require.NotNil(t, allocationUnavailable)
 	require.Nil(t, allocationUnavailable.AllocatedUSD)
 	require.Nil(t, allocationUnavailable.UnallocatedRemainingUSD)
@@ -301,11 +337,11 @@ func TestBuildSevenDayQuotaCapacityClampsOverageAndRejectsUnknownEstimate(t *tes
 	require.Nil(t, buildSevenDayQuotaCapacity(&service.UsageProgress{
 		Utilization: 0,
 		WindowStats: &service.WindowStats{UserCost: 10},
-	}, &service.APIKey7dAllocation{AllocatedUSD: 5}))
+	}, &service.APIKey7dAllocation{AllocatedUSD: 5}, nil))
 	require.Nil(t, buildSevenDayQuotaCapacity(&service.UsageProgress{
 		Utilization: 25,
 		WindowStats: &service.WindowStats{UserCost: 0},
-	}, &service.APIKey7dAllocation{AllocatedUSD: 5}))
+	}, &service.APIKey7dAllocation{AllocatedUSD: 5}, nil))
 }
 
 func TestSevenDayWindowStartUsesCurrentUpstreamWindow(t *testing.T) {
