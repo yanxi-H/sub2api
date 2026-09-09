@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-delivery-20260907T150300275Z-65670-3eedc9a5ad09",
+  "runId": "20260907T150300275Z-65670-3eedc9a5ad09",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "StopDelivery"
+  },
+  "revision": "17463b99e6adb5ea632e71904ea9eeee48211582",
+  "diffHash": "9434fc754b1bc41929b5f1965e71992e788f910bf1f7677d0c6ba12b862e38e7",
+  "rulesVersion": "unavailable",
+  "sessionHash": "a93224d5a71c94ceb2642f1fd7a318836b1a93bae9d14179e524d081203fa539",
+  "reportRef": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96-20260907T150300275Z-65670-3eedc9a5ad09.json",
+  "events": [
+    {
+      "eventId": "hook-9781d1df775677b2f7a133f87541ca73",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_blocked",
+      "at": "2026-09-07T15:03:00.513Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 155,
+      "endLine": 155,
+      "reasonCode": "stop_rewake",
+      "reportedToAgent": true,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 0
+    },
+    {
+      "eventId": "hook-50ac2c67207b9b85f484f58115ff5b8c",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_blocked",
+      "at": "2026-09-07T15:03:00.513Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 210,
+      "endLine": 210,
+      "reasonCode": "stop_rewake",
+      "reportedToAgent": true,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 1
+    },
+    {
+      "eventId": "hook-e56cef6c33092a06d29871205b660968",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_blocked",
+      "at": "2026-09-07T15:03:00.513Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 246,
+      "endLine": 246,
+      "reasonCode": "stop_rewake",
+      "reportedToAgent": true,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 2
+    }
+  ],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-09-07T15:03:00.742Z"
+}

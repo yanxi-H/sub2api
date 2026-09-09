@@ -1,0 +1,566 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260907T150300275Z-65670-3eedc9a5ad09",
+  "runId": "20260907T150300275Z-65670-3eedc9a5ad09",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "17463b99e6adb5ea632e71904ea9eeee48211582",
+  "diffHash": "9434fc754b1bc41929b5f1965e71992e788f910bf1f7677d0c6ba12b862e38e7",
+  "rulesVersion": "unavailable",
+  "sessionHash": "a93224d5a71c94ceb2642f1fd7a318836b1a93bae9d14179e524d081203fa539",
+  "reportRef": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96-20260907T150300275Z-65670-3eedc9a5ad09.json",
+  "events": [
+    {
+      "eventId": "hook-d1041bcb78424f7af2268a7c387b6d2c",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 155,
+      "endLine": 155,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 0
+    },
+    {
+      "eventId": "hook-88d0669d3c24da5c8ffba044a4cee795",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 210,
+      "endLine": 210,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 1
+    },
+    {
+      "eventId": "hook-e69e28363e325da13b7cef98359c5445",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 246,
+      "endLine": 246,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 2
+    },
+    {
+      "eventId": "hook-8ed0a58615ff627ed47ecc3758fbe43c",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 289,
+      "endLine": 289,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 3
+    },
+    {
+      "eventId": "hook-9c619ec7ae19540e54dfbbefe5952398",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 325,
+      "endLine": 325,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 4
+    },
+    {
+      "eventId": "hook-efd6c16f935b41640b19d3ca2daec928",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 364,
+      "endLine": 364,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 5
+    },
+    {
+      "eventId": "hook-ffab1e5ff15f071e64b188c3c0eb5aa4",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 398,
+      "endLine": 398,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 6
+    },
+    {
+      "eventId": "hook-afac60cd445c246f951e7abd8bbc343d",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 440,
+      "endLine": 440,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 7
+    },
+    {
+      "eventId": "hook-ca5d0bbcd292043f596fdc3fabd5ba17",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 478,
+      "endLine": 478,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 8
+    },
+    {
+      "eventId": "hook-713db0d3e035b68dedf428f61a84c9dd",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 525,
+      "endLine": 525,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 9
+    },
+    {
+      "eventId": "hook-3e246c3d623fc8cfbb09fdb6301056d5",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 563,
+      "endLine": 563,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 10
+    },
+    {
+      "eventId": "hook-7ee7da977ed12b92fc0f640fb20cedc8",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 594,
+      "endLine": 594,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 11
+    },
+    {
+      "eventId": "hook-afb39722583ec3259b95ee847082f82a",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 627,
+      "endLine": 627,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 12
+    },
+    {
+      "eventId": "hook-4f110dc20f0d174ef817d4d720dc82a4",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 675,
+      "endLine": 675,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 13
+    },
+    {
+      "eventId": "hook-8acdb806eb6dd6f22ab5f322ce9c5ed1",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 699,
+      "endLine": 699,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 14
+    },
+    {
+      "eventId": "hook-16af9b4606b246d6f7088d364b25abaf",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 731,
+      "endLine": 731,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 15
+    },
+    {
+      "eventId": "hook-02e4c9a4eb2916695e88ea259843bbf7",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 756,
+      "endLine": 756,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 16
+    },
+    {
+      "eventId": "hook-2efda38e6de9e0baeca5fa01cf978b90",
+      "findingId": "mimosa-7861654243ec6b2a740768ec",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 787,
+      "endLine": 787,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267"
+      },
+      "sequence": 17
+    },
+    {
+      "eventId": "hook-e291d1800d130948e193fbcd65ccfc4c",
+      "findingId": "mimosa-162b0daf3030e5785b21ddda",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 808,
+      "endLine": 808,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf"
+      },
+      "sequence": 18
+    },
+    {
+      "eventId": "hook-6ff3c5d4dba1db0ba34241f172bc95b9",
+      "findingId": "mimosa-162b0daf3030e5785b21ddda",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 833,
+      "endLine": 833,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf"
+      },
+      "sequence": 19
+    },
+    {
+      "eventId": "hook-6b849fc2836e1392d18a0ca6de63adf9",
+      "findingId": "mimosa-162b0daf3030e5785b21ddda",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 858,
+      "endLine": 858,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf"
+      },
+      "sequence": 20
+    },
+    {
+      "eventId": "hook-ebba9c92e0dabdd77f1e2d0b909d513e",
+      "findingId": "mimosa-162b0daf3030e5785b21ddda",
+      "type": "finding_observed",
+      "at": "2026-09-07T15:03:00.275Z",
+      "identity": {
+        "projectRelativeFile": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ruleId": "security",
+        "codeEvidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 888,
+      "endLine": 888,
+      "reasonCode": "observe",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf"
+      },
+      "sequence": 21
+    }
+  ],
+  "observedFindingIds": [
+    "mimosa-7861654243ec6b2a740768ec",
+    "mimosa-2df4d8172ec93e809591b223",
+    "mimosa-2499f9933e1ed174403aa5a1",
+    "mimosa-1f38e3cf72fa0ccd290d931e",
+    "mimosa-429877a8e4621c7a69c9126f",
+    "mimosa-601b86222d7147321450a538",
+    "mimosa-162b0daf3030e5785b21ddda"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-07T15:03:00.495Z"
+}

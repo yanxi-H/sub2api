@@ -1,10 +1,10 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-09-07T14:05:19.110Z",
+  "recordedAt": "2026-09-08T03:56:57.891Z",
   "sessionId": "sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96",
   "event": "PostToolUse",
   "toolName": "Edit",
-  "file": "frontend/src/views/admin/__tests__/GroupsView.codexManifest.spec.ts",
+  "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
   "outcome": "clear",
   "coverage": "complete",
   "findingCount": 0,

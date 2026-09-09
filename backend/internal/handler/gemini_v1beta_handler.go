@@ -662,7 +662,6 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				UpstreamEndpoint:   upstreamEndpoint,
 				UserAgent:          userAgent,
 				IPAddress:          clientIP,
-				RequestBodyBytes:   requestBodyBytes,
 				RequestPayloadHash: requestPayloadHash,
 				RequestBodyBytes:   int64(len(body)),
 				ForceCacheBilling:  forceCacheBilling,

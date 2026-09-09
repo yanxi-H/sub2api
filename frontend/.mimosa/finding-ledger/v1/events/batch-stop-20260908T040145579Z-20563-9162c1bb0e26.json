@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260908T040145579Z-20563-9162c1bb0e26",
+  "runId": "20260908T040145579Z-20563-9162c1bb0e26",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": ".",
+        "detail": "baseline capture had enumeration or snapshot errors",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": ".",
+        "detail": "baseline_partial: baseline capture had enumeration or snapshot errors",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "a8e9e6899dcd9aff514e76ce72dec39b7ca3124b",
+  "diffHash": "782bdd790cd01d5b210cce84d82f3c27077560c5be70386afb449aa98afe133a",
+  "rulesVersion": "unavailable",
+  "sessionHash": "a93224d5a71c94ceb2642f1fd7a318836b1a93bae9d14179e524d081203fa539",
+  "reportRef": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96-20260908T040145579Z-20563-9162c1bb0e26.json",
+  "events": [],
+  "observedFindingIds": [
+    "mimosa-72e82839edba09aac878b879",
+    "mimosa-180051533dfa525fd98f33aa",
+    "mimosa-3190c0a00478e3b1357fe1e3",
+    "mimosa-616d679467ad033934d58657",
+    "mimosa-bb79a87a05ef5efcff522999",
+    "mimosa-9ccc25c451369a9c8574ed83",
+    "mimosa-a06f8a9f911e9a4ba3c904b9",
+    "mimosa-e5870bdf9c07d86ef43b48fd",
+    "mimosa-0265f60f2a0e1b670e6eee03",
+    "mimosa-6e20cdec6f776ee8ff5b5f89",
+    "mimosa-fd27536c8727ef56a5681d89",
+    "mimosa-0089c43bde552d6e08fbfe98",
+    "mimosa-b2aca5df9cfe07b4a1ce94a8",
+    "mimosa-03bb4ee65224dc463a4b7bda",
+    "mimosa-48f28ac400d2078bdc58e721",
+    "mimosa-9acb811330ac5d2364906ff5",
+    "mimosa-ec536aeb65b64985c99047ed",
+    "mimosa-ac0b9d49c3e10ae92a40bf6d",
+    "mimosa-0f3b87b34c65ab7b400df473"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/api/__tests__/tokenRefresh.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-08T04:01:45.796Z"
+}

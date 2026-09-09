@@ -1,0 +1,1214 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20260907T150300275Z-65670-3eedc9a5ad09",
+  "run_status": "completed",
+  "errors": [],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "complete",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": true,
+      "captured_files": 3172,
+      "candidate_limit": 5000,
+      "truncated": false,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 2
+    },
+    "change_tracking": {
+      "touched_observed": 0,
+      "touched_retained": 0,
+      "truncated": false,
+      "bash_mutation": true,
+      "bash_discovered": 2,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 2,
+      "selected_files": 2,
+      "limit": 20,
+      "truncated": false
+    },
+    "scanning": {
+      "required_files": 1,
+      "scanned_files": 1,
+      "skipped_files": 0,
+      "failed_files": 0,
+      "project_checks_required": 1,
+      "project_checks_completed": 1
+    },
+    "notification": {
+      "eligible_findings": 22,
+      "detailed_findings": 3,
+      "detail_limit": 3,
+      "truncated": true
+    },
+    "reason_counts": {},
+    "reasons": [],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-09-07T15:03:00.275Z",
+  "session_id": "sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96",
+  "target": ".",
+  "revision": "17463b99e6adb5ea632e71904ea9eeee48211582",
+  "rules_version": "unavailable",
+  "diff_hash": "9434fc754b1bc41929b5f1965e71992e788f910bf1f7677d0c6ba12b862e38e7",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 2,
+    "changed_files": [
+      {
+        "file": "frontend/pnpm-lock.yaml",
+        "ranges": [
+          {
+            "start": 7,
+            "end": 12
+          },
+          {
+            "start": 124,
+            "end": 124
+          },
+          {
+            "start": 1867,
+            "end": 1867
+          },
+          {
+            "start": 3500,
+            "end": 3500
+          },
+          {
+            "start": 3506,
+            "end": 3506
+          },
+          {
+            "start": 3513,
+            "end": 3513
+          },
+          {
+            "start": 3530,
+            "end": 3530
+          }
+        ],
+        "before_hash": "4cf6e7c5525c785a320c1beb4e2e2b575b14062b0b669bc9a90b874135714ff8",
+        "after_hash": "ac97b87456f4b4242330f7f4542413c522e3d58f982d5137b99c1b0e889ebd9c"
+      },
+      {
+        "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+        "ranges": [
+          {
+            "start": 155,
+            "end": 155
+          },
+          {
+            "start": 210,
+            "end": 210
+          },
+          {
+            "start": 246,
+            "end": 246
+          },
+          {
+            "start": 289,
+            "end": 289
+          },
+          {
+            "start": 325,
+            "end": 325
+          },
+          {
+            "start": 364,
+            "end": 364
+          },
+          {
+            "start": 398,
+            "end": 398
+          },
+          {
+            "start": 440,
+            "end": 440
+          },
+          {
+            "start": 478,
+            "end": 478
+          },
+          {
+            "start": 525,
+            "end": 525
+          },
+          {
+            "start": 563,
+            "end": 563
+          },
+          {
+            "start": 594,
+            "end": 594
+          },
+          {
+            "start": 627,
+            "end": 627
+          },
+          {
+            "start": 675,
+            "end": 675
+          },
+          {
+            "start": 699,
+            "end": 699
+          },
+          {
+            "start": 731,
+            "end": 731
+          },
+          {
+            "start": 756,
+            "end": 756
+          },
+          {
+            "start": 787,
+            "end": 787
+          },
+          {
+            "start": 808,
+            "end": 808
+          },
+          {
+            "start": 833,
+            "end": 833
+          },
+          {
+            "start": 858,
+            "end": 858
+          },
+          {
+            "start": 888,
+            "end": 888
+          }
+        ],
+        "before_hash": "b8d3c6d5e765ad901caf6ba9e705b16f5a67b4f8b7672c347009cf1350f03565",
+        "after_hash": "ad3f531aef4ea71fa8830c0f02797c9e74c13ef953edb5b12f007bc88fa046a3"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-09-07T15:02:58.534Z",
+    "completed_at": "2026-09-07T15:03:00.275Z",
+    "duration_ms": 1741,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "complete",
+    "latencyMs": 1741,
+    "peakMemoryBytes": 213991424,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 1,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 22,
+  "rewake_finding_count": 1,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 155,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 210,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 246,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 289,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 325,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 364,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 398,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 440,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 478,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 525,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 563,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 594,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 627,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 675,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 699,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 731,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 756,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 787,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "blocked",
+      "decision": "stop_rewake",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 808,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "candidate",
+      "decision": "observe",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 833,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "candidate",
+      "decision": "observe",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 858,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "candidate",
+      "decision": "observe",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "runtime_oracle": false
+      }
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 888,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "status": "candidate",
+      "decision": "observe",
+      "at": "2026-09-07T15:03:00.275Z",
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "source": "semgrep",
+        "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+        "runtime_oracle": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 155,
+      "end_line": 155,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 155,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 210,
+      "end_line": 210,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 210,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 246,
+      "end_line": 246,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 246,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 289,
+      "end_line": 289,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 289,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 325,
+      "end_line": 325,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 325,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 364,
+      "end_line": 364,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 364,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 398,
+      "end_line": 398,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 398,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 440,
+      "end_line": 440,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 440,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 478,
+      "end_line": 478,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 478,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 525,
+      "end_line": 525,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 525,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 563,
+      "end_line": 563,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 563,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 594,
+      "end_line": 594,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 594,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 627,
+      "end_line": 627,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 627,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 675,
+      "end_line": 675,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 675,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 699,
+      "end_line": 699,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 699,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 731,
+      "end_line": 731,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 731,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 756,
+      "end_line": 756,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 756,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-7861654243ec6b2a740768ec",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 787,
+      "end_line": 787,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "blocked",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 787,
+          "evidence_hash": "9876f673e8ac2b4101693f737d938f55df1d7094aae251a546b95571bb365267",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": true
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 808,
+      "end_line": 808,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "candidate",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 808,
+          "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": false
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 833,
+      "end_line": 833,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "candidate",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 833,
+          "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": false
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 858,
+      "end_line": 858,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "candidate",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 858,
+          "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": false
+    },
+    {
+      "finding_id": "mimosa-162b0daf3030e5785b21ddda",
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "line": 888,
+      "end_line": 888,
+      "severity": "high",
+      "category": "硬编码凭据",
+      "kind": "semgrep",
+      "advisory": false,
+      "status": "candidate",
+      "evidence_boundary": "candidate",
+      "evidence": [
+        {
+          "kind": "static_scan",
+          "boundary": "candidate",
+          "producer": "deterministic",
+          "source": "semgrep",
+          "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+          "line": 888,
+          "evidence_hash": "deb2d938806205af8b262130b85fc9ac79ef8386e8e1c216babec4558335fccf",
+          "runtime_oracle": false
+        }
+      ],
+      "already_reported_to_agent": false,
+      "selected_for_rewake": false
+    }
+  ],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96-20260907T150300275Z-65670-3eedc9a5ad09.json",
+    "latest_report": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96.json",
+    "history_summary": ".mimosa/history/run-20260907T150300275Z-65670-3eedc9a5ad09.json"
+  }
+}

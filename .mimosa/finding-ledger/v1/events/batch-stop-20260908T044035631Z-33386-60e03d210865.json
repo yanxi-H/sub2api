@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260908T044035631Z-33386-60e03d210865",
+  "runId": "20260908T044035631Z-33386-60e03d210865",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": [
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": ".",
+        "detail": "baseline capture had enumeration or snapshot errors",
+        "affectsCompletion": false
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "a8e9e6899dcd9aff514e76ce72dec39b7ca3124b",
+  "diffHash": "9eddf17ad8c27d5d6ffd7a1ed8173cc8288a6fce936c75c0b5735fec2de371b0",
+  "rulesVersion": "unavailable",
+  "sessionHash": "a93224d5a71c94ceb2642f1fd7a318836b1a93bae9d14179e524d081203fa539",
+  "reportRef": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96-20260908T044035631Z-33386-60e03d210865.json",
+  "events": [],
+  "observedFindingIds": [
+    "mimosa-2df4d8172ec93e809591b223",
+    "mimosa-2499f9933e1ed174403aa5a1",
+    "mimosa-1f38e3cf72fa0ccd290d931e",
+    "mimosa-429877a8e4621c7a69c9126f",
+    "mimosa-601b86222d7147321450a538",
+    "mimosa-162b0daf3030e5785b21ddda"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "frontend/src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-08T04:40:35.856Z"
+}

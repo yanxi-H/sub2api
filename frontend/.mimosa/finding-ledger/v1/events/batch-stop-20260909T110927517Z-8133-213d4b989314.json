@@ -1,0 +1,183 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260909T110927517Z-8133-213d4b989314",
+  "runId": "20260909T110927517Z-8133-213d4b989314",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "bash_discovery_truncated",
+        "stage": "bash-discovery",
+        "target": "src/components/account/__tests__/EditAccountModal.spec.ts",
+        "detail": "changed-file discovery exceeded 80 files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "candidate_limit_exceeded",
+        "stage": "candidate-select",
+        "target": "src/views/admin/__tests__/AccountsView.schedulerScore.spec.ts",
+        "detail": "60 changed reviewable file(s) were not scanned because the limit is 20",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "src/views/user/__tests__/CustomPageView.spec.ts",
+        "detail": "file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "src/views/auth/__tests__/LoginView.spec.ts",
+        "detail": "file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "src/components/account/__tests__/EditAccountModal.spec.ts",
+        "detail": "bash_discovery_truncated: changed-file discovery exceeded 80 files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "candidate-select",
+        "target": "src/views/admin/__tests__/AccountsView.schedulerScore.spec.ts",
+        "detail": "candidate_limit_exceeded: 60 changed reviewable file(s) were not scanned because the limit is 20",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "src/views/user/__tests__/CustomPageView.spec.ts",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "src/views/auth/__tests__/LoginView.spec.ts",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "01332b2e36b4d42888d0df6e1631411e31b05b33",
+  "diffHash": "db34459d4438e63c1aa19aa3bc2dc7557f8ddd0f388b99706725556522708faa",
+  "rulesVersion": "unavailable",
+  "sessionHash": "a93224d5a71c94ceb2642f1fd7a318836b1a93bae9d14179e524d081203fa539",
+  "reportRef": ".mimosa/reports/task-review-sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96-20260909T110927517Z-8133-213d4b989314.json",
+  "events": [],
+  "observedFindingIds": [
+    "mimosa-ff4e3890660d67245a70b0a0"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "src/views/user/__tests__/AirwallexPaymentView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/user/__tests__/CustomPageView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/user/__tests__/PaymentResultView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/user/__tests__/PaymentView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/user/__tests__/StripePaymentView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/user/__tests__/paymentWechatResume.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/EmailVerifyView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/LinuxDoCallbackView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/LoginView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/OAuthCallbackView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/OidcCallbackView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/TencentCaptchaActionGate.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/TencentCaptchaForgotPassword.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/WechatCallbackView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/auth/__tests__/WechatPaymentCallbackView.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/admin/ops/components/__tests__/OpsErrorLogTable.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/admin/ops/components/__tests__/OpsSystemLogTable.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/admin/__tests__/AccountsView.bulkEdit.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/admin/__tests__/AccountsView.lite.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/views/admin/__tests__/AccountsView.priorityColumn.spec.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-09T11:09:27.738Z"
+}

@@ -1,14 +1,14 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-09-07T14:10:22.559Z",
+  "recordedAt": "2026-09-08T03:59:59.004Z",
   "sessionId": "sess_e6506fe7-dfd8-461c-8050-f5165d7dbc96",
   "event": "PostToolUse",
   "toolName": "Edit",
-  "file": "src/views/auth/__tests__/EmailVerifyView.spec.ts",
+  "file": "src/api/__tests__/tokenRefresh.spec.ts",
   "outcome": "clear",
   "coverage": "complete",
   "findingCount": 0,
-  "durationMs": 3,
+  "durationMs": 4,
   "hostState": "hook_complete",
   "reportHint": ".mimosa/reports/"
 }
