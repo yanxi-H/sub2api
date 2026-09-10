@@ -3597,7 +3597,11 @@ const loadSeenDevices = async () => {
   seenDevicesLoading.value = true
   try {
     seenDevices.value = await adminAPI.accounts.listCodexSeenDevices()
-  } catch {
+    if (seenDevices.value.length === 0) {
+      appStore.showInfo(t('admin.accounts.openai.codexDeviceEmpty'))
+    }
+  } catch (error) {
+    appStore.showError(error instanceof Error ? error.message : t('admin.accounts.failedToUpdate'))
     seenDevices.value = []
   } finally {
     seenDevicesLoading.value = false

@@ -649,7 +649,8 @@ export default {
         codexDeviceId: 'Device ID',
         codexDeviceIdPlaceholder: 'Paste or pick from the observed list',
         codexDevicePick: 'Load observed devices',
-        codexDeviceIdHint:
+
+codexDeviceEmpty: 'No observations yet: after deploying the new build, let users generate some Codex traffic first, then retry',        codexDeviceIdHint:
           'Lists x-codex-installation-id values observed from each API key gateway traffic. The selected ID is used by device-mode fingerprint convergence.',
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:
