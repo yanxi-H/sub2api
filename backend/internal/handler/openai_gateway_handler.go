@@ -2519,6 +2519,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
+	// 观测真实设备：WS 入口同样记录 x-codex-installation-id（与 HTTP 入口一致）。
+	service.RecordCodexSeenDeviceIfPresent(h.codexSeenDevices, c, apiKey.ID)
+
 	reqLog := requestLogger(
 		c,
 		"handler.openai_gateway.responses_ws",
