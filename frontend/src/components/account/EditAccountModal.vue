@@ -2284,6 +2284,45 @@
             <Select v-model="codexFingerprintMode" data-testid="edit-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
           </div>
         </div>
+
+        <!-- 设备 ID：从网关观测列表选择（device 档生效） -->
+        <div
+          v-if="codexFingerprintMode === 'device' || codexFingerprintMode === 'session' || codexFingerprintMode === 'full'"
+          class="mt-3"
+        >
+          <label class="input-label">{{ t('admin.accounts.openai.codexDeviceId') }}</label>
+          <div class="flex gap-2">
+            <input
+              v-model="codexDeviceId"
+              type="text"
+              :placeholder="t('admin.accounts.openai.codexDeviceIdPlaceholder')"
+              class="input flex-1 font-mono text-xs"
+            />
+            <button
+              type="button"
+              class="btn btn-secondary text-xs whitespace-nowrap"
+              :disabled="seenDevicesLoading"
+              data-testid="edit-codex-device-pick"
+              @click="loadSeenDevices"
+            >
+              {{ seenDevicesLoading ? '...' : t('admin.accounts.openai.codexDevicePick') }}
+            </button>
+          </div>
+          <div v-if="seenDevices.length > 0" class="mt-2 space-y-1 max-h-32 overflow-y-auto">
+            <button
+              v-for="device in seenDevices"
+              :key="device.device_id"
+              type="button"
+              class="w-full text-left px-2 py-1 text-xs rounded bg-gray-50 dark:bg-dark-700 hover:bg-gray-100 dark:hover:bg-dark-600 font-mono break-all"
+              @click="codexDeviceId = device.device_id"
+            >
+              {{ device.device_id }}
+            </button>
+          </div>
+          <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+            {{ t('admin.accounts.openai.codexDeviceIdHint') }}
+          </p>
+        </div>
       </div>
 
       <!-- OpenAI 订阅档位手动覆盖（Plus/Pro/Free），仅 OAuth 非影子账号 -->
@@ -3549,6 +3588,22 @@ const codexFingerprintModeOptions = computed(() => [
   { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
 ])
 
+const codexDeviceId = ref('')
+const seenDevices = ref<{ device_id: string; last_seen_at: number }[]>([])
+const seenDevicesLoading = ref(false)
+
+const loadSeenDevices = async () => {
+  if (seenDevicesLoading.value) return
+  seenDevicesLoading.value = true
+  try {
+    seenDevices.value = await adminAPI.accounts.listCodexSeenDevices()
+  } catch {
+    seenDevices.value = []
+  } finally {
+    seenDevicesLoading.value = false
+  }
+}
+
 const openAIWSModeOptions = computed(() => [
   { value: OPENAI_WS_MODE_OFF, label: t('admin.accounts.openai.wsModeOff') },
   { value: OPENAI_WS_MODE_CTX_POOL, label: t('admin.accounts.openai.wsModeCtxPool') },
@@ -4060,6 +4115,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fpMode || '')
         ? fpMode as CodexFingerprintMode
         : 'off')
+      codexDeviceId.value = typeof extra?.openai_device_id === 'string' ? extra.openai_device_id : ''
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
     const compactMappings = credentials?.compact_model_mapping as Record<string, string> | undefined
@@ -5596,6 +5652,12 @@ const handleSubmit = async () => {
           newExtra.codex_fingerprint_mode = codexFingerprintMode.value
         } else {
           delete newExtra.codex_fingerprint_mode
+        }
+        const deviceId = codexDeviceId.value.trim()
+        if (deviceId) {
+          newExtra.openai_device_id = deviceId
+        } else {
+          delete newExtra.openai_device_id
         }
       }
 

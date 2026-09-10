@@ -44,6 +44,7 @@ type OpenAIGatewayHandler struct {
 	grokMediaEligibilityProber grokMediaEligibilityProber
 	opsService                 *service.OpsService
 	concurrencyHelper          *ConcurrencyHelper
+	codexSeenDevices           service.CodexSeenDeviceRecorder
 	imageLimiter               *imageConcurrencyLimiter
 	maxAccountSwitches         int
 	cfg                        *config.Config
@@ -396,6 +397,7 @@ func NewOpenAIGatewayHandler(
 	errorPassthroughService *service.ErrorPassthroughService,
 	contentModerationService *service.ContentModerationService,
 	opsService *service.OpsService,
+	codexSeenDevices service.CodexSeenDeviceRecorder,
 	cfg *config.Config,
 ) *OpenAIGatewayHandler {
 	pingInterval := time.Duration(0)
@@ -414,6 +416,7 @@ func NewOpenAIGatewayHandler(
 		errorPassthroughService:  errorPassthroughService,
 		contentModerationService: contentModerationService,
 		opsService:               opsService,
+		codexSeenDevices:         codexSeenDevices,
 		concurrencyHelper:        NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval),
 		imageLimiter:             &imageConcurrencyLimiter{},
 		maxAccountSwitches:       maxAccountSwitches,
@@ -467,6 +470,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+
+	// 观测真实设备：记录该 Key 的 x-codex-installation-id，供指纹收敛(device 档)选择真机设备。
+	service.RecordCodexSeenDeviceIfPresent(h.codexSeenDevices, c, apiKey.ID)
+
 	performanceRequestID := ""
 	if requestID, ok := clientRequestContext.Value(ctxkey.RequestID).(string); ok {
 		performanceRequestID = strings.TrimSpace(requestID)

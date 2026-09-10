@@ -725,6 +725,11 @@ export default {
         codexFingerprintDevice: '仅设备',
         codexFingerprintSession: '设备+会话',
         codexFingerprintFull: '完全收敛',
+
+        codexDeviceId: '设备 ID',
+        codexDeviceIdPlaceholder: '粘贴或从下方列表选择',
+        codexDevicePick: '获取已观测设备',
+        codexDeviceIdHint: '列出网关从各 API Key 流量中观测到的 x-codex-installation-id。选择后指纹收敛(device 档)将使用该真实设备 ID。',
         codexImageTool: 'Codex 图片桥接策略',
         codexImageToolDesc:
           '统一控制 Codex /responses 文本请求的 hosted image_generation 桥接和客户端图片工具声明。hosted 工具自动注入仅适用于非 Responses Lite 请求；账号级策略优先于渠道和全局配置，不影响独立图片生成接口。',

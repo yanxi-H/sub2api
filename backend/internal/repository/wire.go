@@ -40,6 +40,10 @@ func ProvidePricingRemoteClient(cfg *config.Config) service.PricingRemoteClient 
 
 // ProvideSessionLimitCache 创建会话限制缓存
 // 用于 Anthropic OAuth/SetupToken 账号的并发会话数量控制
+func ProvideCodexSeenDeviceRecorder(rdb *redis.Client) service.CodexSeenDeviceRecorder {
+	return NewCodexSeenDeviceRepo(rdb)
+}
+
 func ProvideSessionLimitCache(rdb *redis.Client, cfg *config.Config) service.SessionLimitCache {
 	defaultIdleTimeoutMinutes := 5 // 默认 5 分钟空闲超时
 	if cfg != nil && cfg.Gateway.SessionIdleTimeoutMinutes > 0 {
@@ -116,6 +120,7 @@ var ProviderSet = wire.NewSet(
 	NewInternal500CounterCache,
 	ProvideConcurrencyCache,
 	ProvideSessionLimitCache,
+	ProvideCodexSeenDeviceRecorder,
 	NewRPMCache,
 	NewUserRPMCache,
 	NewUserMsgQueueCache,

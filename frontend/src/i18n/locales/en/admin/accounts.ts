@@ -645,6 +645,12 @@ export default {
         codexFingerprintDevice: 'Device only',
         codexFingerprintSession: 'Device + Session',
         codexFingerprintFull: 'Full convergence',
+
+        codexDeviceId: 'Device ID',
+        codexDeviceIdPlaceholder: 'Paste or pick from the observed list',
+        codexDevicePick: 'Load observed devices',
+        codexDeviceIdHint:
+          'Lists x-codex-installation-id values observed from each API key gateway traffic. The selected ID is used by device-mode fingerprint convergence.',
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:
           'Controls the hosted image_generation bridge and client-declared image tools on Codex /responses text requests. Hosted auto-injection applies only to non-Responses Lite requests. Account policy takes precedence over channel and global settings; standalone image-generation endpoints are unaffected.',

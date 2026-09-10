@@ -1205,7 +1205,27 @@ export const accountsAPI = {
   saveOllamaCloudUsageSession,
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
-  refreshOllamaCloudUsage
+  refreshOllamaCloudUsage,
+  listCodexSeenDevices
 }
 
 export default accountsAPI
+
+// ==================== Codex 已观测设备（指纹收敛 device 档选择） ====================
+
+export interface CodexSeenDevice {
+  device_id: string
+  last_seen_at: number
+}
+
+/**
+ * List Codex device IDs observed from gateway traffic (x-codex-installation-id)
+ * No param: all devices deduped; with api_key_id: scoped to that key
+ */
+export async function listCodexSeenDevices(apiKeyId?: number): Promise<CodexSeenDevice[]> {
+  const url = apiKeyId
+    ? `/admin/codex/seen-devices?api_key_id=${apiKeyId}`
+    : '/admin/codex/seen-devices'
+  const { data } = await apiClient.get<{ devices: CodexSeenDevice[] }>(url)
+  return data.devices ?? []
+}
