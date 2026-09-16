@@ -1,8 +1,4 @@
-
-
-const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');;
-const FIXTURE_TOKEN_ResumeSubscription7 = ['resume-subscription-', '7'].join('');;
-const FIXTURE_TOKEN_ResumeTokenH5 = ['resume-token-h', '5'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
@@ -30,6 +26,11 @@ const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
 const translate = vi.hoisted(() => vi.fn((key: string) => key))
+// Public settings live in a reactive holder so tests can flip feature flags after mount
+// and exercise the watchers that react to them.
+const appStoreState = vi.hoisted(() => ({
+  setPublicSettings: (_value: Record<string, unknown> | undefined) => {},
+}))
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -77,13 +78,23 @@ vi.mock('@/stores/subscriptions', () => ({
   }),
 }))
 
-vi.mock('@/stores', () => ({
-  useAppStore: () => ({
-    showError,
-    showInfo,
-    showWarning,
-  }),
-}))
+vi.mock('@/stores', async () => {
+  const { reactive } = await import('vue')
+  const state = reactive({ cachedPublicSettings: undefined as Record<string, unknown> | undefined })
+  appStoreState.setPublicSettings = (value) => {
+    state.cachedPublicSettings = value
+  }
+  return {
+    useAppStore: () => ({
+      showError,
+      showInfo,
+      showWarning,
+      get cachedPublicSettings() {
+        return state.cachedPublicSettings
+      },
+    }),
+  }
+})
 
 vi.mock('@/api/payment', () => ({
   paymentAPI: {
@@ -577,7 +588,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     routeState.path = '/purchase'
     routeState.query = {
       wechat_resume: '1',
-      wechat_resume_token: FIXTURE_TOKEN_ResumeToken123,
+      wechat_resume_token: 'resume-token-123',
     }
     routerReplace.mockReset().mockResolvedValue(undefined)
     routerPush.mockReset().mockResolvedValue(undefined)
@@ -619,7 +630,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
       query: {
         order_id: '123',
         out_trade_no: 'sub2_jsapi_123',
-        resume_token: FIXTURE_TOKEN_ResumeToken123,
+        resume_token: 'resume-token-123',
       },
     })
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
@@ -708,7 +719,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     await flushPromises()
 
     expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({
-      wechat_resume_token: FIXTURE_TOKEN_ResumeToken123,
+      wechat_resume_token: 'resume-token-123',
     }))
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
   })
@@ -716,7 +727,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
   it('keeps subscription resume context for token-only WeChat callbacks', async () => {
     routeState.query = {
       wechat_resume: '1',
-      wechat_resume_token: FIXTURE_TOKEN_ResumeSubscription7,
+      wechat_resume_token: 'resume-subscription-7',
       payment_type: 'wxpay_direct',
       order_type: 'subscription',
       plan_id: '7',
@@ -750,7 +761,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
       payment_type: 'wxpay',
       order_type: 'subscription',
       plan_id: 7,
-      wechat_resume_token: FIXTURE_TOKEN_ResumeSubscription7,
+      wechat_resume_token: 'resume-subscription-7',
     }))
     expect(locationState.href).toContain('/api/v1/auth/oauth/wechat/payment/start?')
     expect(new URL(locationState.href, 'http://localhost').searchParams.get('redirect')).toBe(
@@ -766,7 +777,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
   it('falls back to QR flow when mobile WeChat payment is unavailable', async () => {
     routeState.query = {
       wechat_resume: '1',
-      wechat_resume_token: FIXTURE_TOKEN_ResumeTokenH5,
+      wechat_resume_token: 'resume-token-h5',
       payment_type: 'wxpay_direct',
     }
     createOrder
@@ -796,7 +807,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     expect(createOrder).toHaveBeenNthCalledWith(1, expect.objectContaining({
       payment_type: 'wxpay',
       is_mobile: true,
-      wechat_resume_token: FIXTURE_TOKEN_ResumeTokenH5,
+      wechat_resume_token: 'resume-token-h5',
     }))
     expect(createOrder).toHaveBeenNthCalledWith(2, expect.objectContaining({
       payment_type: 'wxpay',
@@ -806,5 +817,73 @@ describe('PaymentView WeChat JSAPI flow', () => {
     expect(showWarning).toHaveBeenCalledWith('payment.errors.mobilePaymentFallbackToQr')
     expect(showError).not.toHaveBeenCalled()
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('weixin://wxpay/bizpayurl?pr=fallback-native')
+  })
+})
+
+describe('PaymentView subscription feature flag', () => {
+  afterEach(() => {
+    appStoreState.setPublicSettings(undefined)
+  })
+
+  function tabLabels(wrapper: Awaited<ReturnType<typeof mountSubscriptionPlanList>>) {
+    return wrapper
+      .findAll('button')
+      .map((button) => button.text())
+      .filter((text) => text === 'payment.tabTopUp' || text === 'payment.tabSubscribe')
+  }
+
+  it('keeps the top-up / subscribe switcher when subscription_enabled is absent (opt-out default)', async () => {
+    const wrapper = await mountSubscriptionPlanList(2)
+
+    expect(tabLabels(wrapper)).toEqual(['payment.tabTopUp', 'payment.tabSubscribe'])
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(2)
+  })
+
+  it('drops the subscribe tab, hides the switcher and ignores ?tab=subscription when subscriptions are disabled', async () => {
+    appStoreState.setPublicSettings({ subscription_enabled: false })
+    const wrapper = await mountSubscriptionPlanList(2)
+
+    expect(tabLabels(wrapper)).toEqual([])
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(0)
+    expect(wrapper.text()).toContain('payment.rechargeAccount')
+  })
+
+  it('shows an unavailable notice instead of a doomed top-up form when balance recharge is disabled too', async () => {
+    appStoreState.setPublicSettings({ subscription_enabled: false })
+    const wrapper = await mountSubscriptionConfirm({ checkout: { balance_disabled: true } })
+
+    expect(tabLabels(wrapper)).toEqual([])
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('payment.confirmSubscription')
+    expect(wrapper.text()).not.toContain('payment.rechargeAccount')
+    expect(wrapper.text()).toContain('payment.billingUnavailable')
+    wrapper.unmount()
+  })
+
+  it('falls back from the subscribe tab to top-up when the flag flips off after mount', async () => {
+    const wrapper = await mountSubscriptionPlanList(2)
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(2)
+
+    appStoreState.setPublicSettings({ subscription_enabled: false })
+    await flushPromises()
+
+    expect(tabLabels(wrapper)).toEqual([])
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(0)
+    expect(wrapper.text()).toContain('payment.rechargeAccount')
+    wrapper.unmount()
+  })
+
+  it('enters the subscribe tab when a subscription-only site turns subscriptions back on', async () => {
+    appStoreState.setPublicSettings({ subscription_enabled: false })
+    const wrapper = await mountSubscriptionConfirm({ checkout: { balance_disabled: true } })
+    expect(wrapper.text()).toContain('payment.billingUnavailable')
+
+    appStoreState.setPublicSettings({ subscription_enabled: true })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('payment.billingUnavailable')
+    expect(wrapper.text()).not.toContain('payment.rechargeAccount')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard).length).toBeGreaterThan(0)
+    wrapper.unmount()
   })
 })

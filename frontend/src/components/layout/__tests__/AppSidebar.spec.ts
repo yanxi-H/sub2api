@@ -63,13 +63,20 @@ describe('AppSidebar header styles', () => {
   })
 })
 
-describe('AppSidebar admin personal navigation', () => {
-  it('provides a clearly labelled link to the user dashboard', () => {
-    expect(componentSource).toContain("{ path: '/dashboard', label: t('nav.userDashboard'), icon: DashboardIcon }")
-    expect(componentSource).toContain('...buildSelfNavItems(false)')
+describe('AppSidebar subscription feature flag', () => {
+  it('gates the My Subscriptions entry behind the subscription public-settings flag', () => {
+    expect(componentSource).toContain('const flagSubscription = makeSidebarFlag(FeatureFlags.subscription)')
+    expect(componentSource).toMatch(/path: '\/subscriptions'[^\n]*featureFlag: flagSubscription/)
   })
 
-  it('keeps the regular user dashboard in the main user navigation', () => {
-    expect(componentSource).toContain('finalizeNav(buildSelfNavItems(true))')
+  it('also hides the admin Subscription Management entry on recharge-only sites', () => {
+    expect(componentSource).toMatch(/path: '\/admin\/subscriptions'[^\n]*featureFlag: flagSubscription/)
+  })
+
+  it('derives the purchase entry label from the site billing mode', () => {
+    expect(componentSource).toContain("import { resolveSiteBillingMode } from '@/utils/siteBillingMode'")
+    expect(componentSource).toMatch(/case 'recharge_only':\s*return t\('nav\.recharge'\)/)
+    expect(componentSource).toMatch(/case 'subscription_only':\s*return t\('nav\.subscribe'\)/)
+    expect(componentSource).toMatch(/path: '\/purchase'[^\n]*label: purchaseNavLabel\.value/)
   })
 })

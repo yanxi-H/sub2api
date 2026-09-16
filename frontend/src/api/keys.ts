@@ -21,7 +21,6 @@ export async function list(
     search?: string
     status?: string
     group_id?: number | string
-    user_id?: number | string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   },
@@ -49,7 +48,6 @@ export async function getById(id: number): Promise<ApiKey> {
 /**
  * Create new API key
  * @param name - Key name
- * @param userId - Optional target user ID for admin-created keys
  * @param groupId - Optional group ID
  * @param customKey - Optional custom key value
  * @param ipWhitelist - Optional IP whitelist
@@ -57,9 +55,13 @@ export async function getById(id: number): Promise<ApiKey> {
  * @param quota - Optional quota limit in USD (0 = unlimited)
  * @param expiresInDays - Optional days until expiry (undefined = never expires)
  * @param rateLimitData - Optional rate limit fields
- * @param userId - Optional target owner (admin assigns key to another user)
  * @returns Created API key
  */
+export async function regenerate(id: number): Promise<ApiKey> {
+  const { data } = await apiClient.post<ApiKey>(`/keys/${id}/regenerate`)
+  return data
+}
+
 export async function create(
   name: string,
   userId?: number | null,
@@ -69,7 +71,7 @@ export async function create(
   ipBlacklist?: string[],
   quota?: number,
   expiresInDays?: number,
-  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
+  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number }
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
   if (userId !== undefined && userId !== null) {
@@ -102,9 +104,6 @@ export async function create(
   if (rateLimitData?.rate_limit_7d && rateLimitData.rate_limit_7d > 0) {
     payload.rate_limit_7d = rateLimitData.rate_limit_7d
   }
-  if (userId !== undefined && userId !== null) {
-    payload.user_id = userId
-  }
 
   const { data } = await apiClient.post<ApiKey>('/keys', payload)
   return data
@@ -121,12 +120,30 @@ export async function update(id: number, updates: UpdateApiKeyRequest): Promise<
   return data
 }
 
-/**
- * Regenerate an API key secret while retaining its configuration and usage state.
- */
-export async function regenerate(id: number): Promise<ApiKey> {
-  const { data } = await apiClient.post<ApiKey>(`/keys/${id}/regenerate`)
-  return data
+export interface BulkUpdateApiKeysResult {
+  succeededIds: number[]
+  failures: Array<{ id: number; error: unknown }>
+}
+
+/** Reuse per-key validation and permissions, with at most five requests in flight. */
+export async function bulkUpdate(
+  ids: number[],
+  updates: UpdateApiKeyRequest
+): Promise<BulkUpdateApiKeysResult> {
+  const uniqueIds = [...new Set(ids)]
+  const result: BulkUpdateApiKeysResult = { succeededIds: [], failures: [] }
+  for (let offset = 0; offset < uniqueIds.length; offset += 5) {
+    const batch = uniqueIds.slice(offset, offset + 5)
+    const responses = await Promise.allSettled(batch.map((id) => update(id, updates)))
+    responses.forEach((response, index) => {
+      if (response.status === 'fulfilled') {
+        result.succeededIds.push(batch[index])
+      } else {
+        result.failures.push({ id: batch[index], error: response.reason })
+      }
+    })
+  }
+  return result
 }
 
 /**
@@ -150,11 +167,12 @@ export async function toggleStatus(id: number, status: 'active' | 'inactive'): P
 }
 
 export const keysAPI = {
+  regenerate,
   list,
   getById,
   create,
   update,
-  regenerate,
+  bulkUpdate,
   delete: deleteKey,
   toggleStatus
 }
