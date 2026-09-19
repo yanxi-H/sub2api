@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 

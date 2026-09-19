@@ -3,9 +3,9 @@ package admin
 import (
 	"strconv"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 )
 
 // CodexDeviceHandler 管理网关观测到的 Codex 真实设备 ID 列表

@@ -1,7 +1,7 @@
 
 
-const FIXTURE_TOKENSTATUS_Configured = ['configured'].join('');;
-const FIXTURE_TOKEN_TemporaryCanaryToken = ['temporary-canary-token'].join('');;import { describe, expect, it } from 'vitest'
+const FIXTURE_TOKENSTATUS_Configured = ['configured'].join('');
+const FIXTURE_TOKEN_TemporaryCanaryToken = ['temporary-canary-token'].join('');import { describe, expect, it } from 'vitest'
 import type { PromptAuditConfig } from '../types'
 import {
   buildUpdateRequest,

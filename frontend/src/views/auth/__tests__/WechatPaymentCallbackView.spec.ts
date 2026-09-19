@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');;import { flushPromises, mount } from '@vue/test-utils'
+const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import WechatPaymentCallbackView from '@/views/auth/WechatPaymentCallbackView.vue'
 

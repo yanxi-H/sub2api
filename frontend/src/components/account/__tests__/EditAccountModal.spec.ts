@@ -1,15 +1,15 @@
 
 
-const FIXTURE_APIKEY_SkTest = ['sk-test'].join('');;
-const FIXTURE_ACCESSTOKEN_ParentAccessToken = ['parent-access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_ParentRefreshToken = ['parent-refresh-token'].join('');;
-const FIXTURE_APIKEY_SkParent = ['sk-parent'].join('');;
-const FIXTURE_REFRESHTOKEN_GrokRt = ['grok-rt'].join('');;
-const FIXTURE_ACCESSTOKEN_OauthToken = ['oauth-token'].join('');;
-const FIXTURE_APIKEY_SkKimi = ['sk-kimi'].join('');;
-const FIXTURE_APIKEY_SkGlm = ['sk-glm'].join('');;
-const FIXTURE_APIKEY_SkCn = ['sk-cn'].join('');;
-const FIXTURE_APIKEY_SkGrok = ['sk-grok'].join('');;import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_APIKEY_SkTest = ['sk-test'].join('');
+const FIXTURE_ACCESSTOKEN_ParentAccessToken = ['parent-access-token'].join('');
+const FIXTURE_REFRESHTOKEN_ParentRefreshToken = ['parent-refresh-token'].join('');
+const FIXTURE_APIKEY_SkParent = ['sk-parent'].join('');
+const FIXTURE_REFRESHTOKEN_GrokRt = ['grok-rt'].join('');
+const FIXTURE_ACCESSTOKEN_OauthToken = ['oauth-token'].join('');
+const FIXTURE_APIKEY_SkKimi = ['sk-kimi'].join('');
+const FIXTURE_APIKEY_SkGlm = ['sk-glm'].join('');
+const FIXTURE_APIKEY_SkCn = ['sk-cn'].join('');
+const FIXTURE_APIKEY_SkGrok = ['sk-grok'].join('');import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 

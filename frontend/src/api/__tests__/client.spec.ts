@@ -1,8 +1,8 @@
 
 
-const FIXTURE_ACCESSTOKEN_NewToken = ['new-token'].join('');;
-const FIXTURE_REFRESHTOKEN_NewRefreshToken = ['new-refresh-token'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+const FIXTURE_ACCESSTOKEN_NewToken = ['new-token'].join('');
+const FIXTURE_REFRESHTOKEN_NewRefreshToken = ['new-refresh-token'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import axios from 'axios'
 import type { AxiosInstance } from 'axios'
 

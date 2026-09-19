@@ -1,7 +1,7 @@
 
 
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_APIKEY_XaiTest = ['xai-test'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_APIKEY_XaiTest = ['xai-test'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 

@@ -1,6 +1,6 @@
 
 
-const FIXTURE_APIKEYMASKED_SkT = ['sk-t***'].join('');;import { defineComponent, nextTick } from 'vue'
+const FIXTURE_APIKEYMASKED_SkT = ['sk-t***'].join('');import { defineComponent, nextTick } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 

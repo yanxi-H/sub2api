@@ -1,9 +1,9 @@
 
 
-const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_PASSWORD_SuperSecret = ['super-secret'].join('');;
-const FIXTURE_TOKEN_SsoCookie = ['sso-cookie'].join('');;import { describe, expect, it, vi } from 'vitest'
+const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_PASSWORD_SuperSecret = ['super-secret'].join('');
+const FIXTURE_TOKEN_SsoCookie = ['sso-cookie'].join('');import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({

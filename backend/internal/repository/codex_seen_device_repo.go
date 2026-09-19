@@ -47,7 +47,9 @@ func (r *codexSeenDeviceRepo) ListAll(ctx context.Context) ([]service.CodexSeenD
 		}
 		for _, key := range keys {
 			apiKeyID := int64(0)
-			fmt.Sscanf(key, codexSeenDeviceKeyPrefix+"%d", &apiKeyID)
+			if _, err := fmt.Sscanf(key, codexSeenDeviceKeyPrefix+"%d", &apiKeyID); err != nil {
+				continue
+			}
 			entries, err := r.rdb.ZRevRangeWithScores(ctx, key, 0, -1).Result()
 			if err != nil {
 				continue

@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { get, post } = vi.hoisted(() => ({
   get: vi.fn(),

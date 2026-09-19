@@ -1,7 +1,7 @@
 
 
-const FIXTURE_APIKEYNAME_MyKey = ['my-key'].join('');;
-const FIXTURE_APIKEYNAME_OldKey = ['old-key'].join('');;import { describe, it, expect, vi } from 'vitest'
+const FIXTURE_APIKEYNAME_MyKey = ['my-key'].join('');
+const FIXTURE_APIKEYNAME_OldKey = ['old-key'].join('');import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import OpsErrorLogTable from '../OpsErrorLogTable.vue'
 import zhLocale from '@/i18n/locales/zh'

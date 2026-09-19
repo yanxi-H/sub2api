@@ -1,6 +1,6 @@
 
 
-const FIXTURE_APIKEY_SkRelay = ['sk-relay'].join('');;import { defineComponent } from 'vue'
+const FIXTURE_APIKEY_SkRelay = ['sk-relay'].join('');import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 

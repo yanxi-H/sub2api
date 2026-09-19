@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_TicketValue = ['ticket-value'].join('');;import { defineComponent, h } from 'vue'
+const FIXTURE_TOKEN_TicketValue = ['ticket-value'].join('');import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ForgotPasswordView from '@/views/auth/ForgotPasswordView.vue'

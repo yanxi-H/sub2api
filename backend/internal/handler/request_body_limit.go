@@ -66,16 +66,6 @@ func installRequestBodyAdmissionContexts(c *gin.Context) (context.Context, func(
 	return parent, cancel
 }
 
-func responsesAccountSlotLifecycleContext(ctx context.Context, lane service.RequestBodyLane) context.Context {
-	if lane != service.RequestBodyLaneHeavy && lane != service.RequestBodyLaneRecovery {
-		return ctx
-	}
-	if upstreamCtx, ok := service.RequestBodyAdmissionUpstreamContext(ctx); ok {
-		return upstreamCtx
-	}
-	return ctx
-}
-
 func releaseAcquiredAccountSelection(selection *service.AccountSelectionResult) {
 	if selection != nil && selection.Acquired && selection.ReleaseFunc != nil {
 		selection.ReleaseFunc()
@@ -107,13 +97,6 @@ func releaseSelectionForRequestBodyLaneWait(selection *service.AccountSelectionR
 			MaxWaiting:     1,
 		}
 	}
-}
-
-func requestBodyPolicyLimit(policy service.RequestBodyAdmissionPolicy, compactRequest bool) int64 {
-	if compactRequest {
-		return policy.RecoveryLimitBytes
-	}
-	return policy.HeavyLimitBytes
 }
 
 func (h *OpenAIGatewayHandler) rejectResponsesRequestBodyAcrossAccounts(

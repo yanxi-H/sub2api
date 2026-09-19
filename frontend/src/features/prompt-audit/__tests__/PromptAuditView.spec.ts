@@ -1,8 +1,8 @@
 
 
-const FIXTURE_TOKENSTATUS_Configured = ['configured'].join('');;
-const FIXTURE_TOKEN_OpaqueConfirmation = ['opaque-confirmation'].join('');;
-const FIXTURE_TOKEN_PROMPTAUDITCANARY = ['P', 'R', 'O', 'M', 'P', 'T_', 'A', 'U', 'D', 'I', 'T_', 'C', 'A', 'N', 'A', 'R', 'Y_', 'S', 'E', 'C', 'R', 'E', 'T_', 'D', 'O_', 'N', 'O', 'T_', 'P', 'E', 'R', 'S', 'I', 'S', 'T'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKENSTATUS_Configured = ['configured'].join('');
+const FIXTURE_TOKEN_OpaqueConfirmation = ['opaque-confirmation'].join('');
+const FIXTURE_TOKEN_PROMPTAUDITCANARY = ['P', 'R', 'O', 'M', 'P', 'T_', 'A', 'U', 'D', 'I', 'T_', 'C', 'A', 'N', 'A', 'R', 'Y_', 'S', 'E', 'C', 'R', 'E', 'T_', 'D', 'O_', 'N', 'O', 'T_', 'P', 'E', 'R', 'S', 'I', 'S', 'T'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { PromptAuditConfig, PromptAuditRuntime } from '../types'

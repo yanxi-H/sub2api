@@ -1,7 +1,7 @@
 
 
-const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_RotatedRefreshToken = ['rotated-refresh-token'].join('');;import { describe, expect, it, vi } from 'vitest'
+const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');
+const FIXTURE_REFRESHTOKEN_RotatedRefreshToken = ['rotated-refresh-token'].join('');import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({

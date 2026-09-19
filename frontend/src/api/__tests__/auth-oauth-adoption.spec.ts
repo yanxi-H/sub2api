@@ -1,6 +1,6 @@
 
 
-const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const post = vi.fn()
 

@@ -1,6 +1,6 @@
 
 
-const FIXTURE_SECRET_PiSecret42 = ['pi_secret_', '4', '2'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_SECRET_PiSecret42 = ['pi_secret_', '4', '2'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 
 const routeState = vi.hoisted(() => ({

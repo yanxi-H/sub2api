@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_Ticket1 = ['ticket-', '1'].join('');;import { defineComponent, h } from 'vue'
+const FIXTURE_TOKEN_Ticket1 = ['ticket-', '1'].join('');import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LoginView from '@/views/auth/LoginView.vue'

@@ -1,9 +1,9 @@
 
 
-const FIXTURE_ACCESSTOKEN_Token1 = ['token-', '1'].join('');;
-const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');;
-const FIXTURE_ACCESSTOKEN_Token2 = ['token-', '2'].join('');;
-const FIXTURE_PASSWORD_Secret456 = ['secret-', '4', '5', '6'].join('');;import { mount } from '@vue/test-utils'
+const FIXTURE_ACCESSTOKEN_Token1 = ['token-', '1'].join('');
+const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');
+const FIXTURE_ACCESSTOKEN_Token2 = ['token-', '2'].join('');
+const FIXTURE_PASSWORD_Secret456 = ['secret-', '4', '5', '6'].join('');import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OAuthCallbackView from '@/views/auth/OAuthCallbackView.vue'
 

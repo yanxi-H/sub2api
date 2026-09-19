@@ -1,15 +1,15 @@
 
 
-const FIXTURE_ACCESSTOKEN_TestToken123 = ['test-token-', '1', '2', '3'].join('');;
-const FIXTURE_REFRESHTOKEN_RefreshToken456 = ['refresh-token-', '4', '5', '6'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_PASSWORD_123456 = ['1', '2', '3', '4', '5', '6'].join('');;
-const FIXTURE_PASSWORD_Wrong = ['wrong'].join('');;
-const FIXTURE_TOKEN_Temp123 = ['temp-', '1', '2', '3'].join('');;
-const FIXTURE_TOKEN_PendingToken = ['pending-token'].join('');;
-const FIXTURE_TOKENFIELD_PendingAuthToken = ['pending_auth_token'].join('');;
-const FIXTURE_TOKENFIELD_PendingOauthToken = ['pending_oauth_token'].join('');;
-const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');;import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+const FIXTURE_ACCESSTOKEN_TestToken123 = ['test-token-', '1', '2', '3'].join('');
+const FIXTURE_REFRESHTOKEN_RefreshToken456 = ['refresh-token-', '4', '5', '6'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_PASSWORD_123456 = ['1', '2', '3', '4', '5', '6'].join('');
+const FIXTURE_PASSWORD_Wrong = ['wrong'].join('');
+const FIXTURE_TOKEN_Temp123 = ['temp-', '1', '2', '3'].join('');
+const FIXTURE_TOKEN_PendingToken = ['pending-token'].join('');
+const FIXTURE_TOKENFIELD_PendingAuthToken = ['pending_auth_token'].join('');
+const FIXTURE_TOKENFIELD_PendingOauthToken = ['pending_oauth_token'].join('');
+const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 

@@ -1,20 +1,20 @@
 
 
-const FIXTURE_ACCESSTOKEN_LegacyAccessToken = ['legacy-access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_LegacyRefreshToken = ['legacy-refresh-token'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_TOKEN_LegacyPendingToken = ['legacy-pending-token'].join('');;
-const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_RefreshToken = ['refresh-token'].join('');;
-const FIXTURE_TOKENFIELD_PendingOauthToken = ['pending_oauth_token'].join('');;
-const FIXTURE_ACCESSTOKEN_NewAccessToken = ['new-access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_NewRefreshToken = ['new-refresh-token'].join('');;
-const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');;
-const FIXTURE_ACCESSTOKEN_BindAccessToken = ['bind-access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_BindRefreshToken = ['bind-refresh-token'].join('');;
-const FIXTURE_PASSWORD_SecretPassword = ['secret-password'].join('');;
-const FIXTURE_TOKEN_Temp123 = ['temp-', '1', '2', '3'].join('');;
-const FIXTURE_ACCESSTOKEN_2faAccessToken = ['2fa-access-token'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_ACCESSTOKEN_LegacyAccessToken = ['legacy-access-token'].join('');
+const FIXTURE_REFRESHTOKEN_LegacyRefreshToken = ['legacy-refresh-token'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_TOKEN_LegacyPendingToken = ['legacy-pending-token'].join('');
+const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');
+const FIXTURE_REFRESHTOKEN_RefreshToken = ['refresh-token'].join('');
+const FIXTURE_TOKENFIELD_PendingOauthToken = ['pending_oauth_token'].join('');
+const FIXTURE_ACCESSTOKEN_NewAccessToken = ['new-access-token'].join('');
+const FIXTURE_REFRESHTOKEN_NewRefreshToken = ['new-refresh-token'].join('');
+const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');
+const FIXTURE_ACCESSTOKEN_BindAccessToken = ['bind-access-token'].join('');
+const FIXTURE_REFRESHTOKEN_BindRefreshToken = ['bind-refresh-token'].join('');
+const FIXTURE_PASSWORD_SecretPassword = ['secret-password'].join('');
+const FIXTURE_TOKEN_Temp123 = ['temp-', '1', '2', '3'].join('');
+const FIXTURE_ACCESSTOKEN_2faAccessToken = ['2fa-access-token'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import OidcCallbackView from '../OidcCallbackView.vue'

@@ -858,17 +858,6 @@ func TestOpenAIResponses_MissingDependencies_ReturnsServiceUnavailable(t *testin
 	assert.Equal(t, "Service temporarily unavailable", errorObj["message"])
 }
 
-type readTrackingBody struct {
-	read bool
-}
-
-func (b *readTrackingBody) Read([]byte) (int, error) {
-	b.read = true
-	return 0, io.EOF
-}
-
-func (b *readTrackingBody) Close() error { return nil }
-
 func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -1,6 +1,6 @@
 
 
-const FIXTURE_APIKEY_TestKey = ['test-key'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_APIKEY_TestKey = ['test-key'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const {

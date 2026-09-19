@@ -1,8 +1,8 @@
 
 
-const FIXTURE_TOKEN_ResumeAwx = ['resume-awx'].join('');;
-const FIXTURE_SECRET_AwxClientSecret = ['awx_client_secret'].join('');;
-const FIXTURE_SECRET_SecretFromQuery = ['secret_from_query'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_ResumeAwx = ['resume-awx'].join('');
+const FIXTURE_SECRET_AwxClientSecret = ['awx_client_secret'].join('');
+const FIXTURE_SECRET_SecretFromQuery = ['secret_from_query'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import AirwallexPaymentView from '../AirwallexPaymentView.vue'
 import {

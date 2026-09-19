@@ -1,6 +1,6 @@
 
 
-const FIXTURE_APIKEY_SkTest = ['sk-test'].join('');;import { describe, expect, it } from 'vitest'
+const FIXTURE_APIKEY_SkTest = ['sk-test'].join('');import { describe, expect, it } from 'vitest'
 import {
   GROK_CC_SWITCH_MODEL,
   OPENAI_CC_SWITCH_CODEX_MODEL,

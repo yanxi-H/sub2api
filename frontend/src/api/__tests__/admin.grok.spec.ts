@@ -1,7 +1,7 @@
 
 
-const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');;
-const FIXTURE_PASSWORD_PasswordWithSpaces = ['  password with spaces  '].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_ACCESSTOKEN_AccessToken = ['access-token'].join('');
+const FIXTURE_PASSWORD_PasswordWithSpaces = ['  password with spaces  '].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { post } = vi.hoisted(() => ({
   post: vi.fn(),

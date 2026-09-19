@@ -1,11 +1,11 @@
 
 
-const FIXTURE_TOKENSTATUS_Configured = ['configured'].join('');;
-const FIXTURE_TOKEN_ReplacementCanary = ['replacement-canary'].join('');;
-const FIXTURE_TOKENSTATUS_Invalid = ['invalid'].join('');;
-const FIXTURE_APIKEYNAME_AliceKey = ['alice-key'].join('');;
-const FIXTURE_TOKEN_Tok = ['tok'].join('');;
-const FIXTURE_APIKEYNAME_BobKey = ['bob-key'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKENSTATUS_Configured = ['configured'].join('');
+const FIXTURE_TOKEN_ReplacementCanary = ['replacement-canary'].join('');
+const FIXTURE_TOKENSTATUS_Invalid = ['invalid'].join('');
+const FIXTURE_APIKEYNAME_AliceKey = ['alice-key'].join('');
+const FIXTURE_TOKEN_Tok = ['tok'].join('');
+const FIXTURE_APIKEYNAME_BobKey = ['bob-key'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import EndpointPool from '../components/EndpointPool.vue'

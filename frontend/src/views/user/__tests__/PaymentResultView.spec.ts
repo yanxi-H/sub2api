@@ -1,12 +1,12 @@
 
 
-const FIXTURE_TOKEN_Resume42 = ['resume-', '4', '2'].join('');;
-const FIXTURE_TOKEN_ResumeAuthoritative = ['resume-authoritative'].join('');;
-const FIXTURE_TOKEN_Resume77 = ['resume-', '7', '7'].join('');;
-const FIXTURE_TOKEN_ResumeRefreshFailure = ['resume-refresh-failure'].join('');;
-const FIXTURE_TOKEN_ResumeFail = ['resume-fail'].join('');;
-const FIXTURE_TOKEN_ResumeHkd = ['resume-hkd'].join('');;
-const FIXTURE_TOKEN_Resume88 = ['resume-', '8', '8'].join('');;import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_Resume42 = ['resume-', '4', '2'].join('');
+const FIXTURE_TOKEN_ResumeAuthoritative = ['resume-authoritative'].join('');
+const FIXTURE_TOKEN_Resume77 = ['resume-', '7', '7'].join('');
+const FIXTURE_TOKEN_ResumeRefreshFailure = ['resume-refresh-failure'].join('');
+const FIXTURE_TOKEN_ResumeFail = ['resume-fail'].join('');
+const FIXTURE_TOKEN_ResumeHkd = ['resume-hkd'].join('');
+const FIXTURE_TOKEN_Resume88 = ['resume-', '8', '8'].join('');import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 
 const routeState = vi.hoisted(() => ({

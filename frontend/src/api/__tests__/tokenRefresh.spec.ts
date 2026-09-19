@@ -1,9 +1,9 @@
 
 
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_ACCESSTOKEN_NewAccess = ['new-access'].join('');;
-const FIXTURE_REFRESHTOKEN_NewRefresh = ['new-refresh'].join('');;
-const FIXTURE_REFRESHTOKEN_PeerRefresh = ['peer-refresh'].join('');;import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_ACCESSTOKEN_NewAccess = ['new-access'].join('');
+const FIXTURE_REFRESHTOKEN_NewRefresh = ['new-refresh'].join('');
+const FIXTURE_REFRESHTOKEN_PeerRefresh = ['peer-refresh'].join('');import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios from 'axios'
 
 vi.mock('axios', () => ({

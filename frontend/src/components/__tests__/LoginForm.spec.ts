@@ -1,9 +1,9 @@
 
 
-const FIXTURE_ACCESSTOKEN_Token = ['token'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_PASSWORD_Password123 = ['password', '1', '2', '3'].join('');;
-const FIXTURE_TOKEN_Temp123 = ['temp-', '1', '2', '3'].join('');;/**
+const FIXTURE_ACCESSTOKEN_Token = ['token'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_PASSWORD_Password123 = ['password', '1', '2', '3'].join('');
+const FIXTURE_TOKEN_Temp123 = ['temp-', '1', '2', '3'].join('');/**
  * LoginView 组件核心逻辑测试
  * 测试登录表单提交、验证、2FA 等场景
  */

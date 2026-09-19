@@ -1,12 +1,12 @@
 
 
-const FIXTURE_APIKEY_SkAnthropicTest = ['sk-anthropic-test'].join('');;
-const FIXTURE_APIKEY_SkGrokTest = ['sk-grok-test'].join('');;
-const FIXTURE_APIKEY_SkGrokClaude = ['sk-grok-claude-test'].join('');;
-const FIXTURE_APIKEY_SkGrokCodex = ['sk-grok-codex-test'].join('');;
-const FIXTURE_APIKEY_SkTest = ['sk-test'].join('');;
-const FIXTURE_APIKEY_SkCompositeTest = ['sk-composite-test'].join('');;
-const FIXTURE_APIKEY_SkOpenaiTest = ['sk-openai-test'].join('');;import { afterEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_APIKEY_SkAnthropicTest = ['sk-anthropic-test'].join('');
+const FIXTURE_APIKEY_SkGrokTest = ['sk-grok-test'].join('');
+const FIXTURE_APIKEY_SkGrokClaude = ['sk-grok-claude-test'].join('');
+const FIXTURE_APIKEY_SkGrokCodex = ['sk-grok-codex-test'].join('');
+const FIXTURE_APIKEY_SkTest = ['sk-test'].join('');
+const FIXTURE_APIKEY_SkCompositeTest = ['sk-composite-test'].join('');
+const FIXTURE_APIKEY_SkOpenaiTest = ['sk-openai-test'].join('');import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 

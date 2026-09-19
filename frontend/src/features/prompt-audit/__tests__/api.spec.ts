@@ -1,8 +1,8 @@
 
 
-const FIXTURE_TOKEN_ApiCanarySecret = ['api-canary-secret'].join('');;
-const FIXTURE_TOKENSTATUS_Missing = ['missing'].join('');;
-const FIXTURE_TOKEN_OpaqueToken = ['opaque-token'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_ApiCanarySecret = ['api-canary-secret'].join('');
+const FIXTURE_TOKENSTATUS_Missing = ['missing'].join('');
+const FIXTURE_TOKEN_OpaqueToken = ['opaque-token'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { emptyEventFilters } from '../viewModel'
 
 const client = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() }))

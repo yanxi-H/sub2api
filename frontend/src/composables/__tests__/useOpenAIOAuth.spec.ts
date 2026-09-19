@@ -1,7 +1,7 @@
 
 
-const FIXTURE_ACCESSTOKEN_At = ['at'].join('');;
-const FIXTURE_REFRESHTOKEN_Rt = ['rt'].join('');;import { describe, expect, it, vi } from 'vitest'
+const FIXTURE_ACCESSTOKEN_At = ['at'].join('');
+const FIXTURE_REFRESHTOKEN_Rt = ['rt'].join('');import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({

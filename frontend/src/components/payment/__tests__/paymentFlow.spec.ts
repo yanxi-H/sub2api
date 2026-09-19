@@ -1,9 +1,9 @@
 
 
-const FIXTURE_SECRET_CsTest = ['cs_test'].join('');;
-const FIXTURE_TOKEN_Resume1 = ['resume-', '1'].join('');;
-const FIXTURE_SECRET_AwxCs = ['awx_cs'].join('');;
-const FIXTURE_TOKEN_Resume2 = ['resume-', '2'].join('');;import { describe, expect, it } from 'vitest'
+const FIXTURE_SECRET_CsTest = ['cs_test'].join('');
+const FIXTURE_TOKEN_Resume1 = ['resume-', '1'].join('');
+const FIXTURE_SECRET_AwxCs = ['awx_cs'].join('');
+const FIXTURE_TOKEN_Resume2 = ['resume-', '2'].join('');import { describe, expect, it } from 'vitest'
 import type { CreateOrderResult, MethodLimit } from '@/types/payment'
 import {
   buildCreateOrderPayload,

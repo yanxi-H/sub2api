@@ -855,7 +855,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // request_body_lane
 			sql.NullString{}, // upstream_request_id
 			sql.NullString{}, // session_id
-			false, // native_compaction_v2
+			false,            // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)
@@ -938,7 +938,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
-			false, // native_compaction_v2
+			false,             // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)
@@ -1003,7 +1003,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
-			false, // native_compaction_v2
+			false,             // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)
@@ -1068,7 +1068,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // request_body_lane
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
-			false, // native_compaction_v2
+			false,             // native_compaction_v2
 			now,
 		}})
 		require.NoError(t, err)

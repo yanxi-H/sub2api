@@ -1,10 +1,10 @@
 
 
-const FIXTURE_TOKEN_OneTimeSession = ['one-time-session'].join('');;
-const FIXTURE_ACCESSTOKEN_Access = ['access'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_TOKEN_RegisterSession = ['register-session'].join('');;
-const FIXTURE_PASSWORD_Hunter2 = ['hunter', '2'].join('');;import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_OneTimeSession = ['one-time-session'].join('');
+const FIXTURE_ACCESSTOKEN_Access = ['access'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_TOKEN_RegisterSession = ['register-session'].join('');
+const FIXTURE_PASSWORD_Hunter2 = ['hunter', '2'].join('');import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { get, post, patch, remove, credentialGet, credentialCreate } = vi.hoisted(() => ({
   get: vi.fn(),

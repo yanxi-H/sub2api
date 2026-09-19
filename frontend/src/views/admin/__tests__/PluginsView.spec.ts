@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_Bridge = ['bridge'].join('');;import { flushPromises, mount } from '@vue/test-utils'
+const FIXTURE_TOKEN_Bridge = ['bridge'].join('');import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import PluginsView from '../PluginsView.vue'

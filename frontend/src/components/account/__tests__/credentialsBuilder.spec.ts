@@ -1,7 +1,7 @@
 
 
-const FIXTURE_ACCESSTOKEN_Tok = ['tok'].join('');;
-const FIXTURE_APIKEY_Sk = ['sk'].join('');;import { describe, it, expect } from 'vitest'
+const FIXTURE_ACCESSTOKEN_Tok = ['tok'].join('');
+const FIXTURE_APIKEY_Sk = ['sk'].join('');import { describe, it, expect } from 'vitest'
 import {
   ANTIGRAVITY_PROJECT_ID_CREDENTIAL_KEY,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,

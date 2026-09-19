@@ -1,7 +1,7 @@
 
 
-const FIXTURE_PASSWORD_NewPassword = ['new-password'].join('');;
-const FIXTURE_PASSWORD_CurrentPassword = ['current-password'].join('');;import { mount } from '@vue/test-utils'
+const FIXTURE_PASSWORD_NewPassword = ['new-password'].join('');
+const FIXTURE_PASSWORD_CurrentPassword = ['current-password'].join('');import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileIdentityBindingsSection from '@/components/user/profile/ProfileIdentityBindingsSection.vue'

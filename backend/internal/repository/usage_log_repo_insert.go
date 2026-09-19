@@ -1392,7 +1392,7 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			log.AccountStatsCost, // account_stats_cost
 			requestBodyLane,
 			upstreamRequestID, // upstream_request_id
-			sessionID, // session_id
+			sessionID,         // session_id
 			log.NativeCompactionV2,
 			createdAt,
 		},

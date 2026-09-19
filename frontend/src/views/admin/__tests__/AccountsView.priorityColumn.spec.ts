@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_TestToken = ['test-token'].join('');;import { beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_TestToken = ['test-token'].join('');import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import AccountsView from '../AccountsView.vue'

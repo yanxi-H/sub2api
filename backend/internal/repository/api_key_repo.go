@@ -838,7 +838,7 @@ func (r *apiKeyRepository) SumRateLimit7dByGroupIDs(ctx context.Context, groupID
 	if err != nil {
 		return nil, fmt.Errorf("sum rate limit 7d by group ids: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var gid int64
 		var sum float64

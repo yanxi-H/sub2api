@@ -1,7 +1,7 @@
 
 
-const FIXTURE_TOKEN_TestToken = ['test-token'].join('');;
-const FIXTURE_APIKEY_Redacted = ['redacted'].join('');;import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_TOKEN_TestToken = ['test-token'].join('');
+const FIXTURE_APIKEY_Redacted = ['redacted'].join('');import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 

@@ -1,20 +1,20 @@
 
 
-const FIXTURE_TOKENFIELD_PendingAuthToken = ['pending_auth_token'].join('');;
-const FIXTURE_TOKEN_Ticket1 = ['ticket-', '1'].join('');;
-const FIXTURE_TOKEN_Ticket2 = ['ticket-', '2'].join('');;
-const FIXTURE_TOKEN_PendingToken1 = ['pending-token-', '1'].join('');;
-const FIXTURE_TOKEN_InitialProof = ['initial-proof'].join('');;
-const FIXTURE_TOKEN_PendingToken2 = ['pending-token-', '2'].join('');;
-const FIXTURE_TOKENFIELD_PendingOauthToken = ['pending_oauth_token'].join('');;
-const FIXTURE_ACCESSTOKEN_OauthAccessToken = ['oauth-access-token'].join('');;
-const FIXTURE_REFRESHTOKEN_OauthRefreshToken = ['oauth-refresh-token'].join('');;
-const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');;
-const FIXTURE_TOKEN_PendingToken3 = ['pending-token-', '3'].join('');;
-const FIXTURE_TOKEN_SendCodeToken = ['send-code-token'].join('');;
-const FIXTURE_TOKEN_CreateToken = ['create-token'].join('');;
-const FIXTURE_TOKEN_PendingToken4 = ['pending-token-', '4'].join('');;
-const FIXTURE_PASSWORD_Secret456 = ['secret-', '4', '5', '6'].join('');;import { defineComponent, h } from 'vue'
+const FIXTURE_TOKENFIELD_PendingAuthToken = ['pending_auth_token'].join('');
+const FIXTURE_TOKEN_Ticket1 = ['ticket-', '1'].join('');
+const FIXTURE_TOKEN_Ticket2 = ['ticket-', '2'].join('');
+const FIXTURE_TOKEN_PendingToken1 = ['pending-token-', '1'].join('');
+const FIXTURE_TOKEN_InitialProof = ['initial-proof'].join('');
+const FIXTURE_TOKEN_PendingToken2 = ['pending-token-', '2'].join('');
+const FIXTURE_TOKENFIELD_PendingOauthToken = ['pending_oauth_token'].join('');
+const FIXTURE_ACCESSTOKEN_OauthAccessToken = ['oauth-access-token'].join('');
+const FIXTURE_REFRESHTOKEN_OauthRefreshToken = ['oauth-refresh-token'].join('');
+const FIXTURE_TOKENTYPE_Bearer = ['Bearer'].join('');
+const FIXTURE_TOKEN_PendingToken3 = ['pending-token-', '3'].join('');
+const FIXTURE_TOKEN_SendCodeToken = ['send-code-token'].join('');
+const FIXTURE_TOKEN_CreateToken = ['create-token'].join('');
+const FIXTURE_TOKEN_PendingToken4 = ['pending-token-', '4'].join('');
+const FIXTURE_PASSWORD_Secret456 = ['secret-', '4', '5', '6'].join('');import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import EmailVerifyView from '@/views/auth/EmailVerifyView.vue'

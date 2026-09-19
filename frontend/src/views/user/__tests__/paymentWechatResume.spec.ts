@@ -1,6 +1,6 @@
 
 
-const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');;import { describe, expect, it } from 'vitest'
+const FIXTURE_TOKEN_ResumeToken123 = ['resume-token-', '1', '2', '3'].join('');import { describe, expect, it } from 'vitest'
 import { parseWechatResumeRoute, stripWechatResumeQuery } from '../paymentWechatResume'
 
 describe('parseWechatResumeRoute', () => {

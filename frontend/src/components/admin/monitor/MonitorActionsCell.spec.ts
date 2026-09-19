@@ -1,6 +1,6 @@
 
 
-const FIXTURE_APIKEYMASKED_SkT = ['sk-t***'].join('');;import { mount } from '@vue/test-utils'
+const FIXTURE_APIKEYMASKED_SkT = ['sk-t***'].join('');import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ChannelMonitor } from '@/api/admin/channelMonitor'

@@ -1,7 +1,7 @@
 
 
-const FIXTURE_SECRET_ABC123 = ['A', 'B', 'C', '1', '2', '3'].join('');;
-const FIXTURE_TOKEN_SetupToken = ['setup-token'].join('');;import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+const FIXTURE_SECRET_ABC123 = ['A', 'B', 'C', '1', '2', '3'].join('');
+const FIXTURE_TOKEN_SetupToken = ['setup-token'].join('');import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TotpSetupModal from '@/components/user/profile/TotpSetupModal.vue'
 import TotpDisableDialog from '@/components/user/profile/TotpDisableDialog.vue'

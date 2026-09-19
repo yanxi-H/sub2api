@@ -1,9 +1,9 @@
 
 
-const FIXTURE_TOKEN_Ticket1 = ['ticket-', '1'].join('');;
-const FIXTURE_TOKEN_Ticket2 = ['ticket-', '2'].join('');;
-const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');;
-const FIXTURE_TOKEN_TurnstileToken = ['turnstile-token'].join('');;import { defineComponent, h } from 'vue'
+const FIXTURE_TOKEN_Ticket1 = ['ticket-', '1'].join('');
+const FIXTURE_TOKEN_Ticket2 = ['ticket-', '2'].join('');
+const FIXTURE_PASSWORD_Secret123 = ['secret-', '1', '2', '3'].join('');
+const FIXTURE_TOKEN_TurnstileToken = ['turnstile-token'].join('');import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 

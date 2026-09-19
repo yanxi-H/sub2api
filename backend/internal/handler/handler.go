@@ -48,7 +48,7 @@ type AdminHandlers struct {
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
-	CodexDevice       *admin.CodexDeviceHandler
+	CodexDevice      *admin.CodexDeviceHandler
 	Auth             *AuthHandler
 	User             *UserHandler
 	APIKey           *APIKeyHandler
