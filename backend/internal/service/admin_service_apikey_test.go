@@ -287,6 +287,10 @@ func (s *apiKeyRepoStubForGroupUpdate) UpdateGroupIDByUserAndGroup(context.Conte
 	panic("unexpected")
 }
 
+func (s *apiKeyRepoStubForGroupUpdate) SumRateLimit7dByGroupIDs(context.Context, []int64) (map[int64]float64, error) {
+	panic("unexpected")
+}
+
 // groupRepoStubForGroupUpdate implements GroupRepository for AdminUpdateAPIKeyGroupID tests.
 type groupRepoStubForGroupUpdate struct {
 	group          *Group

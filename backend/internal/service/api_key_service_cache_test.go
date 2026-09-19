@@ -128,6 +128,10 @@ func (s *authRepoStub) GetRateLimitData(ctx context.Context, id int64) (*APIKeyR
 	panic("unexpected GetRateLimitData call")
 }
 
+func (s *authRepoStub) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
+	panic("unexpected SumRateLimit7dByGroupIDs call")
+}
+
 type authCacheStub struct {
 	getAuthCache   func(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error)
 	setAuthKeys    []string

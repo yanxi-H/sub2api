@@ -578,9 +578,10 @@ func TestAPIContracts(t *testing.T) {
 							"output_cost": 0,
 							"cache_creation_cost": 0,
 							"cache_read_cost": 0,
-						"total_cost": 0.5,
-						"actual_cost": 0.5,
+						"total_cost": 0,
+						"actual_cost": 0,
 						"rate_multiplier": 1,
+						"request_body_bytes": 0,
 						"long_context_billing_applied": false,
 						"billing_type": 0,
 							"stream": true,
@@ -2560,6 +2561,10 @@ func (r *stubApiKeyRepo) ResetRateLimitWindows(ctx context.Context, id int64) er
 	return nil
 }
 func (r *stubApiKeyRepo) GetRateLimitData(ctx context.Context, id int64) (*service.APIKeyRateLimitData, error) {
+	return nil, nil
+}
+
+func (r *stubApiKeyRepo) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
 	return nil, nil
 }
 

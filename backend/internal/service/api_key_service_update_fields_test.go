@@ -35,6 +35,10 @@ func (s *updateFieldsAPIKeyRepoStub) Update(_ context.Context, _ *APIKey, fields
 	return nil
 }
 
+func (s *updateFieldsAPIKeyRepoStub) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
+	panic("unexpected SumRateLimit7dByGroupIDs call")
+}
+
 func newUpdateFieldsAPIKeyService(key *APIKey) (*APIKeyService, *updateFieldsAPIKeyRepoStub) {
 	repo := &updateFieldsAPIKeyRepoStub{key: key}
 	return &APIKeyService{apiKeyRepo: repo}, repo

@@ -30,6 +30,10 @@ func (s *quotaStateRepoStub) IncrementQuotaUsedAndGetState(ctx context.Context, 
 	return &out, nil
 }
 
+func (s *quotaStateRepoStub) SumRateLimit7dByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]float64, error) {
+	panic("unexpected SumRateLimit7dByGroupIDs call")
+}
+
 type quotaStateCacheStub struct {
 	deleteAuthKeys []string
 }

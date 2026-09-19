@@ -270,7 +270,9 @@ func TestValidateCreateParams_CheckModeMatrix(t *testing.T) {
 			name: "probe requires api key",
 			params: ChannelMonitorCreateParams{
 				Provider: MonitorProviderOpenAI, CheckMode: MonitorCheckModeProbe,
-				Endpoint: "https://api.openai.com", IntervalSeconds: 60, PrimaryModel: "gpt-5",
+				// 公网 IP 字面量绕过 DNS 解析：本机/CI 环境的 DNS 结果不可控
+				//（DNS64 可能给出 ULA 地址触发 SSRF 拦截），此用例只关心 api key 缺失。
+				Endpoint: "https://93.184.216.34", IntervalSeconds: 60, PrimaryModel: "gpt-5",
 			},
 			wantErr: ErrChannelMonitorMissingAPIKey,
 		},
@@ -330,7 +332,8 @@ func TestValidateCreateParams_CheckModeMatrix(t *testing.T) {
 			name: "quota_probe requires primary model",
 			params: ChannelMonitorCreateParams{
 				Provider: MonitorProviderKimi, CheckMode: MonitorCheckModeQuotaProbe,
-				Endpoint: "https://api.kimi.com", APIKey: "sk",
+				// 公网 IP 字面量，理由同上：不依赖环境的 DNS 解析结果。
+				Endpoint: "https://93.184.216.34", APIKey: "sk",
 				IntervalSeconds: 60, AccountID: &accountID,
 			},
 			wantErr: ErrChannelMonitorMissingPrimaryModel,
