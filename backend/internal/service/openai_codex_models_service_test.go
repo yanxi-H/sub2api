@@ -282,7 +282,7 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.Equal(t, int64(500_000), grok.ContextWindow)
 	require.Equal(t, int64(500_000), grok.MaxContextWindow)
 	require.NotNil(t, grok.DefaultReasoningLevel)
-	require.Equal(t, "high", *grok.DefaultReasoningLevel)
+	require.Equal(t, "xhigh", *grok.DefaultReasoningLevel)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh"}, effortsFromConfiguredCodexLevels(grok.SupportedReasoningLevels))
 	require.True(t, grok.SupportsParallelToolCalls)
 	require.Equal(t, []string{"text"}, grok.InputModalities)
@@ -292,10 +292,12 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	grokAlias := newConfiguredCodexModelDescriptor("xai/grok-4.6-latest")
 	require.Equal(t, "Grok 4.6", grokAlias.DisplayName)
 	require.NotNil(t, grokAlias.DefaultReasoningLevel)
-	require.Equal(t, "high", *grokAlias.DefaultReasoningLevel)
+	require.Equal(t, "xhigh", *grokAlias.DefaultReasoningLevel)
 	require.Equal(t, []string{"low", "medium", "high", "xhigh"}, effortsFromConfiguredCodexLevels(grokAlias.SupportedReasoningLevels))
 
 	grok45 := newConfiguredCodexModelDescriptor("grok-4.5")
+	require.NotNil(t, grok45.DefaultReasoningLevel)
+	require.Equal(t, "high", *grok45.DefaultReasoningLevel)
 	require.Equal(t, []string{"low", "medium", "high"}, effortsFromConfiguredCodexLevels(grok45.SupportedReasoningLevels))
 
 	grokNonReasoning := newConfiguredCodexModelDescriptor("grok-4.20-0309-non-reasoning")

@@ -172,6 +172,7 @@ export const keysAPI = {
   getById,
   create,
   update,
+  regenerate,
   bulkUpdate,
   delete: deleteKey,
   toggleStatus

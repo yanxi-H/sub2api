@@ -347,6 +347,62 @@ func TestNormalizeGrokChatReasoningEffort(t *testing.T) {
 	require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
 }
 
+func TestNormalizeGrokChatReasoningEffortInjectsDefaultWhenUnspecified(t *testing.T) {
+	// 未指定 effort：支持 xhigh 的模型注入 xhigh。
+	patched, err := normalizeGrokChatReasoningEffort([]byte(`{"model":"grok-4.6","input":"hi"}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "xhigh", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	// 显式为空的 effort 视同未指定。
+	patched, err = normalizeGrokChatReasoningEffort([]byte(`{"reasoning_effort":""}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "xhigh", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	// 不支持 xhigh 的 effort 模型默认归一为 high。
+	patched, err = normalizeGrokChatReasoningEffort([]byte(`{}`), "grok-4.5")
+	require.NoError(t, err)
+	require.Equal(t, "high", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	// 客户端显式指定的低档位不被覆盖。
+	patched, err = normalizeGrokChatReasoningEffort([]byte(`{"reasoning_effort":"low"}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "low", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	// 不支持 effort 的模型（composer）不注入。
+	patched, err = normalizeGrokChatReasoningEffort([]byte(`{}`), "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
+}
+
+func TestNormalizeGrokResponsesReasoningEffortInjectsDefaultWhenUnspecified(t *testing.T) {
+	// 未指定 effort：注入默认 xhigh。
+	patched, err := normalizeGrokResponsesReasoningEffort([]byte(`{"model":"grok-4.6","input":"hi"}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "xhigh", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	// 仅带空 reasoning 对象时同样注入，并清理空对象。
+	patched, err = normalizeGrokResponsesReasoningEffort([]byte(`{"reasoning":{}}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "xhigh", gjson.GetBytes(patched, "reasoning_effort").String())
+	require.False(t, gjson.GetBytes(patched, "reasoning").Exists())
+
+	// 不支持 xhigh 的模型默认 high。
+	patched, err = normalizeGrokResponsesReasoningEffort([]byte(`{}`), "grok-4.5")
+	require.NoError(t, err)
+	require.Equal(t, "high", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	// 已有显式 effort 不覆盖，camelCase 别名继续归一。
+	patched, err = normalizeGrokResponsesReasoningEffort([]byte(`{"reasoning":{"effort":"low"}}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "low", gjson.GetBytes(patched, "reasoning.effort").String())
+	require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
+
+	// 不支持 effort 的模型不注入。
+	patched, err = normalizeGrokResponsesReasoningEffort([]byte(`{}`), "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
+}
+
 func TestPatchGrokResponsesBodyDropsNestedUnsupportedFields(t *testing.T) {
 	t.Parallel()
 

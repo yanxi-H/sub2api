@@ -481,8 +481,8 @@ func TestGatewayModels_Grok46AdvertisesXHighReasoningEffortForGrokBuild(t *testi
 	xhighEfforts := []gatewayReasoningEffortOptionForTest{
 		{Value: "low", Label: "Low"},
 		{Value: "medium", Label: "Medium"},
-		{Value: "high", Label: "High", Default: true},
-		{Value: "xhigh", Label: "xHigh"},
+		{Value: "high", Label: "High"},
+		{Value: "xhigh", Label: "xHigh", Default: true},
 	}
 	tests := []struct {
 		groupID int64
@@ -534,7 +534,14 @@ func assertGrokGatewayReasoningEfforts(t *testing.T, groupID int64, modelID stri
 	model := got.Data[0]
 	require.Equal(t, modelID, model.ID)
 	require.True(t, model.SupportsReasoningEffort)
-	require.Equal(t, "high", model.ReasoningEffort)
+	defaultEffort := ""
+	for _, effort := range want {
+		if effort.Default {
+			defaultEffort = effort.Value
+			break
+		}
+	}
+	require.Equal(t, defaultEffort, model.ReasoningEffort)
 	require.Equal(t, want, model.ReasoningEfforts)
 }
 
@@ -1314,4 +1321,51 @@ func modelIDsForTest(models []gatewayModelItemForTest) []string {
 		ids = append(ids, model.ID)
 	}
 	return ids
+}
+
+func TestWriteGrokModelsListDefaultReasoningEffort(t *testing.T) {
+	tests := []struct {
+		name            string
+		model           string
+		wantDefault     string
+		wantXHighOption bool
+	}{
+		{name: "grok-4.6 defaults to xhigh", model: "grok-4.6", wantDefault: "xhigh", wantXHighOption: true},
+		{name: "grok-4.6-latest defaults to xhigh", model: "grok-4.6-latest", wantDefault: "xhigh", wantXHighOption: true},
+		{name: "grok-4.5 keeps high default", model: "grok-4.5", wantDefault: "high", wantXHighOption: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+
+			writeGrokModelsList(c, []string{tt.model})
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			var got gatewayModelsResponseForTest
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+			require.Len(t, got.Data, 1)
+
+			item := got.Data[0]
+			require.True(t, item.SupportsReasoningEffort)
+			require.Equal(t, tt.wantDefault, item.ReasoningEffort)
+
+			var defaultOptions []string
+			values := make([]string, 0, len(item.ReasoningEfforts))
+			for _, effort := range item.ReasoningEfforts {
+				values = append(values, effort.Value)
+				if effort.Default {
+					defaultOptions = append(defaultOptions, effort.Value)
+				}
+			}
+			require.Equal(t, []string{tt.wantDefault}, defaultOptions)
+			if tt.wantXHighOption {
+				require.Contains(t, values, "xhigh")
+			} else {
+				require.NotContains(t, values, "xhigh")
+			}
+		})
+	}
 }

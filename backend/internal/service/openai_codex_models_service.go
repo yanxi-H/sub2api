@@ -477,7 +477,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		descriptor.ContextWindow = grokCodexContextWindow(modelID)
 		descriptor.MaxContextWindow = descriptor.ContextWindow
 		if grokCodexSupportsReasoningEffort(modelID) {
-			defaultReasoningLevel := "high"
+			defaultReasoningLevel := grokCodexDefaultReasoningLevel(modelID)
 			descriptor.DefaultReasoningLevel = &defaultReasoningLevel
 			descriptor.SupportedReasoningLevels = configuredCodexGrokReasoningLevels(modelID)
 		}
@@ -578,6 +578,15 @@ func configuredCodexGrokReasoningLevels(modelID string) []configuredCodexReasoni
 		})
 	}
 	return levels
+}
+
+// grokCodexDefaultReasoningLevel 与网关注入的 grokDefaultReasoningEffort 保持一致：
+// 支持 xhigh 的模型（Grok 4.6 系列）默认 xhigh，其余 effort 模型默认 high。
+func grokCodexDefaultReasoningLevel(modelID string) string {
+	if GrokSupportsXHighReasoningEffort(modelID) {
+		return "xhigh"
+	}
+	return "high"
 }
 
 func configuredCodexClaudeReasoningLevels(modelID string) []configuredCodexReasoningLevel {

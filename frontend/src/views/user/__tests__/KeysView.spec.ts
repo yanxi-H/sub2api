@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
@@ -8,28 +8,36 @@ import KeysView from '../KeysView.vue'
 
 const {
   listKeys,
-  updateKey,
   getPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
   getUserGroupRates,
+  listAdminUsers,
+  listAccounts,
+  updateKey,
+  regenerateKey,
   showError,
   showSuccess,
   copyToClipboard,
   isCurrentStep,
   nextStep,
+  authStore,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
-  updateKey: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
+  listAdminUsers: vi.fn(),
+  listAccounts: vi.fn(),
+  updateKey: vi.fn(),
+  regenerateKey: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
   copyToClipboard: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
+  authStore: { isAdmin: true },
 }))
 
 const messages: Record<string, string> = {
@@ -58,17 +66,12 @@ const messages: Record<string, string> = {
   'keys.usage': 'Usage',
 }
 
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    isAdmin: true,
-  }),
-}))
-
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
     create: vi.fn(),
     update: updateKey,
+    regenerate: regenerateKey,
     delete: vi.fn(),
     toggleStatus: vi.fn(),
   },
@@ -87,10 +90,10 @@ vi.mock('@/api', () => ({
       getAllIncludingInactive: getAvailableGroups,
     },
     users: {
-      list: vi.fn().mockResolvedValue({
-        items: [{ id: 1, email: 'user1@test.local', name: 'User One' }],
-        total: 1, page: 1, page_size: 1000, pages: 1,
-      }),
+      list: listAdminUsers,
+    },
+    accounts: {
+      list: listAccounts,
     },
   },
 }))
@@ -100,6 +103,10 @@ vi.mock('@/stores/app', () => ({
     showError,
     showSuccess,
   }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authStore,
 }))
 
 vi.mock('@/stores/onboarding', () => ({
@@ -200,6 +207,9 @@ const DataTableStub = {
         >
           <slot name="cell-last_used_ip" :value="row.last_used_ip" :row="row" />
         </div>
+        <div data-test="key-actions">
+          <slot name="cell-actions" :row="row" />
+        </div>
       </div>
       <slot name="empty" />
     </div>
@@ -231,6 +241,12 @@ const PaginationStub = {
   `,
 }
 
+const BaseDialogStub = {
+  props: ['show', 'title'],
+  emits: ['close'],
+  template: '<div v-if="show" role="dialog"><button data-test="close-dialog" @click="$emit(\'close\')">Close</button><slot /><slot name="footer" /></div>',
+}
+
 const IconStub = {
   props: ['name'],
   template: '<span data-test="icon">{{ name }}</span>',
@@ -244,11 +260,7 @@ const mountView = async () => {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: PaginationStub,
-        BaseDialog: {
-          props: ['show', 'title'],
-          emits: ['close'],
-          template: '<div v-if="show" role="dialog"><button data-test="close-dialog" @click="$emit(\'close\')">Close</button><slot /><slot name="footer" /></div>',
-        },
+        BaseDialog: BaseDialogStub,
         ConfirmDialog: true,
         EmptyState: true,
         Select: SelectStub,
@@ -293,6 +305,9 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
+    listAdminUsers.mockReset()
+    listAccounts.mockReset()
+    updateKey.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
@@ -310,7 +325,14 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
+    listAdminUsers.mockResolvedValue({ items: [], pages: 1 })
+    listAccounts.mockResolvedValue({ items: [], pages: 1 })
+    updateKey.mockResolvedValue(createApiKey())
     isCurrentStep.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it.each([
@@ -369,6 +391,63 @@ describe('user KeysView column settings', () => {
     expect(visibleColumnKeys(wrapper)).not.toContain('last_used_at')
     expect(visibleColumnKeys(wrapper)).not.toContain('last_used_ip')
     expect(visibleColumnKeys(wrapper)).not.toContain('id')
+  })
+
+  it('loads users into the create-key owner selector for administrators', async () => {
+    listAdminUsers.mockResolvedValueOnce({
+      items: [{ id: 42, username: 'assigned-user', email: 'assigned@example.com', status: 'active' }],
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await flushPromises()
+
+    expect(listAdminUsers).toHaveBeenCalledWith(1, 1000, { sort_by: 'email', sort_order: 'asc' })
+    expect(
+      wrapper.findAllComponents({ name: 'Select' }).some((select) =>
+        (select.props('options') as Array<{ value: number }>).some((option) => option.value === 42)
+      )
+    ).toBe(true)
+  })
+
+  it('extends an edited key from its current expiration and keeps preset extensions cumulative', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const key = {
+      ...createApiKey(),
+      group_id: 3,
+      expires_at: '2026-01-20T12:00:00.000Z'
+    }
+    listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await flushPromises()
+
+    const expirationInput = wrapper.get('input[type="datetime-local"]')
+    const initialExpiration = new Date((expirationInput.element as HTMLInputElement).value)
+    const plusSeven = getButtonByText(wrapper, 'keys.extendDays')
+    await plusSeven.trigger('click')
+    const firstExtension = new Date((expirationInput.element as HTMLInputElement).value)
+    const expectedFirstExtension = new Date(initialExpiration)
+    expectedFirstExtension.setDate(expectedFirstExtension.getDate() + 7)
+    expect(firstExtension.getTime()).toBe(expectedFirstExtension.getTime())
+
+    const presetButtons = wrapper.findAll('button').filter((button) => button.text().includes('keys.extendDays'))
+    await presetButtons[1].trigger('click')
+    const secondExtensionValue = (expirationInput.element as HTMLInputElement).value
+    const secondExtension = new Date(secondExtensionValue)
+    const expectedSecondExtension = new Date(firstExtension)
+    expectedSecondExtension.setDate(expectedSecondExtension.getDate() + 30)
+    expect(secondExtension.getTime()).toBe(expectedSecondExtension.getTime())
+
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenCalledWith(key.id, expect.objectContaining({
+      expires_at: new Date(secondExtensionValue).toISOString()
+    }))
   })
 
   it('opens bulk editing with only selected visible keys', async () => {
@@ -604,21 +683,22 @@ describe('user KeysView column settings', () => {
 
     it('clears the previous group on provider change and submits only the newly selected group', async () => {
       const wrapper = await openCreate()
+      const ownerSelect = wrapper.get('#key-form').findAllComponents({ name: 'Select' })[0]
+      ownerSelect.vm.$emit('update:modelValue', 1)
       await wrapper.get('[data-tour="key-form-name"]').setValue('My key')
       await groupSelect(wrapper).vm.$emit('update:modelValue', 1)
       await chooseProvider(wrapper, 'domestic')
       expect(groupSelect(wrapper).props('modelValue')).toBeNull()
       await wrapper.get('#key-form').trigger('submit')
       expect(keysAPI.create).not.toHaveBeenCalled()
-      expect(showError).toHaveBeenCalledWith('keys.userRequired')
+      expect(showError).toHaveBeenCalledWith('keys.groupRequired')
 
       await groupSelect(wrapper).vm.$emit('update:modelValue', 5)
-      // admin 视角：归属用户必填，直接设置表单状态（Select 为自定义组件）
-      ;(wrapper.vm as any).formData.user_id = 1
       vi.mocked(keysAPI.create).mockResolvedValue({ ...createApiKey(), group_id: 5 })
       await wrapper.get('#key-form').trigger('submit')
       await flushPromises()
       expect(keysAPI.create).toHaveBeenCalledOnce()
+      expect(vi.mocked(keysAPI.create).mock.calls[0].slice(0, 3)).toEqual(['My key', 1, 5])
     })
 
     it('defaults to a provider with available groups and disables empty categories', async () => {

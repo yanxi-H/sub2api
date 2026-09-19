@@ -1360,10 +1360,14 @@ func writeGrokModelsList(c *gin.Context, modelIDs []string) {
 			efforts := []grokReasoningEffortOption{
 				{Value: "low", Label: "Low"},
 				{Value: "medium", Label: "Medium"},
-				{Value: "high", Label: "High", Default: true},
+				{Value: "high", Label: "High"},
 			}
 			if service.GrokSupportsXHighReasoningEffort(modelID) {
-				efforts = append(efforts, grokReasoningEffortOption{Value: "xhigh", Label: "xHigh"})
+				// 与网关注入的 grokDefaultReasoningEffort 一致：4.6 系列默认 xhigh。
+				item.ReasoningEffort = "xhigh"
+				efforts = append(efforts, grokReasoningEffortOption{Value: "xhigh", Label: "xHigh", Default: true})
+			} else {
+				efforts[2].Default = true
 			}
 			item.ReasoningEfforts = efforts
 		}

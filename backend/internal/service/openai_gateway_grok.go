@@ -696,13 +696,29 @@ func normalizeGrokResponsesReasoningEffort(body []byte, upstreamModel string) ([
 			return nil, fmt.Errorf("remove empty Grok reasoning: %w", err)
 		}
 	}
+	if supportsEffort && !gjson.GetBytes(out, "reasoning.effort").Exists() && !gjson.GetBytes(out, "reasoning_effort").Exists() {
+		normalized, keep := normalizeGrokReasoningEffortValue(grokDefaultReasoningEffort, upstreamModel)
+		if keep {
+			out, err = sjson.SetBytes(out, "reasoning_effort", normalized)
+			if err != nil {
+				return nil, fmt.Errorf("set default Grok reasoning_effort: %w", err)
+			}
+		}
+	}
 	return out, nil
 }
+
+// grokDefaultReasoningEffort 是中转站为未指定思考强度的 Grok 请求注入的默认档位。
+// 不支持 xhigh 的模型由 normalizeGrokReasoningEffortValue 自动归一为 high。
+const grokDefaultReasoningEffort = "xhigh"
 
 func normalizeGrokChatReasoningEffort(body []byte, upstreamModel string) ([]byte, error) {
 	raw := strings.TrimSpace(gjson.GetBytes(body, "reasoning_effort").String())
 	if raw == "" {
 		raw = strings.TrimSpace(gjson.GetBytes(body, "reasoningEffort").String())
+	}
+	if raw == "" {
+		raw = grokDefaultReasoningEffort
 	}
 	normalized, keep := normalizeGrokReasoningEffortValue(raw, upstreamModel)
 	keep = keep && grokSupportsReasoningEffort(upstreamModel)

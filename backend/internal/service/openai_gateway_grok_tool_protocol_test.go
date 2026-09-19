@@ -99,6 +99,7 @@ func TestPatchGrokResponsesBodyWithClientToolsLowersDiscoveredToolsOutput(t *tes
 
 	require.JSONEq(t, `{
 		"model":"grok-4.5",
+		"reasoning_effort":"high",
 		"tools":[
 			{"type":"function","name":"tool_search","description":"Search and load Codex tools, plugins, connectors, and MCP namespaces for the current task.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search query for tools or connectors to load."},"limit":{"type":"integer","description":"Maximum number of tool groups to return."}},"required":["query"]}},
 			{"type":"function","name":"codex_app__load_workspace_dependencies","parameters":{"type":"object","properties":{},"additionalProperties":false}},
