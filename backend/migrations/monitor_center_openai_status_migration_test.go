@@ -17,7 +17,7 @@ func TestMonitorCenterOpenAIStatusMigration(t *testing.T) {
 }
 
 func TestMonitorCenterIncidentLifecycleMigration(t *testing.T) {
-	content, err := FS.ReadFile("192_monitor_center_incident_lifecycle.sql")
+	content, err := FS.ReadFile("193_monitor_center_incident_lifecycle.sql")
 	require.NoError(t, err)
 	sql := string(content)
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS failure_reason")
