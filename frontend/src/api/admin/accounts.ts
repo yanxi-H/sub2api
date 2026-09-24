@@ -30,6 +30,7 @@ import type {
   OllamaCloudUsageState,
   GrokMediaEligibilityMode,
   GrokMediaEligibilityState,
+  UsageProgress,
   OpenCodeGoUsageSettings,
   OpenCodeGoUsageState
 } from '@/types'
@@ -1131,6 +1132,80 @@ export async function refreshOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsag
   return data
 }
 
+// ==================== 用量窗口 / OpenAI 重置额度快照（仪表盘限额总览） ====================
+
+export interface AccountUsageWindowItem {
+  id: number
+  name: string
+  platform: string
+  type: string
+  status: string
+  five_hour: UsageProgress | null
+  seven_day: UsageProgress | null
+  seven_day_capacity?: SevenDayQuotaCapacity | null
+  updated_at: string | null
+  supports_live_refresh: boolean
+  supports_openai_reset_credits?: boolean
+  openai_reset_credits?: OpenAIResetCreditSnapshot | null
+  refresh_error?: string
+}
+
+export interface OpenAIResetCreditSnapshot {
+  available_count: number
+  credits?: OpenAIRateLimitResetCreditDetail[]
+  checked_at: string
+}
+
+export interface OpenAIResetCreditRefreshResult {
+  id: number
+  openai_reset_credits?: OpenAIResetCreditSnapshot | null
+  refresh_error?: string
+}
+
+export interface SevenDayQuotaCapacity {
+  capacity_source?: string
+  estimated_total_usd: number
+  actual_used_usd: number
+  actual_remaining_usd: number
+  actual_remaining_percent: number
+  allocated_usd: number | null
+  unallocated_remaining_usd: number | null
+  unallocated_remaining_percent: number | null
+  allocation_unlimited: boolean
+}
+
+export async function listUsageWindows(
+  page: number = 1,
+  pageSize: number = 10,
+  search?: string,
+  options?: { signal?: AbortSignal }
+): Promise<PaginatedResponse<AccountUsageWindowItem>> {
+  const { data } = await apiClient.get<PaginatedResponse<AccountUsageWindowItem>>(
+    '/admin/accounts/usage-windows',
+    {
+      params: { page, page_size: pageSize, search: search || undefined },
+      signal: options?.signal
+    }
+  )
+  return data
+}
+
+export async function refreshUsageWindows(accountIds: number[]): Promise<AccountUsageWindowItem[]> {
+  const { data } = await apiClient.post<AccountUsageWindowItem[]>(
+    '/admin/accounts/usage-windows/refresh',
+    { account_ids: accountIds }
+  )
+  return data
+}
+
+export async function refreshOpenAIResetCredits(accountIds: number[]): Promise<OpenAIResetCreditRefreshResult[]> {
+  const { data } = await apiClient.post<OpenAIResetCreditRefreshResult[]>(
+    '/admin/accounts/usage-windows/openai-reset-credits/refresh',
+    { account_ids: accountIds }
+  )
+  return data
+}
+
 // ==================== Codex 已观测设备（指纹收敛 device 档选择） ====================
 
 export interface CodexSeenDevice {
@@ -1219,6 +1294,9 @@ export const accountsAPI = {
   getOpenCodeGoUsage,
   setOpenCodeGoUsageAutoRefresh,
   refreshOpenCodeGoUsage,
+  listUsageWindows,
+  refreshUsageWindows,
+  refreshOpenAIResetCredits,
   listCodexSeenDevices
 }
 

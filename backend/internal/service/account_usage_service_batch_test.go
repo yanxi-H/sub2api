@@ -18,6 +18,9 @@ var _ UsageLogRepository = (*usageBatchLogRepoStub)(nil)
 func (r *usageBatchLogRepoStub) Create(context.Context, *UsageLog) (bool, error) {
 	return false, nil
 }
+func (r *usageBatchLogRepoStub) GetUserRequestBodyTrend(context.Context, time.Time, time.Time, string, int) ([]usagestats.UserRequestBodyTrendPoint, error) {
+	return nil, nil
+}
 func (r *usageBatchLogRepoStub) GetByID(context.Context, int64) (*UsageLog, error) {
 	return nil, nil
 }

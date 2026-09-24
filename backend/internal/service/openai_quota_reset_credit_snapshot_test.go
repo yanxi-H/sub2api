@@ -60,7 +60,7 @@ func TestResetCreditRefreshesStoredSnapshot(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := NewOpenAIQuotaService(repo, nil, tokenProvider, newQuotaRedirectingFactory(srv))
+	svc := NewOpenAIQuotaService(repo, nil, tokenProvider, newQuotaRedirectingFactory(srv), nil)
 	_, err := svc.ResetCredit(context.Background(), account.ID)
 	require.NoError(t, err)
 
