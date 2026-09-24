@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../client'
+import type { OpenAIReferralRefreshResult, OpenAIReferralSendResult } from '@/types/openaiReferrals'
 import type {
   Account,
   AccountListItem,
@@ -11,7 +12,6 @@ import type {
   UpdateAccountRequest,
   PaginatedResponse,
   AccountUsageInfo,
-  UsageProgress,
   WindowStats,
   ClaudeModel,
   AccountUsageStatsResponse,
@@ -29,80 +29,10 @@ import type {
   OllamaCloudUsageSettings,
   OllamaCloudUsageState,
   GrokMediaEligibilityMode,
-  GrokMediaEligibilityState
+  GrokMediaEligibilityState,
+  OpenCodeGoUsageSettings,
+  OpenCodeGoUsageState
 } from '@/types'
-
-export interface AccountUsageWindowItem {
-  id: number
-  name: string
-  platform: string
-  type: string
-  status: string
-  five_hour: UsageProgress | null
-  seven_day: UsageProgress | null
-  seven_day_capacity?: SevenDayQuotaCapacity | null
-  updated_at: string | null
-  supports_live_refresh: boolean
-  supports_openai_reset_credits?: boolean
-  openai_reset_credits?: OpenAIResetCreditSnapshot | null
-  refresh_error?: string
-}
-
-export interface OpenAIResetCreditSnapshot {
-  available_count: number
-  credits?: OpenAIRateLimitResetCreditDetail[]
-  checked_at: string
-}
-
-export interface OpenAIResetCreditRefreshResult {
-  id: number
-  openai_reset_credits?: OpenAIResetCreditSnapshot | null
-  refresh_error?: string
-}
-
-export interface SevenDayQuotaCapacity {
-  capacity_source?: string
-  estimated_total_usd: number
-  actual_used_usd: number
-  actual_remaining_usd: number
-  actual_remaining_percent: number
-  allocated_usd: number | null
-  unallocated_remaining_usd: number | null
-  unallocated_remaining_percent: number | null
-  allocation_unlimited: boolean
-}
-
-export async function listUsageWindows(
-  page: number = 1,
-  pageSize: number = 10,
-  search?: string,
-  options?: { signal?: AbortSignal }
-): Promise<PaginatedResponse<AccountUsageWindowItem>> {
-  const { data } = await apiClient.get<PaginatedResponse<AccountUsageWindowItem>>(
-    '/admin/accounts/usage-windows',
-    {
-      params: { page, page_size: pageSize, search: search || undefined },
-      signal: options?.signal
-    }
-  )
-  return data
-}
-
-export async function refreshUsageWindows(accountIds: number[]): Promise<AccountUsageWindowItem[]> {
-  const { data } = await apiClient.post<AccountUsageWindowItem[]>(
-    '/admin/accounts/usage-windows/refresh',
-    { account_ids: accountIds }
-  )
-  return data
-}
-
-export async function refreshOpenAIResetCredits(accountIds: number[]): Promise<OpenAIResetCreditRefreshResult[]> {
-  const { data } = await apiClient.post<OpenAIResetCreditRefreshResult[]>(
-    '/admin/accounts/usage-windows/openai-reset-credits/refresh',
-    { account_ids: accountIds }
-  )
-  return data
-}
 
 /**
  * List all accounts with pagination
@@ -991,7 +921,14 @@ export interface OpenAIQuotaUsage {
   rate_limit?: OpenAIRateLimit | null
   additional_rate_limits?: OpenAIAdditionalRateLimit[]
   rate_limit_reset_credits?: OpenAIRateLimitResetCredits | null
+  credits?: OpenAICredits | null
   fetched_at: number
+}
+
+export interface OpenAICredits {
+  has_credits: boolean
+  unlimited: boolean
+  balance: string | null
 }
 
 export interface OpenAIQuotaResetCredit {
@@ -1021,6 +958,7 @@ export interface OpenAIQuotaResetResult {
 /** Usage payload plus whether the reset-credit snapshot was persisted. */
 export interface OpenAIQuotaRefreshResult extends OpenAIQuotaUsage {
   cache_persisted: boolean
+  credits_cache_persisted?: boolean
 }
 
 /**
@@ -1035,6 +973,23 @@ export interface OpenAIQuotaRefreshResult extends OpenAIQuotaUsage {
 export async function refreshOpenAIQuota(id: number): Promise<OpenAIQuotaRefreshResult> {
   const { data } = await apiClient.post<OpenAIQuotaRefreshResult>(
     `/admin/openai/accounts/${id}/quota/refresh`
+  )
+  return data
+}
+
+export async function refreshOpenAIReferrals(id: number): Promise<OpenAIReferralRefreshResult> {
+  const { data } = await apiClient.post<OpenAIReferralRefreshResult>(
+    `/admin/openai/accounts/${id}/referrals/refresh`
+  )
+  return data
+}
+
+export async function sendOpenAIReferralInvite(
+  id: number,
+  input: { email: string; program_id: string; confirmed: boolean }
+): Promise<OpenAIReferralSendResult> {
+  const { data } = await apiClient.post<OpenAIReferralSendResult>(
+    `/admin/openai/accounts/${id}/referrals/invite`, input, { timeout: 90_000 }
   )
   return data
 }
@@ -1144,11 +1099,59 @@ export async function refreshOllamaCloudUsage(id: number): Promise<OllamaCloudUs
   return data
 }
 
+export async function getOpenCodeGoUsageSettings(): Promise<OpenCodeGoUsageSettings> {
+  const { data } = await apiClient.get<OpenCodeGoUsageSettings>('/admin/accounts/opencode-go-usage/settings')
+  return data
+}
+
+export async function updateOpenCodeGoUsageSettings(
+  settings: OpenCodeGoUsageSettings
+): Promise<OpenCodeGoUsageSettings> {
+  const { data } = await apiClient.put<OpenCodeGoUsageSettings>(
+    '/admin/accounts/opencode-go-usage/settings',
+    settings
+  )
+  return data
+}
+
+export async function getOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsageState> {
+  const { data } = await apiClient.get<OpenCodeGoUsageState>(`/admin/accounts/${id}/opencode-go-usage`)
+  return data
+}
+
+export async function setOpenCodeGoUsageAutoRefresh(id: number, enabled: boolean): Promise<OpenCodeGoUsageState> {
+  const { data } = await apiClient.put<OpenCodeGoUsageState>(`/admin/accounts/${id}/opencode-go-usage/auto-refresh`, {
+    enabled
+  })
+  return data
+}
+
+export async function refreshOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsageState> {
+  const { data } = await apiClient.post<OpenCodeGoUsageState>(`/admin/accounts/${id}/opencode-go-usage/refresh`)
+  return data
+}
+
+// ==================== Codex 已观测设备（指纹收敛 device 档选择） ====================
+
+export interface CodexSeenDevice {
+  device_id: string
+  last_seen_at: number
+}
+
+/**
+ * List Codex device IDs observed from gateway traffic (x-codex-installation-id)
+ * No param: all devices deduped; with api_key_id: scoped to that key
+ */
+export async function listCodexSeenDevices(apiKeyId?: number): Promise<CodexSeenDevice[]> {
+  const url = apiKeyId
+    ? `/admin/codex/seen-devices?api_key_id=${apiKeyId}`
+    : '/admin/codex/seen-devices'
+  const { data } = await apiClient.get<{ devices: CodexSeenDevice[] }>(url)
+  return data.devices ?? []
+}
+
 export const accountsAPI = {
   list,
-  listUsageWindows,
-  refreshUsageWindows,
-  refreshOpenAIResetCredits,
   listWithEtag,
   getUpstreamBillingRatesWithEtag,
   getById,
@@ -1211,26 +1214,12 @@ export const accountsAPI = {
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
   refreshOllamaCloudUsage,
+  getOpenCodeGoUsageSettings,
+  updateOpenCodeGoUsageSettings,
+  getOpenCodeGoUsage,
+  setOpenCodeGoUsageAutoRefresh,
+  refreshOpenCodeGoUsage,
   listCodexSeenDevices
 }
 
 export default accountsAPI
-
-// ==================== Codex 已观测设备（指纹收敛 device 档选择） ====================
-
-export interface CodexSeenDevice {
-  device_id: string
-  last_seen_at: number
-}
-
-/**
- * List Codex device IDs observed from gateway traffic (x-codex-installation-id)
- * No param: all devices deduped; with api_key_id: scoped to that key
- */
-export async function listCodexSeenDevices(apiKeyId?: number): Promise<CodexSeenDevice[]> {
-  const url = apiKeyId
-    ? `/admin/codex/seen-devices?api_key_id=${apiKeyId}`
-    : '/admin/codex/seen-devices'
-  const { data } = await apiClient.get<{ devices: CodexSeenDevice[] }>(url)
-  return data.devices ?? []
-}
