@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -1162,6 +1164,14 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 	if g == nil {
 		return nil
 	}
+	var modelPricing []service.ChannelModelPricing
+	if len(g.ModelPricing) > 0 {
+		if err := json.Unmarshal(g.ModelPricing, &modelPricing); err != nil {
+			slog.Warn("group model_pricing unmarshal failed; falling back to channel/builtin pricing",
+				"group_id", g.ID, "error", err)
+			modelPricing = nil
+		}
+	}
 	return &service.Group{
 		ID:                              g.ID,
 		Name:                            g.Name,
@@ -1198,6 +1208,8 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		AudioSTTPricePerHour:            g.AudioSttPricePerHour,
 		DefaultValidityDays:             g.DefaultValidityDays,
 		ClaudeCodeOnly:                  g.ClaudeCodeOnly,
+		LongContextPricingEnabled:       g.LongContextPricingEnabled,
+		ModelPricing:                    modelPricing,
 		FallbackGroupID:                 g.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: g.FallbackGroupIDOnInvalidRequest,
 		ModelRouting:                    g.ModelRouting,
