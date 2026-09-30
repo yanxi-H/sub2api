@@ -77,11 +77,10 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		return
 	}
 
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "api_error", "message": "User context not found"}})
-		return
-	}
+	// 审计门先于一切计费/调度副作用；subject 由认证中间件保证存在，
+	// 缺失时（如内部调用）用零值继续，不在此处 500。
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	subject, _ := middleware2.GetAuthSubjectFromContext(c)
 	reqLog := requestLogger(c, "handler.gateway.web_search")
 	// Audit user search query before upstream Grok web_search traffic.
 	auditBody, _ := json.Marshal(map[string]any{
@@ -105,19 +104,8 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		c.JSON(status, gin.H{"error": gin.H{"type": code, "message": msg}})
 		return
 	}
-	var streamStarted bool
-	userRelease, concurrencyErr := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, false, &streamStarted)
-	if concurrencyErr != nil {
-		h.handleConcurrencyError(c, concurrencyErr, "user", false)
-		return
-	}
-	userRelease = wrapReleaseOnDone(c.Request.Context(), userRelease)
-	if userRelease != nil {
-		defer userRelease()
-	}
 
 	// Billing eligibility (same as other requests)
-	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		status, code, message, retryAfter := billingErrorDetails(err)
 		if retryAfter > 0 {
@@ -138,6 +126,17 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		return
 	}
 	defer inflightDone()
+
+	var streamStarted bool
+	userRelease, concurrencyErr := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, false, &streamStarted)
+	if concurrencyErr != nil {
+		h.handleConcurrencyError(c, concurrencyErr, "user", false)
+		return
+	}
+	userRelease = wrapReleaseOnDone(c.Request.Context(), userRelease)
+	if userRelease != nil {
+		defer userRelease()
+	}
 
 	// Use exactly the same scheduling as other requests (SelectAccountWithLoadAwareness handles load, rate limit, sticky, etc.)
 	groupID := apiKey.GroupID
