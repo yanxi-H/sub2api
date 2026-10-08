@@ -251,7 +251,12 @@ export default {
         codexCli: 'Codex CLI',
         codexCliWs: 'Codex CLI (WebSocket)',
         grokCli: 'Grok CLI',
+        systemOne: 'System One',
         opencode: 'OpenCode',
+      },
+      typesafe: {
+        description: 'Call Jev through the native TypeSafe System One endpoint.',
+        note: 'System One is non-streaming and is not compatible with Chat Completions, Responses, Claude Code, or Codex clients.',
       },
       antigravity: {
         description: 'Configure API access for Antigravity group. Select the configuration method based on your client.',
@@ -475,6 +480,8 @@ export default {
     latencyFirstToken: 'First',
     latencyDuration: 'Total',
     requestBodySize: 'Body',
+    outputTps: 'Output TPS',
+    outputTpsHint: 'Output tokens divided by total duration, including first-token wait, in tok/s. Output tokens may include reasoning tokens.',
     time: 'Time',
     ws: 'WS',
     stream: 'Stream',

@@ -4,6 +4,8 @@ export default {
       description: 'Operational monitoring and troubleshooting',
       // Dashboard
       systemHealth: 'System Health',
+      outputTps: 'Per-request output TPS',
+      outputTpsSamples: 'Valid samples: {count}',
       overview: 'Overview',
       noSystemMetrics: 'No system metrics collected yet.',
       collectedAt: 'Collected at:',
@@ -919,6 +921,7 @@ export default {
         accountError: 'Error'
       },
       tooltips: {
+        outputTps: 'Percentiles of each valid usage record’s output tokens / total duration, including first-token wait, within the selected time, platform and group. Output may include reasoning tokens; they are not added again. P50 is the median; P5/P10 show slower requests. Higher is faster. Excludes images, Live and records without positive output or duration. Samples come from retained usage logs; — means no samples or temporarily unavailable statistics.',
         totalRequests: 'Total number of requests (including both successful and failed requests) in the selected time window.',
         throughputTrend: 'Requests/QPS + Tokens/TPS in the selected window.',
         responseTimeTrend: 'P95, P90, P50, average, and maximum successful service-request duration over the selected window.',
